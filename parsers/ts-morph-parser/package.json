@@ -1,0 +1,38 @@
+{
+  "name": "ts-morph-parser",
+  "version": "1.0.0",
+  "description": "TypeScript parser for Neo4j knowledge graph using ts-morph",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "ts-morph": "^20.0.0",
+    "typescript": "^5.3.0",
+    "@types/node": "^20.10.0",
+    "commander": "^11.1.0",
+    "glob": "^10.3.0",
+    "crypto": "^1.0.1"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.0",
+    "@types/glob": "^8.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "typescript",
+    "parser",
+    "ast",
+    "ts-morph",
+    "neo4j",
+    "knowledge-graph",
+    "code-analysis"
+  ],
+  "author": "TekCode",
+  "license": "MIT"
+}

@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database for Development
+  postgres:
+    image: postgres:15-alpine
+    container_name: tekaicontext-postgres-dev
+    environment:
+      POSTGRES_DB: tekaicontextengine2_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST_AUTH_METHOD: md5
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tekaicontextengine2_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # Redis for Development
+  redis:
+    image: redis:7-alpine
+    container_name: tekaicontext-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Development Application (with hot reload)
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: tekaicontext-app-dev
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tekaicontextengine2_dev?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QUEUE_REDIS_HOST: redis
+      QUEUE_REDIS_PORT: 6379
+      GITLAB_URL: https://gitlab.com
+      GITLAB_TOKEN: ${GITLAB_TOKEN}
+      JWT_SECRET: dev-jwt-secret
+      STORAGE_TYPE: local
+      STORAGE_PATH: /app/storage
+      LOG_LEVEL: debug
+      SYNC_INTERVAL_MINUTES: 5
+      MAX_FILE_SIZE_MB: 50
+    ports:
+      - "3000:3000"
+      - "9229:9229" # Debug port
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - dev_storage:/app/storage
+      - dev_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["npm", "run", "start:debug"]
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+  dev_storage:
+  dev_logs:
+
+networks:
+  default:
+    name: tekaicontext-dev-network

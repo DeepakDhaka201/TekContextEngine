@@ -1,0 +1,31 @@
+FROM node:20-alpine
+
+# Install build dependencies for native modules (tree-sitter) and curl for health checks
+RUN apk add --no-cache \
+    curl \
+    python3 \
+    make \
+    g++ \
+    linux-headers
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json ./
+
+# Install all dependencies (including dev dependencies)
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Create storage and logs directories
+RUN mkdir -p /app/storage /app/logs
+
+EXPOSE 3000 9229
+
+# Default command (can be overridden in docker-compose)
+CMD ["npm", "run", "start:dev"]

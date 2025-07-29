@@ -1,0 +1,46 @@
+{
+  "includeMethodBodies": false,
+  "includeComments": false,
+  "includePrivateMembers": false,
+  "includeTestFiles": true,
+  "includeGeneratedFiles": false,
+  
+  "enableFrameworkDetection": false,
+  "frameworksToDetect": [],
+  
+  "extractCallGraph": false,
+  "extractTypeUsage": false,
+  "extractInheritance": true,
+  "extractAnnotations": false,
+  "extractFieldRelationships": false,
+  
+  "extractDependencies": false,
+  "includeMavenDependencies": false,
+  "includeGradleDependencies": false,
+  "includeTransitiveDependencies": false,
+  
+  "maxMemoryMB": 1024,
+  "enableParallelProcessing": false,
+  "maxThreads": 1,
+  "enableProgressReporting": false,
+  
+  "prettyPrintJson": false,
+  "includeSourceCode": false,
+  "includeLineNumbers": false,
+  "includeFileChecksums": false,
+  
+  "excludePatterns": [
+    ".*\\.generated\\..*",
+    ".*target/generated-sources/.*",
+    ".*build/generated/.*"
+  ],
+  "includePatterns": [
+    ".*\\.java$"
+  ],
+  "excludePackages": [],
+  "includePackages": [],
+  
+  "validateOutput": false,
+  "failOnErrors": false,
+  "maxErrorsBeforeAbort": 10
+}

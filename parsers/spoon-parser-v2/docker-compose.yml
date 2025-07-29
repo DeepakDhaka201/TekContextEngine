@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  spoon-parser-v2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spoon-parser-v2:latest
+    container_name: spoon-parser-v2
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    
+    # Environment variables
+    environment:
+      - JAVA_OPTS=-Xmx3g -Xms1g -XX:+UseG1GC -XX:+UseContainerSupport
+    
+    # Volume mounts
+    volumes:
+      - ./test-projects:/workspace/input:ro
+      - ./output:/workspace/output
+      - ./config:/workspace/config:ro
+    
+    # Working directory
+    working_dir: /workspace
+    
+    # Default command (can be overridden)
+    command: ["test-project", "/workspace/input/sample-project", "/workspace/output/result.json"]
+    
+    # Restart policy
+    restart: "no"
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "java", "-version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Development service with interactive shell
+  spoon-parser-v2-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spoon-parser-v2:latest
+    container_name: spoon-parser-v2-dev
+    
+    environment:
+      - JAVA_OPTS=-Xmx2g -Xms512m -XX:+UseG1GC
+    
+    volumes:
+      - ./test-projects:/workspace/input:ro
+      - ./output:/workspace/output
+      - ./config:/workspace/config:ro
+      - ./logs:/workspace/logs
+    
+    working_dir: /workspace
+    
+    # Interactive shell
+    stdin_open: true
+    tty: true
+    entrypoint: ["/bin/bash"]
+    
+    restart: "no"
+
+# Named volumes for persistent data
+volumes:
+  parser_output:
+    driver: local
+  parser_logs:
+    driver: local
+
+# Networks
+networks:
+  default:
+    name: spoon-parser-network

@@ -1,0 +1,127 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: tekaicontext-postgres
+    environment:
+      POSTGRES_DB: tekaicontextengine2
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache & Queue
+  redis:
+    image: redis:7-alpine
+    container_name: tekaicontext-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Main Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tekaicontext-app
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tekaicontextengine2?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QUEUE_REDIS_HOST: redis
+      QUEUE_REDIS_PORT: 6379
+      GITLAB_URL: https://gitlab.com
+      GITLAB_TOKEN: ${GITLAB_TOKEN}
+      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-here}
+      STORAGE_TYPE: local
+      STORAGE_PATH: /app/storage
+      LOG_LEVEL: info
+      SYNC_INTERVAL_MINUTES: 30
+      MAX_FILE_SIZE_MB: 100
+    ports:
+      - "3000:3000"
+    volumes:
+      - app_storage:/app/storage
+      - app_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Background Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: tekaicontext-worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tekaicontextengine2?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QUEUE_REDIS_HOST: redis
+      QUEUE_REDIS_PORT: 6379
+      GITLAB_URL: https://gitlab.com
+      GITLAB_TOKEN: ${GITLAB_TOKEN}
+      STORAGE_TYPE: local
+      STORAGE_PATH: /app/storage
+      LOG_LEVEL: info
+      MAX_FILE_SIZE_MB: 100
+    volumes:
+      - app_storage:/app/storage
+      - app_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+
+  # Database Migration (runs once)
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tekaicontext-migrate
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tekaicontextengine2?schema=public
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  postgres_data:
+  redis_data:
+  app_storage:
+  app_logs:
+
+networks:
+  default:
+    name: tekaicontext-network

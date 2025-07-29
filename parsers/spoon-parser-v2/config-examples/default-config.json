@@ -1,0 +1,53 @@
+{
+  "includeMethodBodies": false,
+  "includeComments": true,
+  "includePrivateMembers": true,
+  "includeTestFiles": true,
+  "includeGeneratedFiles": false,
+  
+  "enableFrameworkDetection": true,
+  "frameworksToDetect": [
+    "spring-boot",
+    "spring-mvc", 
+    "quarkus",
+    "micronaut",
+    "junit",
+    "testng"
+  ],
+  
+  "extractCallGraph": true,
+  "extractTypeUsage": true,
+  "extractInheritance": true,
+  "extractAnnotations": true,
+  "extractFieldRelationships": true,
+  
+  "extractDependencies": true,
+  "includeMavenDependencies": true,
+  "includeGradleDependencies": true,
+  "includeTransitiveDependencies": false,
+  
+  "maxMemoryMB": 2048,
+  "enableParallelProcessing": true,
+  "maxThreads": 4,
+  "enableProgressReporting": true,
+  
+  "prettyPrintJson": true,
+  "includeSourceCode": false,
+  "includeLineNumbers": true,
+  "includeFileChecksums": true,
+  
+  "excludePatterns": [
+    ".*\\.generated\\..*",
+    ".*target/generated-sources/.*",
+    ".*build/generated/.*"
+  ],
+  "includePatterns": [
+    ".*\\.java$"
+  ],
+  "excludePackages": [],
+  "includePackages": [],
+  
+  "validateOutput": true,
+  "failOnErrors": false,
+  "maxErrorsBeforeAbort": 100
+}
