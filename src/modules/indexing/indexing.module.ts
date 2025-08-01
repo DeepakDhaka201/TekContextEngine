@@ -1,9 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { 
-  TekProject, 
-  Codebase, 
-  CodeSymbol
+import {
+  TekProject,
+  Codebase
 } from '@/entities';
 import { IndexPipeline } from './entities/index-pipeline.entity';
 import { PipelineOrchestratorService } from './pipeline/services/pipeline-orchestrator.service';
@@ -14,7 +13,7 @@ import { CodeParsingTask } from './pipeline/tasks/code-parsing.task';
 import { GraphUpdateTask } from './pipeline/tasks/graph-update.task';
 import { CleanupTask } from './pipeline/tasks/cleanup.task';
 import { IndexingController } from './indexing.controller';
-import { WorkerPoolService } from '@/shared/workers/worker-pool.service';
+
 import { GitlabModule } from '../gitlab/gitlab.module';
 
 @Module({
@@ -22,17 +21,15 @@ import { GitlabModule } from '../gitlab/gitlab.module';
     TypeOrmModule.forFeature([
       TekProject,
       Codebase,
-      CodeSymbol,
       IndexPipeline,
     ]),
-    GitlabModule,
+    forwardRef(() => GitlabModule),
   ],
   controllers: [IndexingController],
   providers: [
     PipelineOrchestratorService,
     PipelineWorkerService,
     PipelineConfigService,
-    WorkerPoolService,
     GitSyncTask,
     CodeParsingTask,
     GraphUpdateTask,

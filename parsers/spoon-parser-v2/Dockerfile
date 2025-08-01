@@ -1,5 +1,5 @@
 # Multi-stage build for Spoon Parser v2
-FROM maven:3.9-openjdk-11-slim AS builder
+FROM maven:3.8.6-openjdk-11-slim AS builder
 
 # Set working directory
 WORKDIR /build
@@ -29,7 +29,7 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Copy the built JAR from builder stage
-COPY --from=builder /build/target/spoon-parser-v2-*-shaded.jar /app/spoon-parser-v2.jar
+COPY --from=builder /build/target/spoon-parser-v2-*.jar /app/spoon-parser-v2.jar
 
 # Create non-root user for security
 RUN groupadd -r spoonparser && useradd -r -g spoonparser spoonparser

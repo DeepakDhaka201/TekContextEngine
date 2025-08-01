@@ -43,13 +43,24 @@ public class IdGenerator {
     
     /**
      * Generates a unique ID for an interface
-     * 
+     *
      * @param codebaseName the codebase name
      * @param fullyQualifiedName the fully qualified interface name
      * @return unique interface ID
      */
     public static String generateInterfaceId(String codebaseName, String fullyQualifiedName) {
         return sanitize(codebaseName) + SEPARATOR + "interface" + SEPARATOR + sanitize(fullyQualifiedName);
+    }
+
+    /**
+     * Generates a unique ID for an enum
+     *
+     * @param codebaseName the codebase name
+     * @param fullyQualifiedName the fully qualified enum name
+     * @return unique enum ID
+     */
+    public static String generateEnumId(String codebaseName, String fullyQualifiedName) {
+        return sanitize(codebaseName) + SEPARATOR + "enum" + SEPARATOR + sanitize(fullyQualifiedName);
     }
     
     /**
@@ -130,15 +141,28 @@ public class IdGenerator {
     
     /**
      * Generates a unique ID for an API endpoint
-     * 
+     *
      * @param codebaseName the codebase name
      * @param httpMethod the HTTP method (GET, POST, etc.)
      * @param path the endpoint path
      * @return unique API endpoint ID
      */
     public static String generateApiEndpointId(String codebaseName, String httpMethod, String path) {
-        return sanitize(codebaseName) + SEPARATOR + "endpoint" + SEPARATOR + 
+        return sanitize(codebaseName) + SEPARATOR + "endpoint" + SEPARATOR +
                sanitize(httpMethod) + SEPARATOR + sanitize(path);
+    }
+
+    /**
+     * Generate unique ID for API endpoint with class and method info
+     * @param codebaseName the codebase name
+     * @param className the controller class name
+     * @param methodName the method name
+     * @param httpMethod the HTTP method (GET, POST, etc.)
+     * @return unique API endpoint ID
+     */
+    public static String generateAPIEndpointId(String codebaseName, String className, String methodName, String httpMethod) {
+        return sanitize(codebaseName) + SEPARATOR + "endpoint" + SEPARATOR +
+               sanitize(className) + SEPARATOR + sanitize(methodName) + SEPARATOR + sanitize(httpMethod);
     }
     
     /**

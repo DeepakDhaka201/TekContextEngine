@@ -25,7 +25,7 @@ export class DocumentAdapter {
   /**
    * Create default docs buckets for TekProject
    */
-  static createDefaultDocsBuckets(tekProject: TekProject): DocsBucket[] {
+  static createDefaultDocsBuckets(tekProject: TekProject, storagePath: string = './storage'): DocsBucket[] {
     const bucketConfigs = [
       {
         name: 'API Documentation',
@@ -46,7 +46,7 @@ export class DocumentAdapter {
       bucket.project = tekProject;
       bucket.name = config.name;
       bucket.type = config.type;
-      bucket.storagePath = `/data/docs/${tekProject.id}/${config.type}`;
+      bucket.storagePath = `${storagePath}/docs/${tekProject.id}/${config.type}`;
       bucket.metadata = {
         createdBy: 'system',
         defaultBucket: true,
@@ -63,12 +63,12 @@ export class DocumentAdapter {
   /**
    * Create custom docs bucket from data
    */
-  static fromCreateBucketData(data: CreateDocsBucketData, tekProject: TekProject): DocsBucket {
+  static fromCreateBucketData(data: CreateDocsBucketData, tekProject: TekProject, storagePath: string = './storage'): DocsBucket {
     const bucket = new DocsBucket();
     bucket.project = tekProject;
     bucket.name = data.name;
     bucket.type = data.type as DocsBucketType;
-    bucket.storagePath = `/data/docs/${tekProject.id}/${data.type}`;
+    bucket.storagePath = `${storagePath}/docs/${tekProject.id}/${data.type}`;
     bucket.metadata = {
       description: data.description,
       createdBy: 'user',
@@ -147,6 +147,10 @@ export class DocumentAdapter {
         return DocumentType.HTML;
       case 'text':
         return DocumentType.TEXT;
+      case 'documentation':
+      case 'specification':
+      case 'guide':
+        return DocumentType.OTHER; // Map new types to OTHER for now
       default:
         return DocumentType.OTHER;
     }

@@ -1,11 +1,13 @@
-import { SourceFile, MethodDeclaration, FunctionDeclaration, ConstructorDeclaration, GetAccessorDeclaration, SetAccessorDeclaration, SyntaxKind, Scope } from 'ts-morph';
+import { SourceFile, MethodDeclaration, FunctionDeclaration, ConstructorDeclaration, GetAccessorDeclaration, SetAccessorDeclaration, SyntaxKind, Scope, ClassDeclaration } from 'ts-morph';
 import { ParseResult, MethodNode, ParameterInfo, DecoratorInfo } from '../models/parse-result';
 import { ParserOptions } from '../parser';
+import { generateMethodId, generateMethodSignature, createFullyQualifiedName } from '../utils/id-generator';
 
 export class MethodVisitor {
   constructor(
     private result: ParseResult,
-    private options: ParserOptions
+    private options: ParserOptions,
+    private codebaseName: string
   ) {}
 
   visitSourceFile(sourceFile: SourceFile): void {
@@ -107,25 +109,30 @@ export class MethodVisitor {
     const decorators = this.getDecorators(method);
 
     return {
+      id: generateMethodId(this.codebaseName, className || 'unknown', signature),
       name,
       signature,
       returnType,
-      comment: this.getComment(method),
-      body: method.getBodyText(),
+      comment: this.getComment(method) || '',
+      body: method.getBodyText() || '',
       visibility: this.getVisibility(method),
-      cyclomaticComplexity: this.calculateCyclomaticComplexity(method),
-      parameters,
-      isAsync: method.isAsync(),
-      isStatic: method.isStatic(),
       isAbstract: method.isAbstract(),
+      isFinal: false, // TypeScript doesn't have final methods
+      isStatic: method.isStatic(),
+      isConstructor,
+      isTestMethod: this.isTestMethod(method),
       filePath: sourceFile.getFilePath(),
-      className,
       startLine: method.getStartLineNumber(),
       endLine: method.getEndLineNumber(),
-      isConstructor,
-      isGetter: false,
-      isSetter: false,
-      decorators
+      cyclomaticComplexity: this.calculateCyclomaticComplexity(method),
+      parameters,
+      decorators,
+      properties: {
+        isAsync: method.isAsync(),
+        className,
+        isGetter: false,
+        isSetter: false
+      }
     };
   }
 
@@ -134,24 +141,30 @@ export class MethodVisitor {
     const parameters = this.getConstructorParameters(constructor);
 
     return {
+      id: generateMethodId(this.codebaseName, className || 'unknown', signature),
       name: 'constructor',
       signature,
       returnType: 'void',
-      comment: this.getComment(constructor),
-      body: constructor.getBodyText(),
+      comment: this.getComment(constructor) || '',
+      body: constructor.getBodyText() || '',
       visibility: this.getConstructorVisibility(constructor),
-      cyclomaticComplexity: this.calculateCyclomaticComplexity(constructor),
-      parameters,
-      isAsync: false,
-      isStatic: false,
       isAbstract: false,
+      isFinal: false,
+      isStatic: false,
+      isConstructor: true,
+      isTestMethod: false,
       filePath: sourceFile.getFilePath(),
-      className,
       startLine: constructor.getStartLineNumber(),
       endLine: constructor.getEndLineNumber(),
-      isConstructor: true,
-      isGetter: false,
-      isSetter: false
+      cyclomaticComplexity: this.calculateCyclomaticComplexity(constructor),
+      parameters,
+      decorators: [],
+      properties: {
+        isAsync: false,
+        className,
+        isGetter: false,
+        isSetter: false
+      }
     };
   }
 
@@ -162,23 +175,29 @@ export class MethodVisitor {
     const parameters = this.getFunctionParameters(func);
 
     return {
+      id: generateMethodId(this.codebaseName, 'global', signature),
       name,
       signature,
       returnType,
-      comment: this.getComment(func),
-      body: func.getBodyText(),
+      comment: this.getComment(func) || '',
+      body: func.getBodyText() || '',
       visibility: func.isExported() ? 'public' : 'private',
-      cyclomaticComplexity: this.calculateCyclomaticComplexity(func),
-      parameters,
-      isAsync: func.isAsync(),
-      isStatic: false,
       isAbstract: false,
+      isFinal: false,
+      isStatic: false,
+      isConstructor: false,
+      isTestMethod: this.isTestMethod(func),
       filePath: sourceFile.getFilePath(),
       startLine: func.getStartLineNumber(),
       endLine: func.getEndLineNumber(),
-      isConstructor: false,
-      isGetter: false,
-      isSetter: false
+      cyclomaticComplexity: this.calculateCyclomaticComplexity(func),
+      parameters,
+      decorators: [],
+      properties: {
+        isAsync: func.isAsync(),
+        isGetter: false,
+        isSetter: false
+      }
     };
   }
 
@@ -187,24 +206,30 @@ export class MethodVisitor {
     const returnType = getter.getReturnType().getText();
 
     return {
+      id: generateMethodId(this.codebaseName, className || 'unknown', `get ${name}(): ${returnType}`),
       name,
       signature: `get ${name}(): ${returnType}`,
       returnType,
-      comment: this.getComment(getter),
-      body: getter.getBodyText(),
+      comment: this.getComment(getter) || '',
+      body: getter.getBodyText() || '',
       visibility: this.getAccessorVisibility(getter),
-      cyclomaticComplexity: this.calculateCyclomaticComplexity(getter),
-      parameters: [],
-      isAsync: false,
-      isStatic: getter.isStatic(),
       isAbstract: getter.isAbstract(),
+      isFinal: false,
+      isStatic: getter.isStatic(),
+      isConstructor: false,
+      isTestMethod: false,
       filePath: sourceFile.getFilePath(),
-      className,
       startLine: getter.getStartLineNumber(),
       endLine: getter.getEndLineNumber(),
-      isConstructor: false,
-      isGetter: true,
-      isSetter: false
+      cyclomaticComplexity: this.calculateCyclomaticComplexity(getter),
+      parameters: [],
+      decorators: [],
+      properties: {
+        isAsync: false,
+        className,
+        isGetter: true,
+        isSetter: false
+      }
     };
   }
 
@@ -212,25 +237,33 @@ export class MethodVisitor {
     const name = setter.getName();
     const parameters = this.getSetterParameters(setter);
 
+    const signature = `set ${name}(${parameters.map(p => `${p.name}: ${p.type}`).join(', ')})`;
+
     return {
+      id: generateMethodId(this.codebaseName, className || 'unknown', signature),
       name,
-      signature: `set ${name}(${parameters.map(p => `${p.name}: ${p.type}`).join(', ')})`,
+      signature,
       returnType: 'void',
-      comment: this.getComment(setter),
-      body: setter.getBodyText(),
+      comment: this.getComment(setter) || '',
+      body: setter.getBodyText() || '',
       visibility: this.getAccessorVisibility(setter),
-      cyclomaticComplexity: this.calculateCyclomaticComplexity(setter),
-      parameters,
-      isAsync: false,
-      isStatic: setter.isStatic(),
       isAbstract: setter.isAbstract(),
+      isFinal: false,
+      isStatic: setter.isStatic(),
+      isConstructor: false,
+      isTestMethod: false,
       filePath: sourceFile.getFilePath(),
-      className,
       startLine: setter.getStartLineNumber(),
       endLine: setter.getEndLineNumber(),
-      isConstructor: false,
-      isGetter: false,
-      isSetter: true
+      cyclomaticComplexity: this.calculateCyclomaticComplexity(setter),
+      parameters,
+      decorators: [],
+      properties: {
+        isAsync: false,
+        className,
+        isGetter: false,
+        isSetter: true
+      }
     };
   }
 
@@ -263,9 +296,12 @@ export class MethodVisitor {
     return method.getParameters().map(param => ({
       name: param.getName(),
       type: param.getType().getText(),
-      isOptional: param.hasQuestionToken(),
-      defaultValue: param.getInitializer()?.getText(),
-      decorators: this.getParameterDecorators(param)
+      isVarArgs: param.isRestParameter(),
+      decorators: this.getParameterDecorators(param),
+      properties: {
+        isOptional: param.hasQuestionToken(),
+        defaultValue: param.getInitializer()?.getText()
+      }
     }));
   }
 
@@ -273,9 +309,12 @@ export class MethodVisitor {
     return constructor.getParameters().map(param => ({
       name: param.getName(),
       type: param.getType().getText(),
-      isOptional: param.hasQuestionToken(),
-      defaultValue: param.getInitializer()?.getText(),
-      decorators: this.getParameterDecorators(param)
+      isVarArgs: param.isRestParameter(),
+      decorators: this.getParameterDecorators(param),
+      properties: {
+        isOptional: param.hasQuestionToken(),
+        defaultValue: param.getInitializer()?.getText()
+      }
     }));
   }
 
@@ -283,8 +322,12 @@ export class MethodVisitor {
     return func.getParameters().map(param => ({
       name: param.getName(),
       type: param.getType().getText(),
-      isOptional: param.hasQuestionToken(),
-      defaultValue: param.getInitializer()?.getText()
+      isVarArgs: param.isRestParameter(),
+      decorators: [],
+      properties: {
+        isOptional: param.hasQuestionToken(),
+        defaultValue: param.getInitializer()?.getText()
+      }
     }));
   }
 
@@ -292,25 +335,51 @@ export class MethodVisitor {
     return setter.getParameters().map(param => ({
       name: param.getName(),
       type: param.getType().getText(),
-      isOptional: param.hasQuestionToken(),
-      defaultValue: param.getInitializer()?.getText()
+      isVarArgs: param.isRestParameter(),
+      decorators: [],
+      properties: {
+        isOptional: param.hasQuestionToken(),
+        defaultValue: param.getInitializer()?.getText()
+      }
     }));
   }
 
   private getDecorators(method: MethodDeclaration): DecoratorInfo[] {
-    return method.getDecorators().map(decorator => ({
-      name: decorator.getName(),
-      arguments: decorator.getArguments().map(arg => arg.getText())
-    }));
+    return method.getDecorators().map(decorator => {
+      const name = decorator.getName();
+      const args = decorator.getArguments();
+      const properties: Record<string, any> = {};
+
+      args.forEach((arg, index) => {
+        properties[`arg${index}`] = arg.getText();
+      });
+
+      return {
+        name,
+        fullyQualifiedName: name, // For now, use simple name
+        properties
+      };
+    });
   }
 
   private getParameterDecorators(param: any): DecoratorInfo[] {
     try {
       const decorators = param.getDecorators?.() || [];
-      return decorators.map((decorator: any) => ({
-        name: decorator.getName(),
-        arguments: decorator.getArguments().map((arg: any) => arg.getText())
-      }));
+      return decorators.map((decorator: any) => {
+        const name = decorator.getName();
+        const args = decorator.getArguments();
+        const properties: Record<string, any> = {};
+
+        args.forEach((arg: any, index: number) => {
+          properties[`arg${index}`] = arg.getText();
+        });
+
+        return {
+          name,
+          fullyQualifiedName: name,
+          properties
+        };
+      });
     } catch {
       return [];
     }
@@ -385,55 +454,78 @@ export class MethodVisitor {
   }
 
   private analyzeFrameworkSpecificMethod(methodNode: MethodNode, methodDeclaration: any): void {
-    const decorators = methodNode.decorators || [];
+    const decorators = methodNode.decorators;
     const decoratorNames = decorators.map(d => d.name);
     const methodName = methodNode.name;
-    
+
+    // Store framework-specific information in properties instead of direct properties
     // HTTP method decorators (NestJS, Angular)
     const httpDecorators = ['Get', 'Post', 'Put', 'Delete', 'Patch', 'Options', 'Head'];
     const httpDecorator = decoratorNames.find(name => httpDecorators.includes(name));
-    
+
     if (httpDecorator) {
-      methodNode.isApiEndpoint = true;
-      methodNode.httpMethod = httpDecorator.toUpperCase();
-      
+      methodNode.properties['isApiEndpoint'] = true;
+      methodNode.properties['httpMethod'] = httpDecorator.toUpperCase();
+
       // Extract route from decorator argument
       const decorator = decorators.find(d => d.name === httpDecorator);
-      if (decorator && decorator.arguments && decorator.arguments.length > 0) {
-        methodNode.route = decorator.arguments[0].replace(/['"]/g, '');
+      if (decorator && decorator.properties['arg0']) {
+        methodNode.properties['route'] = decorator.properties['arg0'].replace(/['"]/g, '');
       }
     }
-    
+
     // React lifecycle methods
     const reactLifecycleMethods = [
       'componentDidMount', 'componentDidUpdate', 'componentWillUnmount',
       'componentDidCatch', 'getSnapshotBeforeUpdate', 'shouldComponentUpdate'
     ];
     if (reactLifecycleMethods.includes(methodName)) {
-      methodNode.isLifecycleMethod = true;
+      methodNode.properties['isLifecycleMethod'] = true;
+      methodNode.properties['framework'] = 'react';
     }
-    
+
     // React event handlers
     if (methodName.startsWith('on') || methodName.startsWith('handle')) {
-      methodNode.isEventHandler = true;
+      methodNode.properties['isEventHandler'] = true;
     }
-    
+
     // Angular lifecycle methods
     const angularLifecycleMethods = [
       'ngOnInit', 'ngOnDestroy', 'ngOnChanges', 'ngAfterViewInit',
       'ngAfterContentInit', 'ngAfterViewChecked', 'ngAfterContentChecked'
     ];
     if (angularLifecycleMethods.includes(methodName)) {
-      methodNode.isLifecycleMethod = true;
+      methodNode.properties['isLifecycleMethod'] = true;
+      methodNode.properties['framework'] = 'angular';
     }
-    
+
     // Vue lifecycle methods
     const vueLifecycleMethods = [
       'created', 'mounted', 'updated', 'destroyed', 'beforeCreate',
       'beforeMount', 'beforeUpdate', 'beforeDestroy'
     ];
     if (vueLifecycleMethods.includes(methodName)) {
-      methodNode.isLifecycleMethod = true;
+      methodNode.properties['isLifecycleMethod'] = true;
+      methodNode.properties['framework'] = 'vue';
     }
+  }
+
+  private isTestMethod(method: any): boolean {
+    const methodName = method.getName();
+    const decorators = method.getDecorators?.() || [];
+    const decoratorNames = decorators.map((d: any) => d.getName());
+
+    // Check for test decorators
+    const testDecorators = ['Test', 'it', 'describe', 'beforeEach', 'afterEach', 'beforeAll', 'afterAll'];
+    if (decoratorNames.some((name: string) => testDecorators.includes(name))) {
+      return true;
+    }
+
+    // Check method name patterns
+    if (methodName.startsWith('test') || methodName.includes('Test') || methodName.includes('Spec')) {
+      return true;
+    }
+
+    return false;
   }
 }

@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Inject, LoggerService } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -23,10 +24,15 @@ export interface StoredFile {
 
 @Injectable()
 export class StorageService {
-  private readonly logger = new Logger(StorageService.name);
   private readonly config: StorageConfig;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    @Inject(WINSTON_MODULE_NEST_PROVIDER)
+    private readonly logger: LoggerService
+  ) {
+    this.logger.debug('[STORAGE-SERVICE] Initializing storage service');
+
     this.config = {
       type: this.configService.get<'local' | 's3' | 'gcs'>('STORAGE_TYPE', 'local'),
       basePath: this.configService.get<string>('STORAGE_PATH', './storage'),
@@ -39,6 +45,13 @@ export class StorageService {
       ],
     };
 
+    this.logger.log('[STORAGE-SERVICE] Storage configuration loaded', {
+      type: this.config.type,
+      basePath: this.config.basePath,
+      maxFileSizeMB: Math.round(this.config.maxFileSize / (1024 * 1024)),
+      allowedExtensionsCount: this.config.allowedExtensions?.length || 0
+    });
+
     this.initializeStorage();
   }
 
@@ -46,18 +59,47 @@ export class StorageService {
    * Initialize storage directories
    */
   private async initializeStorage(): Promise<void> {
+    this.logger.debug('[STORAGE-SERVICE] Starting storage initialization', {
+      storageType: this.config.type
+    });
+
     if (this.config.type === 'local') {
+      this.logger.debug('[STORAGE-SERVICE] Initializing local storage directories');
       try {
-        await fs.mkdir(this.config.basePath, { recursive: true });
-        await fs.mkdir(path.join(this.config.basePath, 'codebases'), { recursive: true });
-        await fs.mkdir(path.join(this.config.basePath, 'temp'), { recursive: true });
-        await fs.mkdir(path.join(this.config.basePath, 'cache'), { recursive: true });
-        
+        const directories = [
+          this.config.basePath,
+          path.join(this.config.basePath, 'codebases'),
+          path.join(this.config.basePath, 'temp'),
+          path.join(this.config.basePath, 'cache')
+        ];
+
+        for (const dir of directories) {
+          await fs.mkdir(dir, { recursive: true });
+          this.logger.debug('[STORAGE-SERVICE] Created directory', { directory: dir });
+        }
+
+        this.logger.log('[STORAGE-SERVICE] Local storage initialized successfully', {
+          basePath: this.config.basePath,
+          directoriesCreated: directories.length
+        });
+
         this.logger.log(`Local storage initialized at: ${this.config.basePath}`);
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        this.logger.error('[STORAGE-SERVICE] Failed to initialize local storage', {
+          error: errorMessage,
+          basePath: this.config.basePath,
+          stack: error instanceof Error ? error.stack : undefined
+        });
+
         this.logger.error('Failed to initialize local storage:', error);
         throw error;
       }
+    } else {
+      this.logger.debug('[STORAGE-SERVICE] Non-local storage type, skipping directory initialization', {
+        storageType: this.config.type
+      });
     }
   }
 
@@ -70,30 +112,70 @@ export class StorageService {
     codebaseId: string,
     filePath: string,
   ): Promise<StoredFile> {
+    this.logger.debug('[STORAGE-SERVICE] Starting file storage operation', {
+      originalName,
+      codebaseId,
+      filePath,
+      contentSize: content.length,
+      contentSizeMB: Math.round(content.length / (1024 * 1024) * 100) / 100
+    });
+
     // Validate file size
     if (content.length > this.config.maxFileSize) {
+      this.logger.error('[STORAGE-SERVICE] File size validation failed', {
+        fileSize: content.length,
+        maxFileSize: this.config.maxFileSize,
+        fileSizeMB: Math.round(content.length / (1024 * 1024) * 100) / 100,
+        maxFileSizeMB: Math.round(this.config.maxFileSize / (1024 * 1024))
+      });
       throw new Error(`File size exceeds maximum allowed size: ${this.config.maxFileSize} bytes`);
     }
 
     // Validate file extension
     const extension = path.extname(originalName).toLowerCase();
     if (this.config.allowedExtensions && !this.config.allowedExtensions.includes(extension)) {
+      this.logger.error('[STORAGE-SERVICE] File extension validation failed', {
+        extension,
+        originalName,
+        allowedExtensions: this.config.allowedExtensions
+      });
       throw new Error(`File extension not allowed: ${extension}`);
     }
 
+    this.logger.debug('[STORAGE-SERVICE] File validation passed', {
+      extension,
+      contentSize: content.length
+    });
+
     // Calculate hash
+    this.logger.debug('[STORAGE-SERVICE] Calculating file hash');
     const hash = crypto.createHash('sha256').update(content).digest('hex');
 
     // Generate storage path
+    this.logger.debug('[STORAGE-SERVICE] Generating storage path');
     const storagePath = this.generateStoragePath(codebaseId, filePath);
     const fullPath = path.join(this.config.basePath, storagePath);
 
+    this.logger.debug('[STORAGE-SERVICE] Storage paths generated', {
+      storagePath,
+      fullPath,
+      hash: hash.substring(0, 8)
+    });
+
     try {
       // Ensure directory exists
-      await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      const parentDir = path.dirname(fullPath);
+      this.logger.debug('[STORAGE-SERVICE] Ensuring parent directory exists', {
+        parentDir
+      });
+
+      await fs.mkdir(parentDir, { recursive: true });
 
       // Write file
+      this.logger.debug('[STORAGE-SERVICE] Writing file to storage');
+      const writeStartTime = Date.now();
       await fs.writeFile(fullPath, content);
+      const writeDuration = Date.now() - writeStartTime;
 
       const storedFile: StoredFile = {
         id: crypto.randomUUID(),
@@ -104,9 +186,32 @@ export class StorageService {
         createdAt: new Date(),
       };
 
+      this.logger.log('[STORAGE-SERVICE] File stored successfully', {
+        storedFileId: storedFile.id,
+        originalName: storedFile.originalName,
+        storagePath: storedFile.path,
+        fileSize: storedFile.size,
+        fileSizeMB: Math.round(storedFile.size / (1024 * 1024) * 100) / 100,
+        hash: storedFile.hash.substring(0, 8),
+        writeDurationMs: writeDuration,
+        codebaseId
+      });
+
       this.logger.debug(`File stored: ${storagePath} (${content.length} bytes)`);
       return storedFile;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error('[STORAGE-SERVICE] Failed to store file', {
+        originalName,
+        codebaseId,
+        filePath,
+        storagePath,
+        fullPath,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+
       this.logger.error(`Failed to store file ${originalName}:`, error);
       throw error;
     }
@@ -116,13 +221,36 @@ export class StorageService {
    * Retrieve file content
    */
   async getFile(storagePath: string): Promise<Buffer> {
+    this.logger.debug('[STORAGE-SERVICE] Retrieving file content', {
+      storagePath
+    });
+
     const fullPath = path.join(this.config.basePath, storagePath);
 
     try {
+      const readStartTime = Date.now();
       const content = await fs.readFile(fullPath);
+      const readDuration = Date.now() - readStartTime;
+
+      this.logger.debug('[STORAGE-SERVICE] File retrieved successfully', {
+        storagePath,
+        contentSize: content.length,
+        contentSizeMB: Math.round(content.length / (1024 * 1024) * 100) / 100,
+        readDurationMs: readDuration
+      });
+
       this.logger.debug(`File retrieved: ${storagePath} (${content.length} bytes)`);
       return content;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error('[STORAGE-SERVICE] Failed to retrieve file', {
+        storagePath,
+        fullPath,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+
       this.logger.error(`Failed to retrieve file ${storagePath}:`, error);
       throw error;
     }
@@ -132,12 +260,27 @@ export class StorageService {
    * Check if file exists
    */
   async fileExists(storagePath: string): Promise<boolean> {
+    this.logger.debug('[STORAGE-SERVICE] Checking if file exists', {
+      storagePath
+    });
+
     const fullPath = path.join(this.config.basePath, storagePath);
 
     try {
       await fs.access(fullPath);
+
+      this.logger.debug('[STORAGE-SERVICE] File exists', {
+        storagePath,
+        exists: true
+      });
+
       return true;
     } catch {
+      this.logger.debug('[STORAGE-SERVICE] File does not exist', {
+        storagePath,
+        exists: false
+      });
+
       return false;
     }
   }

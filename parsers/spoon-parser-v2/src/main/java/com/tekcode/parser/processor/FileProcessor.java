@@ -51,7 +51,7 @@ public class FileProcessor {
             String relativePath = PathUtils.toRelativePath(file.getAbsolutePath(), context.getProjectPath());
             fileNode.setPath(relativePath);
             fileNode.setFileName(file.getName());
-            fileNode.setAbsolutePath(file.getAbsolutePath());
+            // absolutePath removed - not needed for LLM context
             
             // File metadata
             fileNode.setLastModified(file.lastModified());
@@ -63,9 +63,7 @@ public class FileProcessor {
                 fileNode.setChecksum(checksum);
             }
             
-            // Count lines
-            int lineCount = countLines(file);
-            fileNode.setLineCount(lineCount);
+            // Line counting removed - not needed for LLM context
             
             // Determine file type and characteristics
             analyzeFileCharacteristics(fileNode, file);
@@ -76,7 +74,7 @@ public class FileProcessor {
                 fileNode.setSourceCode(sourceCode);
             }
             
-            logger.debug("Processed file: {} ({} lines)", relativePath, lineCount);
+            logger.debug("Processed file: {}", relativePath);
             return fileNode;
             
         } catch (Exception e) {
@@ -171,8 +169,8 @@ public class FileProcessor {
         String path = file.getAbsolutePath();
         
         // Set file type flags
-        fileNode.setIsTestFile(PathUtils.isTestFile(path));
-        fileNode.setIsGeneratedFile(PathUtils.isGeneratedFile(path));
+        fileNode.setTestFile(PathUtils.isTestFile(path));
+        // isGeneratedFile removed - not needed for LLM context
         
         // Determine package name from path
         String packageName = PathUtils.pathToPackageName(fileNode.getPath());
@@ -212,10 +210,7 @@ public class FileProcessor {
                 }
             }
             
-            fileNode.setLineCount(totalLines);
-            fileNode.setCodeLines(codeLines);
-            fileNode.setCommentLines(commentLines);
-            fileNode.setBlankLines(blankLines);
+            // Detailed line metrics removed - not needed for LLM context
             
         } catch (IOException e) {
             logger.warn("Could not analyze content characteristics for file: {}", file.getAbsolutePath(), e);

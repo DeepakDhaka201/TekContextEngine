@@ -11,8 +11,8 @@ export class UploadDocumentDto {
   @IsString()
   description?: string;
 
-  @IsIn(['markdown', 'pdf', 'text', 'html', 'other'])
-  type: 'markdown' | 'pdf' | 'text' | 'html' | 'other';
+  @IsIn(['markdown', 'pdf', 'text', 'html', 'documentation', 'specification', 'guide', 'other'])
+  type: 'markdown' | 'pdf' | 'text' | 'html' | 'documentation' | 'specification' | 'guide' | 'other';
 
   @IsOptional()
   @IsArray()

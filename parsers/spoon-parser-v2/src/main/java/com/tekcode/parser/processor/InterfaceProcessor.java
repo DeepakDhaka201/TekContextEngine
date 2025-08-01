@@ -56,10 +56,11 @@ public class InterfaceProcessor {
             extractPositionInfo(interfaceNode, ctInterface);
 
             // Annotations/Decorators
+            List<DecoratorInfo> decorators = new ArrayList<>();
             if (context.shouldExtractAnnotations()) {
-                List<DecoratorInfo> decorators = extractDecorators(ctInterface);
-                interfaceNode.setDecorators(decorators);
+                decorators = extractDecorators(ctInterface);
             }
+            interfaceNode.setDecorators(decorators);
 
             // Method count
             interfaceNode.setMethodCount(ctInterface.getMethods().size());

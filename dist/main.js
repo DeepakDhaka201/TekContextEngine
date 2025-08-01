@@ -50,14 +50,14 @@ const schedule_1 = __webpack_require__(7);
 const nest_winston_1 = __webpack_require__(5);
 const winston = __webpack_require__(8);
 const database_module_1 = __webpack_require__(9);
-const storage_module_1 = __webpack_require__(20);
-const worker_pool_module_1 = __webpack_require__(25);
-const project_module_1 = __webpack_require__(27);
-const sync_module_1 = __webpack_require__(66);
-const indexing_module_1 = __webpack_require__(64);
-const gitlab_module_1 = __webpack_require__(62);
-const health_module_1 = __webpack_require__(67);
-const websocket_module_1 = __webpack_require__(70);
+const storage_module_1 = __webpack_require__(19);
+const worker_pool_module_1 = __webpack_require__(24);
+const project_module_1 = __webpack_require__(26);
+const indexing_module_1 = __webpack_require__(58);
+const gitlab_module_1 = __webpack_require__(52);
+const health_module_1 = __webpack_require__(70);
+const all_exceptions_filter_1 = __webpack_require__(73);
+const logging_interceptor_1 = __webpack_require__(74);
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -82,6 +82,15 @@ exports.AppModule = AppModule = __decorate([
                                     return `${timestamp} ${level}: ${contextStr}${message}`;
                                 })),
                             }),
+                            new winston.transports.File({
+                                filename: 'logs/app.log',
+                                format: winston.format.combine(winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }), winston.format.json()),
+                            }),
+                            new winston.transports.File({
+                                filename: 'logs/error.log',
+                                level: 'error',
+                                format: winston.format.combine(winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }), winston.format.json()),
+                            }),
                         ],
                     };
                 },
@@ -92,11 +101,13 @@ exports.AppModule = AppModule = __decorate([
             worker_pool_module_1.WorkerPoolModule,
             schedule_1.ScheduleModule.forRoot(),
             project_module_1.ProjectModule,
-            sync_module_1.SyncModule,
             indexing_module_1.IndexingModule,
             gitlab_module_1.GitlabModule,
             health_module_1.HealthModule,
-            websocket_module_1.WebSocketModule,
+        ],
+        providers: [
+            all_exceptions_filter_1.AllExceptionsFilter,
+            logging_interceptor_1.LoggingInterceptor,
         ],
     })
 ], AppModule);
@@ -153,7 +164,6 @@ exports.DatabaseModule = DatabaseModule = __decorate([
                         entities_1.DocsBucket,
                         entities_1.Codebase,
                         entities_1.Document,
-                        entities_1.CodeSymbol,
                         index_pipeline_entity_1.IndexPipeline,
                     ],
                     synchronize: configService.get('DB_SYNCHRONIZE', false),
@@ -174,7 +184,6 @@ exports.DatabaseModule = DatabaseModule = __decorate([
                 entities_1.DocsBucket,
                 entities_1.Codebase,
                 entities_1.Document,
-                entities_1.CodeSymbol,
                 index_pipeline_entity_1.IndexPipeline,
             ]),
         ],
@@ -214,7 +223,6 @@ __exportStar(__webpack_require__(16), exports);
 __exportStar(__webpack_require__(14), exports);
 __exportStar(__webpack_require__(15), exports);
 __exportStar(__webpack_require__(18), exports);
-__exportStar(__webpack_require__(19), exports);
 __exportStar(__webpack_require__(17), exports);
 
 
@@ -317,23 +325,14 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var _a, _b, _c, _d, _e, _f;
+var _a, _b, _c, _d, _e, _f, _g;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.Codebase = exports.CodebaseStatus = void 0;
+exports.Codebase = void 0;
 const typeorm_1 = __webpack_require__(13);
 const project_entity_1 = __webpack_require__(12);
 const document_entity_1 = __webpack_require__(15);
 const enums_1 = __webpack_require__(17);
 const index_pipeline_entity_1 = __webpack_require__(18);
-const code_symbol_entity_1 = __webpack_require__(19);
-var CodebaseStatus;
-(function (CodebaseStatus) {
-    CodebaseStatus["PENDING"] = "PENDING";
-    CodebaseStatus["SYNCING"] = "SYNCING";
-    CodebaseStatus["ACTIVE"] = "ACTIVE";
-    CodebaseStatus["ERROR"] = "ERROR";
-    CodebaseStatus["ARCHIVED"] = "ARCHIVED";
-})(CodebaseStatus || (exports.CodebaseStatus = CodebaseStatus = {}));
 let Codebase = class Codebase {
 };
 exports.Codebase = Codebase;
@@ -392,10 +391,10 @@ __decorate([
 __decorate([
     (0, typeorm_1.Column)({
         type: 'enum',
-        enum: CodebaseStatus,
-        default: CodebaseStatus.PENDING,
+        enum: enums_1.CodebaseStatus,
+        default: enums_1.CodebaseStatus.PENDING,
     }),
-    __metadata("design:type", String)
+    __metadata("design:type", typeof (_d = typeof enums_1.CodebaseStatus !== "undefined" && enums_1.CodebaseStatus) === "function" ? _d : Object)
 ], Codebase.prototype, "status", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'jsonb', nullable: true }),
@@ -403,16 +402,16 @@ __decorate([
 ], Codebase.prototype, "metadata", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
-    __metadata("design:type", typeof (_d = typeof Date !== "undefined" && Date) === "function" ? _d : Object)
+    __metadata("design:type", typeof (_e = typeof Date !== "undefined" && Date) === "function" ? _e : Object)
 ], Codebase.prototype, "createdAt", void 0);
 __decorate([
     (0, typeorm_1.UpdateDateColumn)(),
-    __metadata("design:type", typeof (_e = typeof Date !== "undefined" && Date) === "function" ? _e : Object)
+    __metadata("design:type", typeof (_f = typeof Date !== "undefined" && Date) === "function" ? _f : Object)
 ], Codebase.prototype, "updatedAt", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => project_entity_1.TekProject, (project) => project.codebases, { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: 'project_id' }),
-    __metadata("design:type", typeof (_f = typeof project_entity_1.TekProject !== "undefined" && project_entity_1.TekProject) === "function" ? _f : Object)
+    __metadata("design:type", typeof (_g = typeof project_entity_1.TekProject !== "undefined" && project_entity_1.TekProject) === "function" ? _g : Object)
 ], Codebase.prototype, "project", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => document_entity_1.Document, (document) => document.codebase),
@@ -422,10 +421,6 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => index_pipeline_entity_1.IndexPipeline, (pipeline) => pipeline.codebase),
     __metadata("design:type", Array)
 ], Codebase.prototype, "indexPipelines", void 0);
-__decorate([
-    (0, typeorm_1.OneToMany)(() => code_symbol_entity_1.CodeSymbol, (symbol) => symbol.codebase),
-    __metadata("design:type", Array)
-], Codebase.prototype, "symbols", void 0);
 exports.Codebase = Codebase = __decorate([
     (0, typeorm_1.Entity)('codebases'),
     (0, typeorm_1.Unique)(['project', 'gitlabUrl']),
@@ -626,7 +621,7 @@ exports.DocsBucket = DocsBucket = __decorate([
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.DocumentType = exports.FileStatus = exports.SymbolKind = exports.SyncMode = exports.IndexMode = exports.ProjectStatus = void 0;
+exports.CodebaseStatus = exports.DocumentType = exports.FileStatus = exports.SyncMode = exports.IndexMode = exports.ProjectStatus = void 0;
 var ProjectStatus;
 (function (ProjectStatus) {
     ProjectStatus["ACTIVE"] = "active";
@@ -640,25 +635,6 @@ var IndexMode;
     IndexMode["WEBHOOK"] = "webhook";
 })(IndexMode || (exports.IndexMode = IndexMode = {}));
 exports.SyncMode = IndexMode;
-var SymbolKind;
-(function (SymbolKind) {
-    SymbolKind["CLASS"] = "class";
-    SymbolKind["INTERFACE"] = "interface";
-    SymbolKind["FUNCTION"] = "function";
-    SymbolKind["METHOD"] = "method";
-    SymbolKind["CONSTRUCTOR"] = "constructor";
-    SymbolKind["FIELD"] = "field";
-    SymbolKind["VARIABLE"] = "variable";
-    SymbolKind["CONSTANT"] = "constant";
-    SymbolKind["ENUM"] = "enum";
-    SymbolKind["ENUM_MEMBER"] = "enum_member";
-    SymbolKind["MODULE"] = "module";
-    SymbolKind["NAMESPACE"] = "namespace";
-    SymbolKind["PACKAGE"] = "package";
-    SymbolKind["TYPE"] = "type";
-    SymbolKind["PARAMETER"] = "parameter";
-    SymbolKind["PROPERTY"] = "property";
-})(SymbolKind || (exports.SymbolKind = SymbolKind = {}));
 var FileStatus;
 (function (FileStatus) {
     FileStatus["ACTIVE"] = "active";
@@ -673,6 +649,14 @@ var DocumentType;
     DocumentType["HTML"] = "html";
     DocumentType["OTHER"] = "other";
 })(DocumentType || (exports.DocumentType = DocumentType = {}));
+var CodebaseStatus;
+(function (CodebaseStatus) {
+    CodebaseStatus["PENDING"] = "pending";
+    CodebaseStatus["SYNCING"] = "syncing";
+    CodebaseStatus["ACTIVE"] = "active";
+    CodebaseStatus["ERROR"] = "error";
+    CodebaseStatus["ARCHIVED"] = "archived";
+})(CodebaseStatus || (exports.CodebaseStatus = CodebaseStatus = {}));
 
 
 /***/ }),
@@ -852,118 +836,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
-var _a, _b, _c, _d;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.CodeSymbol = void 0;
-const typeorm_1 = __webpack_require__(13);
-const codebase_entity_1 = __webpack_require__(14);
-const enums_1 = __webpack_require__(17);
-let CodeSymbol = class CodeSymbol {
-};
-exports.CodeSymbol = CodeSymbol;
-__decorate([
-    (0, typeorm_1.PrimaryGeneratedColumn)('uuid'),
-    __metadata("design:type", String)
-], CodeSymbol.prototype, "id", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 500 }),
-    __metadata("design:type", String)
-], CodeSymbol.prototype, "symbolId", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 255 }),
-    __metadata("design:type", String)
-], CodeSymbol.prototype, "name", void 0);
-__decorate([
-    (0, typeorm_1.Column)({
-        type: 'enum',
-        enum: enums_1.SymbolKind,
-    }),
-    __metadata("design:type", typeof (_a = typeof enums_1.SymbolKind !== "undefined" && enums_1.SymbolKind) === "function" ? _a : Object)
-], CodeSymbol.prototype, "kind", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 50 }),
-    __metadata("design:type", String)
-], CodeSymbol.prototype, "language", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'int' }),
-    __metadata("design:type", Number)
-], CodeSymbol.prototype, "startLine", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'int' }),
-    __metadata("design:type", Number)
-], CodeSymbol.prototype, "startColumn", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'int' }),
-    __metadata("design:type", Number)
-], CodeSymbol.prototype, "endLine", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'int' }),
-    __metadata("design:type", Number)
-], CodeSymbol.prototype, "endColumn", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
-    __metadata("design:type", String)
-], CodeSymbol.prototype, "signature", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
-    __metadata("design:type", String)
-], CodeSymbol.prototype, "documentation", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'boolean', default: false }),
-    __metadata("design:type", Boolean)
-], CodeSymbol.prototype, "isDefinition", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 500 }),
-    __metadata("design:type", String)
-], CodeSymbol.prototype, "badgerKey", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'jsonb', nullable: true }),
-    __metadata("design:type", Object)
-], CodeSymbol.prototype, "metadata", void 0);
-__decorate([
-    (0, typeorm_1.CreateDateColumn)(),
-    __metadata("design:type", typeof (_b = typeof Date !== "undefined" && Date) === "function" ? _b : Object)
-], CodeSymbol.prototype, "createdAt", void 0);
-__decorate([
-    (0, typeorm_1.UpdateDateColumn)(),
-    __metadata("design:type", typeof (_c = typeof Date !== "undefined" && Date) === "function" ? _c : Object)
-], CodeSymbol.prototype, "updatedAt", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 1000 }),
-    __metadata("design:type", String)
-], CodeSymbol.prototype, "filePath", void 0);
-__decorate([
-    (0, typeorm_1.ManyToOne)(() => codebase_entity_1.Codebase, (codebase) => codebase.symbols, { onDelete: 'CASCADE' }),
-    (0, typeorm_1.JoinColumn)({ name: 'codebase_id' }),
-    __metadata("design:type", typeof (_d = typeof codebase_entity_1.Codebase !== "undefined" && codebase_entity_1.Codebase) === "function" ? _d : Object)
-], CodeSymbol.prototype, "codebase", void 0);
-exports.CodeSymbol = CodeSymbol = __decorate([
-    (0, typeorm_1.Entity)('code_symbols'),
-    (0, typeorm_1.Unique)(['codebase', 'symbolId']),
-    (0, typeorm_1.Index)(['codebase', 'kind']),
-    (0, typeorm_1.Index)(['name'])
-], CodeSymbol);
-
-
-/***/ }),
-/* 20 */
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.StorageModule = void 0;
 const common_1 = __webpack_require__(2);
 const config_1 = __webpack_require__(4);
-const storage_service_1 = __webpack_require__(21);
+const storage_service_1 = __webpack_require__(20);
 let StorageModule = class StorageModule {
 };
 exports.StorageModule = StorageModule;
@@ -977,7 +854,7 @@ exports.StorageModule = StorageModule = __decorate([
 
 
 /***/ }),
-/* 21 */
+/* 20 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -990,19 +867,23 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var StorageService_1;
-var _a;
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var _a, _b;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.StorageService = void 0;
 const common_1 = __webpack_require__(2);
 const config_1 = __webpack_require__(4);
-const fs = __webpack_require__(22);
-const path = __webpack_require__(23);
-const crypto = __webpack_require__(24);
-let StorageService = StorageService_1 = class StorageService {
-    constructor(configService) {
+const nest_winston_1 = __webpack_require__(5);
+const fs = __webpack_require__(21);
+const path = __webpack_require__(22);
+const crypto = __webpack_require__(23);
+let StorageService = class StorageService {
+    constructor(configService, logger) {
         this.configService = configService;
-        this.logger = new common_1.Logger(StorageService_1.name);
+        this.logger = logger;
+        this.logger.debug('[STORAGE-SERVICE] Initializing storage service');
         this.config = {
             type: this.configService.get('STORAGE_TYPE', 'local'),
             basePath: this.configService.get('STORAGE_PATH', './storage'),
@@ -1014,37 +895,104 @@ let StorageService = StorageService_1 = class StorageService {
                 '.md', '.txt', '.dockerfile', '.gitignore', '.env.example',
             ],
         };
+        this.logger.log('[STORAGE-SERVICE] Storage configuration loaded', {
+            type: this.config.type,
+            basePath: this.config.basePath,
+            maxFileSizeMB: Math.round(this.config.maxFileSize / (1024 * 1024)),
+            allowedExtensionsCount: this.config.allowedExtensions?.length || 0
+        });
         this.initializeStorage();
     }
     async initializeStorage() {
+        this.logger.debug('[STORAGE-SERVICE] Starting storage initialization', {
+            storageType: this.config.type
+        });
         if (this.config.type === 'local') {
+            this.logger.debug('[STORAGE-SERVICE] Initializing local storage directories');
             try {
-                await fs.mkdir(this.config.basePath, { recursive: true });
-                await fs.mkdir(path.join(this.config.basePath, 'codebases'), { recursive: true });
-                await fs.mkdir(path.join(this.config.basePath, 'temp'), { recursive: true });
-                await fs.mkdir(path.join(this.config.basePath, 'cache'), { recursive: true });
+                const directories = [
+                    this.config.basePath,
+                    path.join(this.config.basePath, 'codebases'),
+                    path.join(this.config.basePath, 'temp'),
+                    path.join(this.config.basePath, 'cache')
+                ];
+                for (const dir of directories) {
+                    await fs.mkdir(dir, { recursive: true });
+                    this.logger.debug('[STORAGE-SERVICE] Created directory', { directory: dir });
+                }
+                this.logger.log('[STORAGE-SERVICE] Local storage initialized successfully', {
+                    basePath: this.config.basePath,
+                    directoriesCreated: directories.length
+                });
                 this.logger.log(`Local storage initialized at: ${this.config.basePath}`);
             }
             catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                this.logger.error('[STORAGE-SERVICE] Failed to initialize local storage', {
+                    error: errorMessage,
+                    basePath: this.config.basePath,
+                    stack: error instanceof Error ? error.stack : undefined
+                });
                 this.logger.error('Failed to initialize local storage:', error);
                 throw error;
             }
         }
+        else {
+            this.logger.debug('[STORAGE-SERVICE] Non-local storage type, skipping directory initialization', {
+                storageType: this.config.type
+            });
+        }
     }
     async storeFile(content, originalName, codebaseId, filePath) {
+        this.logger.debug('[STORAGE-SERVICE] Starting file storage operation', {
+            originalName,
+            codebaseId,
+            filePath,
+            contentSize: content.length,
+            contentSizeMB: Math.round(content.length / (1024 * 1024) * 100) / 100
+        });
         if (content.length > this.config.maxFileSize) {
+            this.logger.error('[STORAGE-SERVICE] File size validation failed', {
+                fileSize: content.length,
+                maxFileSize: this.config.maxFileSize,
+                fileSizeMB: Math.round(content.length / (1024 * 1024) * 100) / 100,
+                maxFileSizeMB: Math.round(this.config.maxFileSize / (1024 * 1024))
+            });
             throw new Error(`File size exceeds maximum allowed size: ${this.config.maxFileSize} bytes`);
         }
         const extension = path.extname(originalName).toLowerCase();
         if (this.config.allowedExtensions && !this.config.allowedExtensions.includes(extension)) {
+            this.logger.error('[STORAGE-SERVICE] File extension validation failed', {
+                extension,
+                originalName,
+                allowedExtensions: this.config.allowedExtensions
+            });
             throw new Error(`File extension not allowed: ${extension}`);
         }
+        this.logger.debug('[STORAGE-SERVICE] File validation passed', {
+            extension,
+            contentSize: content.length
+        });
+        this.logger.debug('[STORAGE-SERVICE] Calculating file hash');
         const hash = crypto.createHash('sha256').update(content).digest('hex');
+        this.logger.debug('[STORAGE-SERVICE] Generating storage path');
         const storagePath = this.generateStoragePath(codebaseId, filePath);
         const fullPath = path.join(this.config.basePath, storagePath);
+        this.logger.debug('[STORAGE-SERVICE] Storage paths generated', {
+            storagePath,
+            fullPath,
+            hash: hash.substring(0, 8)
+        });
         try {
-            await fs.mkdir(path.dirname(fullPath), { recursive: true });
+            const parentDir = path.dirname(fullPath);
+            this.logger.debug('[STORAGE-SERVICE] Ensuring parent directory exists', {
+                parentDir
+            });
+            await fs.mkdir(parentDir, { recursive: true });
+            this.logger.debug('[STORAGE-SERVICE] Writing file to storage');
+            const writeStartTime = Date.now();
             await fs.writeFile(fullPath, content);
+            const writeDuration = Date.now() - writeStartTime;
             const storedFile = {
                 id: crypto.randomUUID(),
                 originalName,
@@ -1053,33 +1001,82 @@ let StorageService = StorageService_1 = class StorageService {
                 hash,
                 createdAt: new Date(),
             };
+            this.logger.log('[STORAGE-SERVICE] File stored successfully', {
+                storedFileId: storedFile.id,
+                originalName: storedFile.originalName,
+                storagePath: storedFile.path,
+                fileSize: storedFile.size,
+                fileSizeMB: Math.round(storedFile.size / (1024 * 1024) * 100) / 100,
+                hash: storedFile.hash.substring(0, 8),
+                writeDurationMs: writeDuration,
+                codebaseId
+            });
             this.logger.debug(`File stored: ${storagePath} (${content.length} bytes)`);
             return storedFile;
         }
         catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('[STORAGE-SERVICE] Failed to store file', {
+                originalName,
+                codebaseId,
+                filePath,
+                storagePath,
+                fullPath,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
             this.logger.error(`Failed to store file ${originalName}:`, error);
             throw error;
         }
     }
     async getFile(storagePath) {
+        this.logger.debug('[STORAGE-SERVICE] Retrieving file content', {
+            storagePath
+        });
         const fullPath = path.join(this.config.basePath, storagePath);
         try {
+            const readStartTime = Date.now();
             const content = await fs.readFile(fullPath);
+            const readDuration = Date.now() - readStartTime;
+            this.logger.debug('[STORAGE-SERVICE] File retrieved successfully', {
+                storagePath,
+                contentSize: content.length,
+                contentSizeMB: Math.round(content.length / (1024 * 1024) * 100) / 100,
+                readDurationMs: readDuration
+            });
             this.logger.debug(`File retrieved: ${storagePath} (${content.length} bytes)`);
             return content;
         }
         catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('[STORAGE-SERVICE] Failed to retrieve file', {
+                storagePath,
+                fullPath,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
             this.logger.error(`Failed to retrieve file ${storagePath}:`, error);
             throw error;
         }
     }
     async fileExists(storagePath) {
+        this.logger.debug('[STORAGE-SERVICE] Checking if file exists', {
+            storagePath
+        });
         const fullPath = path.join(this.config.basePath, storagePath);
         try {
             await fs.access(fullPath);
+            this.logger.debug('[STORAGE-SERVICE] File exists', {
+                storagePath,
+                exists: true
+            });
             return true;
         }
         catch {
+            this.logger.debug('[STORAGE-SERVICE] File does not exist', {
+                storagePath,
+                exists: false
+            });
             return false;
         }
     }
@@ -1203,32 +1200,33 @@ let StorageService = StorageService_1 = class StorageService {
     }
 };
 exports.StorageService = StorageService;
-exports.StorageService = StorageService = StorageService_1 = __decorate([
+exports.StorageService = StorageService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
+    __param(1, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object, typeof (_b = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _b : Object])
 ], StorageService);
 
 
 /***/ }),
-/* 22 */
+/* 21 */
 /***/ ((module) => {
 
 module.exports = require("fs/promises");
 
 /***/ }),
-/* 23 */
+/* 22 */
 /***/ ((module) => {
 
 module.exports = require("path");
 
 /***/ }),
-/* 24 */
+/* 23 */
 /***/ ((module) => {
 
 module.exports = require("crypto");
 
 /***/ }),
-/* 25 */
+/* 24 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -1242,7 +1240,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.WorkerPoolModule = void 0;
 const common_1 = __webpack_require__(2);
 const config_1 = __webpack_require__(4);
-const worker_pool_service_1 = __webpack_require__(26);
+const worker_pool_service_1 = __webpack_require__(25);
 let WorkerPoolModule = class WorkerPoolModule {
 };
 exports.WorkerPoolModule = WorkerPoolModule;
@@ -1257,7 +1255,7 @@ exports.WorkerPoolModule = WorkerPoolModule = __decorate([
 
 
 /***/ }),
-/* 26 */
+/* 25 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -1270,12 +1268,14 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var WorkerPoolService_1;
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.WorkerPoolService = exports.WorkerPool = exports.Semaphore = void 0;
 const common_1 = __webpack_require__(2);
-const config_1 = __webpack_require__(4);
+const nest_winston_1 = __webpack_require__(5);
 class Semaphore {
     constructor(permits) {
         this.waitQueue = [];
@@ -1302,117 +1302,82 @@ class Semaphore {
             }
         }
     }
-    get available() {
-        return this.permits;
-    }
-    get waiting() {
-        return this.waitQueue.length;
-    }
 }
 exports.Semaphore = Semaphore;
 class WorkerPool {
-    constructor(name, options) {
+    constructor(name, options, logger) {
         this.name = name;
         this.options = options;
+        this.logger = logger;
         this.workers = [];
         this.taskQueue = [];
-        this.stats = {
-            completedTasks: 0,
-            failedTasks: 0,
-        };
         this.isShuttingDown = false;
-        this.logger = new common_1.Logger(`WorkerPool-${this.name}`);
+        this.logger.debug(`[WORKER-POOL] [${this.name}] Initializing worker pool`, 'WorkerPool');
+        this.logger.debug({
+            maxWorkers: options.maxWorkers,
+            taskTimeout: options.taskTimeout
+        }, 'WorkerPool');
         this.semaphore = new Semaphore(options.maxWorkers);
         this.initializeWorkers();
-        this.startCleanupTimer();
+        this.logger.log(`[WORKER-POOL] [${this.name}] Worker pool initialized successfully`, 'WorkerPool');
+        this.logger.log({
+            totalWorkers: this.workers.length,
+            maxWorkers: options.maxWorkers
+        }, 'WorkerPool');
     }
     async submit(task) {
+        this.logger.debug(`[WORKER-POOL] [${this.name}] Submitting task to pool`, {
+            taskId: task.id,
+            timeout: task.timeout,
+            currentQueueSize: this.taskQueue.length,
+            activeWorkers: this.getActiveWorkerCount()
+        });
         if (this.isShuttingDown) {
+            this.logger.error(`[WORKER-POOL] [${this.name}] Cannot submit task - pool is shutting down`, {
+                taskId: task.id
+            });
             throw new Error('Worker pool is shutting down');
-        }
-        if (this.options.queueSize && this.taskQueue.length >= this.options.queueSize) {
-            throw new Error('Worker pool queue is full');
         }
         return new Promise((resolve, reject) => {
             const wrappedTask = {
                 ...task,
                 execute: async () => {
                     try {
+                        this.logger.debug(`[WORKER-POOL] [${this.name}] Starting task execution`, 'WorkerPool');
+                        this.logger.debug({
+                            taskId: task.id
+                        }, 'WorkerPool');
                         const result = await this.executeWithTimeout(task);
-                        this.stats.completedTasks++;
+                        this.logger.debug(`[WORKER-POOL] [${this.name}] Task completed successfully`, 'WorkerPool');
+                        this.logger.debug({
+                            taskId: task.id
+                        }, 'WorkerPool');
                         resolve(result);
                         return result;
                     }
                     catch (error) {
-                        this.stats.failedTasks++;
+                        const errorMessage = error instanceof Error ? error.message : String(error);
+                        this.logger.error(`[WORKER-POOL] [${this.name}] Task failed`, {
+                            taskId: task.id,
+                            error: errorMessage,
+                            stack: error instanceof Error ? error.stack : undefined
+                        });
                         reject(error);
                         throw error;
                     }
                 },
             };
             this.taskQueue.push(wrappedTask);
+            this.logger.debug(`[WORKER-POOL] [${this.name}] Task added to queue`, {
+                taskId: task.id,
+                newQueueSize: this.taskQueue.length
+            });
             this.processQueue();
         });
-    }
-    async submitBatch(tasks) {
-        const promises = tasks.map(task => this.submit(task));
-        return Promise.all(promises);
-    }
-    async submitWithConcurrency(tasks, maxConcurrency) {
-        const results = [];
-        const semaphore = new Semaphore(maxConcurrency);
-        const promises = tasks.map(async (task, index) => {
-            await semaphore.acquire();
-            try {
-                const result = await this.submit(task);
-                results[index] = result;
-                return result;
-            }
-            finally {
-                semaphore.release();
-            }
-        });
-        await Promise.all(promises);
-        return results;
-    }
-    getStats() {
-        const activeWorkers = this.workers.filter(w => w.busy).length;
-        const utilization = this.workers.length > 0 ? activeWorkers / this.workers.length : 0;
-        return {
-            activeWorkers,
-            queuedTasks: this.taskQueue.length,
-            completedTasks: this.stats.completedTasks,
-            failedTasks: this.stats.failedTasks,
-            totalWorkers: this.workers.length,
-            utilization,
-        };
-    }
-    resize(newSize) {
-        if (newSize < 1) {
-            throw new Error('Worker pool size must be at least 1');
-        }
-        const currentSize = this.options.maxWorkers;
-        this.options.maxWorkers = newSize;
-        this.semaphore = new Semaphore(newSize);
-        if (newSize > currentSize) {
-            for (let i = currentSize; i < newSize; i++) {
-                this.workers.push(this.createWorker(i));
-            }
-        }
-        else if (newSize < currentSize) {
-            const workersToRemove = this.workers
-                .filter(w => !w.busy)
-                .slice(0, currentSize - newSize);
-            this.workers = this.workers.filter(w => !workersToRemove.includes(w));
-        }
-        this.logger.log(`Worker pool resized from ${currentSize} to ${newSize} workers`);
     }
     async shutdown(timeout = 30000) {
         this.logger.log('Shutting down worker pool...');
         this.isShuttingDown = true;
-        if (this.cleanupInterval) {
-            clearInterval(this.cleanupInterval);
-        }
         const startTime = Date.now();
         while (this.hasActiveTasks() && Date.now() - startTime < timeout) {
             await this.sleep(100);
@@ -1437,40 +1402,92 @@ class WorkerPool {
         };
     }
     async processQueue() {
+        this.logger.debug(`[WORKER-POOL] [${this.name}] Processing queue`, {
+            queueLength: this.taskQueue.length,
+            isShuttingDown: this.isShuttingDown,
+            activeWorkers: this.getActiveWorkerCount(),
+            availableWorkers: this.getAvailableWorkerCount()
+        });
         if (this.taskQueue.length === 0 || this.isShuttingDown) {
+            this.logger.debug(`[WORKER-POOL] [${this.name}] Queue processing skipped`, {
+                reason: this.taskQueue.length === 0 ? 'empty queue' : 'shutting down'
+            });
             return;
         }
+        this.logger.debug(`[WORKER-POOL] [${this.name}] Acquiring worker from semaphore`);
         await this.semaphore.acquire();
         try {
             const task = this.taskQueue.shift();
             if (!task) {
+                this.logger.debug(`[WORKER-POOL] [${this.name}] No task available after acquiring worker`);
                 this.semaphore.release();
                 return;
             }
             const worker = this.getAvailableWorker();
             if (!worker) {
+                this.logger.warn(`[WORKER-POOL] [${this.name}] No available worker despite semaphore acquisition`, {
+                    taskId: task.id,
+                    totalWorkers: this.workers.length,
+                    activeWorkers: this.getActiveWorkerCount()
+                });
                 this.taskQueue.unshift(task);
                 this.semaphore.release();
                 return;
             }
+            this.logger.debug(`[WORKER-POOL] [${this.name}] Assigning task to worker`, {
+                taskId: task.id,
+                workerId: worker.id,
+                queueLengthAfterShift: this.taskQueue.length
+            });
             this.executeTask(worker, task);
         }
         catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[WORKER-POOL] [${this.name}] Error processing queue`, {
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined,
+                queueLength: this.taskQueue.length
+            });
             this.semaphore.release();
             this.logger.error('Error processing queue:', error);
         }
     }
     async executeTask(worker, task) {
+        this.logger.debug(`[WORKER-POOL] [${this.name}] Starting task execution`, {
+            taskId: task.id,
+            workerId: worker.id,
+            workerLastUsed: worker.lastUsed
+        });
         worker.busy = true;
         worker.currentTask = task;
         worker.lastUsed = new Date();
+        const taskStartTime = Date.now();
         try {
             await task.execute();
+            const taskDuration = Date.now() - taskStartTime;
+            this.logger.debug(`[WORKER-POOL] [${this.name}] Task executed successfully`, {
+                taskId: task.id,
+                workerId: worker.id,
+                duration: taskDuration
+            });
         }
         catch (error) {
+            const taskDuration = Date.now() - taskStartTime;
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[WORKER-POOL] [${this.name}] Task execution failed`, {
+                taskId: task.id,
+                workerId: worker.id,
+                duration: taskDuration,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
             this.logger.error(`Task ${task.id} failed:`, error);
         }
         finally {
+            this.logger.debug(`[WORKER-POOL] [${this.name}] Cleaning up after task execution`, {
+                taskId: task.id,
+                workerId: worker.id
+            });
             worker.busy = false;
             worker.currentTask = undefined;
             this.semaphore.release();
@@ -1497,71 +1514,87 @@ class WorkerPool {
     getAvailableWorker() {
         return this.workers.find(w => !w.busy) || null;
     }
+    getActiveWorkerCount() {
+        return this.workers.filter(w => w.busy).length;
+    }
+    getAvailableWorkerCount() {
+        return this.workers.filter(w => !w.busy).length;
+    }
     hasActiveTasks() {
         return this.workers.some(w => w.busy) || this.taskQueue.length > 0;
-    }
-    startCleanupTimer() {
-        if (!this.options.idleTimeout)
-            return;
-        this.cleanupInterval = setInterval(() => {
-            this.cleanupIdleWorkers();
-        }, this.options.idleTimeout);
-    }
-    cleanupIdleWorkers() {
-        if (!this.options.idleTimeout)
-            return;
-        const now = new Date();
-        const idleThreshold = now.getTime() - this.options.idleTimeout;
-        const idleWorkers = this.workers.filter(w => !w.busy && w.lastUsed.getTime() < idleThreshold);
-        if (idleWorkers.length > 0 && this.workers.length > 1) {
-            const toRemove = Math.min(idleWorkers.length, this.workers.length - 1);
-            this.workers = this.workers.filter(w => !idleWorkers.slice(0, toRemove).includes(w));
-            this.logger.debug(`Cleaned up ${toRemove} idle workers`);
-        }
     }
     sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
 exports.WorkerPool = WorkerPool;
-let WorkerPoolService = WorkerPoolService_1 = class WorkerPoolService {
-    constructor(configService) {
-        this.configService = configService;
-        this.logger = new common_1.Logger(WorkerPoolService_1.name);
+let WorkerPoolService = class WorkerPoolService {
+    constructor(logger) {
+        this.logger = logger;
         this.pools = new Map();
+        this.logger.debug('[WORKER-POOL-SERVICE] Initializing worker pool service', 'WorkerPoolService');
     }
     createPool(name, options) {
+        this.logger.debug('[WORKER-POOL-SERVICE] Creating new worker pool', 'WorkerPoolService');
+        this.logger.debug({
+            poolName: name,
+            maxWorkers: options.maxWorkers,
+            taskTimeout: options.taskTimeout
+        }, 'WorkerPoolService');
         if (this.pools.has(name)) {
+            this.logger.error('[WORKER-POOL-SERVICE] Cannot create pool - name already exists', 'WorkerPoolService');
+            this.logger.error({
+                poolName: name,
+                existingPools: Array.from(this.pools.keys())
+            }, 'WorkerPoolService');
             throw new Error(`Worker pool '${name}' already exists`);
         }
-        const pool = new WorkerPool(name, options);
+        const pool = new WorkerPool(name, options, this.logger);
         this.pools.set(name, pool);
-        this.logger.log(`Created worker pool '${name}' with ${options.maxWorkers} workers`);
+        this.logger.log('[WORKER-POOL-SERVICE] Worker pool created successfully', 'WorkerPoolService');
+        this.logger.log({
+            poolName: name,
+            maxWorkers: options.maxWorkers,
+            totalPools: this.pools.size
+        }, 'WorkerPoolService');
+        this.logger.log(`Created worker pool '${name}' with ${options.maxWorkers} workers`, 'WorkerPoolService');
         return pool;
     }
-    getPool(name) {
-        return this.pools.get(name) || null;
-    }
     async submitTask(poolName, task) {
+        this.logger.debug('[WORKER-POOL-SERVICE] Submitting task to pool', 'WorkerPoolService');
+        this.logger.debug({
+            poolName,
+            taskId: task.id,
+            taskTimeout: task.timeout
+        }, 'WorkerPoolService');
         const pool = this.pools.get(poolName);
         if (!pool) {
+            this.logger.error('[WORKER-POOL-SERVICE] Cannot submit task - pool not found', 'WorkerPoolService');
+            this.logger.error({
+                poolName,
+                taskId: task.id,
+                availablePools: Array.from(this.pools.keys())
+            }, 'WorkerPoolService');
             throw new Error(`Worker pool '${poolName}' not found`);
         }
-        return pool.submit(task);
-    }
-    getAllStats() {
-        const stats = {};
-        for (const [name, pool] of this.pools) {
-            stats[name] = pool.getStats();
+        try {
+            const result = await pool.submit(task);
+            this.logger.debug('[WORKER-POOL-SERVICE] Task submitted successfully', 'WorkerPoolService');
+            this.logger.debug({
+                poolName,
+                taskId: task.id
+            }, 'WorkerPoolService');
+            return result;
         }
-        return stats;
-    }
-    async destroyPool(name) {
-        const pool = this.pools.get(name);
-        if (pool) {
-            await pool.shutdown();
-            this.pools.delete(name);
-            this.logger.log(`Destroyed worker pool '${name}'`);
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('[WORKER-POOL-SERVICE] Task submission failed', {
+                poolName,
+                taskId: task.id,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            throw error;
         }
     }
     async onModuleDestroy() {
@@ -1573,14 +1606,15 @@ let WorkerPoolService = WorkerPoolService_1 = class WorkerPoolService {
     }
 };
 exports.WorkerPoolService = WorkerPoolService;
-exports.WorkerPoolService = WorkerPoolService = WorkerPoolService_1 = __decorate([
+exports.WorkerPoolService = WorkerPoolService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
+    __param(0, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _a : Object])
 ], WorkerPoolService);
 
 
 /***/ }),
-/* 27 */
+/* 26 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -1596,14 +1630,13 @@ const common_1 = __webpack_require__(2);
 const typeorm_1 = __webpack_require__(10);
 const config_1 = __webpack_require__(4);
 const entities_1 = __webpack_require__(11);
-const tekproject_service_1 = __webpack_require__(28);
-const codebase_service_1 = __webpack_require__(33);
-const document_service_1 = __webpack_require__(36);
-const tekproject_controller_1 = __webpack_require__(37);
-const codebase_controller_1 = __webpack_require__(46);
-const document_controller_1 = __webpack_require__(60);
-const gitlab_module_1 = __webpack_require__(62);
-const indexing_module_1 = __webpack_require__(64);
+const tekproject_service_1 = __webpack_require__(27);
+const codebase_service_1 = __webpack_require__(32);
+const document_service_1 = __webpack_require__(37);
+const tekproject_controller_1 = __webpack_require__(38);
+const codebase_controller_1 = __webpack_require__(49);
+const document_controller_1 = __webpack_require__(50);
+const gitlab_module_1 = __webpack_require__(52);
 let ProjectModule = class ProjectModule {
 };
 exports.ProjectModule = ProjectModule;
@@ -1618,7 +1651,6 @@ exports.ProjectModule = ProjectModule = __decorate([
                 entities_1.Document,
             ]),
             gitlab_module_1.GitlabModule,
-            indexing_module_1.IndexingModule,
         ],
         controllers: [tekproject_controller_1.TekProjectController, codebase_controller_1.CodebaseController, document_controller_1.DocsBucketController, document_controller_1.DocumentController],
         providers: [tekproject_service_1.TekProjectService, codebase_service_1.CodebaseService, document_service_1.DocumentService],
@@ -1628,7 +1660,7 @@ exports.ProjectModule = ProjectModule = __decorate([
 
 
 /***/ }),
-/* 28 */
+/* 27 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -1644,22 +1676,22 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var TekProjectService_1;
-var _a;
+var _a, _b;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.TekProjectService = void 0;
 const common_1 = __webpack_require__(2);
 const typeorm_1 = __webpack_require__(10);
+const nest_winston_1 = __webpack_require__(5);
 const typeorm_2 = __webpack_require__(13);
 const entities_1 = __webpack_require__(11);
-const adapters_1 = __webpack_require__(29);
-let TekProjectService = TekProjectService_1 = class TekProjectService {
-    constructor(tekProjectRepository) {
+const adapters_1 = __webpack_require__(28);
+let TekProjectService = class TekProjectService {
+    constructor(tekProjectRepository, logger) {
         this.tekProjectRepository = tekProjectRepository;
-        this.logger = new common_1.Logger(TekProjectService_1.name);
+        this.logger = logger;
     }
     async create(createDto) {
-        this.logger.log(`Creating TekProject: ${createDto.name}`);
+        this.logger.log(`Creating TekProject: ${createDto.name}`, 'TekProjectService');
         try {
             const tekProject = adapters_1.TekProjectAdapter.fromCreateDto(createDto);
             const savedProject = await this.tekProjectRepository.save(tekProject);
@@ -1731,15 +1763,16 @@ let TekProjectService = TekProjectService_1 = class TekProjectService {
     }
 };
 exports.TekProjectService = TekProjectService;
-exports.TekProjectService = TekProjectService = TekProjectService_1 = __decorate([
+exports.TekProjectService = TekProjectService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(entities_1.TekProject)),
-    __metadata("design:paramtypes", [typeof (_a = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _a : Object])
+    __param(1, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _a : Object, typeof (_b = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _b : Object])
 ], TekProjectService);
 
 
 /***/ }),
-/* 29 */
+/* 28 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -1758,13 +1791,13 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(29), exports);
 __exportStar(__webpack_require__(30), exports);
 __exportStar(__webpack_require__(31), exports);
-__exportStar(__webpack_require__(32), exports);
 
 
 /***/ }),
-/* 30 */
+/* 29 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -1810,7 +1843,7 @@ exports.TekProjectAdapter = TekProjectAdapter;
 
 
 /***/ }),
-/* 31 */
+/* 30 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -1867,7 +1900,7 @@ exports.CodebaseAdapter = CodebaseAdapter;
 
 
 /***/ }),
-/* 32 */
+/* 31 */
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -1875,7 +1908,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DocumentAdapter = void 0;
 const entities_1 = __webpack_require__(11);
 class DocumentAdapter {
-    static createDefaultDocsBuckets(tekProject) {
+    static createDefaultDocsBuckets(tekProject, storagePath = './storage') {
         const bucketConfigs = [
             {
                 name: 'API Documentation',
@@ -1895,7 +1928,7 @@ class DocumentAdapter {
             bucket.project = tekProject;
             bucket.name = config.name;
             bucket.type = config.type;
-            bucket.storagePath = `/data/docs/${tekProject.id}/${config.type}`;
+            bucket.storagePath = `${storagePath}/docs/${tekProject.id}/${config.type}`;
             bucket.metadata = {
                 createdBy: 'system',
                 defaultBucket: true,
@@ -1908,12 +1941,12 @@ class DocumentAdapter {
             return bucket;
         });
     }
-    static fromCreateBucketData(data, tekProject) {
+    static fromCreateBucketData(data, tekProject, storagePath = './storage') {
         const bucket = new entities_1.DocsBucket();
         bucket.project = tekProject;
         bucket.name = data.name;
         bucket.type = data.type;
-        bucket.storagePath = `/data/docs/${tekProject.id}/${data.type}`;
+        bucket.storagePath = `${storagePath}/docs/${tekProject.id}/${data.type}`;
         bucket.metadata = {
             description: data.description,
             createdBy: 'user',
@@ -1970,6 +2003,10 @@ class DocumentAdapter {
                 return entities_1.DocumentType.HTML;
             case 'text':
                 return entities_1.DocumentType.TEXT;
+            case 'documentation':
+            case 'specification':
+            case 'guide':
+                return entities_1.DocumentType.OTHER;
             default:
                 return entities_1.DocumentType.OTHER;
         }
@@ -1979,7 +2016,7 @@ exports.DocumentAdapter = DocumentAdapter;
 
 
 /***/ }),
-/* 33 */
+/* 32 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -1995,22 +2032,22 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var CodebaseService_1;
-var _a, _b, _c;
+var _a, _b, _c, _d;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CodebaseService = void 0;
 const common_1 = __webpack_require__(2);
 const typeorm_1 = __webpack_require__(10);
+const nest_winston_1 = __webpack_require__(5);
 const typeorm_2 = __webpack_require__(13);
 const entities_1 = __webpack_require__(11);
-const adapters_1 = __webpack_require__(29);
-const gitlab_service_1 = __webpack_require__(34);
-let CodebaseService = CodebaseService_1 = class CodebaseService {
-    constructor(codebaseRepository, tekProjectRepository, gitlabService) {
+const adapters_1 = __webpack_require__(28);
+const gitlab_service_1 = __webpack_require__(33);
+let CodebaseService = class CodebaseService {
+    constructor(codebaseRepository, tekProjectRepository, gitlabService, logger) {
         this.codebaseRepository = codebaseRepository;
         this.tekProjectRepository = tekProjectRepository;
         this.gitlabService = gitlabService;
-        this.logger = new common_1.Logger(CodebaseService_1.name);
+        this.logger = logger;
     }
     async create(createDto) {
         this.logger.log(`Creating codebase: ${createDto.name} for project: ${createDto.projectId}`);
@@ -2041,24 +2078,23 @@ let CodebaseService = CodebaseService_1 = class CodebaseService {
         }
         return codebase;
     }
-    async findByProjectId(projectId) {
-        return await this.codebaseRepository.find({
+    async findByProjectId(projectId, options = {}) {
+        const { page = 1, perPage = 20, sort = 'createdAt', orderBy = 'desc' } = options;
+        const [codebases, total] = await this.codebaseRepository.findAndCount({
             where: { project: { id: projectId } },
-            order: { createdAt: 'DESC' },
-        });
-    }
-    async findForIndexing(codebaseId) {
-        this.logger.log(`Preparing codebase for indexing: ${codebaseId}`);
-        const codebase = await this.codebaseRepository.findOne({
-            where: { id: codebaseId },
             relations: ['project'],
+            order: { [sort]: orderBy.toUpperCase() },
+            skip: (page - 1) * perPage,
+            take: perPage,
         });
-        if (!codebase) {
-            throw new common_1.NotFoundException(`Codebase ${codebaseId} not found`);
-        }
         return {
-            tekProject: codebase.project,
-            codebase
+            data: codebases,
+            total,
+            page,
+            perPage,
+            totalPages: Math.ceil(total / perPage),
+            hasNext: page * perPage < total,
+            hasPrevious: page > 1,
         };
     }
     async findTekProjectById(id) {
@@ -2072,269 +2108,17 @@ let CodebaseService = CodebaseService_1 = class CodebaseService {
     }
 };
 exports.CodebaseService = CodebaseService;
-exports.CodebaseService = CodebaseService = CodebaseService_1 = __decorate([
+exports.CodebaseService = CodebaseService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(entities_1.Codebase)),
     __param(1, (0, typeorm_1.InjectRepository)(entities_1.TekProject)),
-    __metadata("design:paramtypes", [typeof (_a = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _a : Object, typeof (_b = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _b : Object, typeof (_c = typeof gitlab_service_1.GitlabService !== "undefined" && gitlab_service_1.GitlabService) === "function" ? _c : Object])
+    __param(3, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _a : Object, typeof (_b = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _b : Object, typeof (_c = typeof gitlab_service_1.GitlabService !== "undefined" && gitlab_service_1.GitlabService) === "function" ? _c : Object, typeof (_d = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _d : Object])
 ], CodebaseService);
 
 
 /***/ }),
-/* 34 */
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
-var GitlabService_1;
-var _a;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.GitlabService = void 0;
-const common_1 = __webpack_require__(2);
-const config_1 = __webpack_require__(4);
-const rest_1 = __webpack_require__(35);
-let GitlabService = GitlabService_1 = class GitlabService {
-    constructor(configService) {
-        this.configService = configService;
-        this.logger = new common_1.Logger(GitlabService_1.name);
-        const gitlabUrl = this.configService.get('GITLAB_URL', 'https://gitlab.com');
-        const gitlabToken = this.configService.get('GITLAB_TOKEN');
-        if (!gitlabToken) {
-            throw new Error('GITLAB_TOKEN is required');
-        }
-        this.gitlab = new rest_1.Gitlab({
-            host: gitlabUrl,
-            token: gitlabToken,
-        });
-        this.logger.log(`GitLab service initialized with URL: ${gitlabUrl}`);
-    }
-    extractProjectIdFromUrl(gitlabUrl) {
-        try {
-            const url = new URL(gitlabUrl);
-            let pathParts = url.pathname.split('/').filter(Boolean);
-            if (pathParts.length > 0 && pathParts[pathParts.length - 1].endsWith('.git')) {
-                pathParts[pathParts.length - 1] = pathParts[pathParts.length - 1].replace('.git', '');
-            }
-            const ignoredPrefixes = ['-', 'tree', 'blob', 'commits', 'merge_requests', 'issues'];
-            const treeIndex = pathParts.findIndex(part => ignoredPrefixes.includes(part));
-            if (treeIndex > 0) {
-                pathParts = pathParts.slice(0, treeIndex);
-            }
-            if (pathParts.length < 2) {
-                throw new Error('Invalid GitLab URL format - must contain at least namespace/project');
-            }
-            const projectPath = pathParts.join('/');
-            return encodeURIComponent(projectPath);
-        }
-        catch (error) {
-            this.logger.error(`Failed to extract project ID from URL: ${gitlabUrl}`, error);
-            throw new common_1.BadRequestException(`Invalid GitLab URL format: ${gitlabUrl}`);
-        }
-    }
-    async getRepository(projectId) {
-        try {
-            const project = await this.gitlab.Projects.show(projectId);
-            return project;
-        }
-        catch (error) {
-            this.logger.error(`Failed to get repository info for project ${projectId}:`, error);
-            throw new common_1.BadRequestException(`Unable to access GitLab project: ${projectId}`);
-        }
-    }
-    async listFiles(projectId, options = {}) {
-        try {
-            const files = await this.gitlab.Repositories.allRepositoryTrees(projectId, {
-                ref: options.ref || 'main',
-                path: options.path || '',
-                recursive: options.recursive || false,
-            });
-            return files;
-        }
-        catch (error) {
-            this.logger.error(`Failed to list files for project ${projectId}:`, error);
-            throw new common_1.BadRequestException(`Unable to list files for project: ${projectId}`);
-        }
-    }
-    async getFileContent(projectId, filePath, ref = 'main') {
-        try {
-            const file = await this.gitlab.RepositoryFiles.show(projectId, filePath, ref);
-            return {
-                id: file.file_path || filePath,
-                name: file.file_name || filePath.split('/').pop() || '',
-                path: file.file_path || filePath,
-                size: file.size || 0,
-                encoding: file.encoding || 'base64',
-                content_sha256: file.content_sha256 || '',
-                ref: file.ref || ref,
-                blob_id: file.blob_id || '',
-                commit_id: file.commit_id || '',
-                last_commit_id: file.last_commit_id || '',
-                content: file.content,
-            };
-        }
-        catch (error) {
-            this.logger.error(`Failed to get file content for ${filePath} in project ${projectId}:`, error);
-            throw new common_1.BadRequestException(`Unable to get file content: ${filePath}`);
-        }
-    }
-    async getCommits(projectId, options = {}) {
-        try {
-            const commits = await this.gitlab.Commits.all(projectId, options);
-            return commits;
-        }
-        catch (error) {
-            this.logger.error(`Failed to get commits for project ${projectId}:`, error);
-            throw new common_1.BadRequestException(`Unable to get commits for project: ${projectId}`);
-        }
-    }
-    async getBranches(projectId) {
-        try {
-            const branches = await this.gitlab.Branches.all(projectId);
-            return branches;
-        }
-        catch (error) {
-            this.logger.error(`Failed to get branches for project ${projectId}:`, error);
-            throw new common_1.BadRequestException(`Unable to get branches for project: ${projectId}`);
-        }
-    }
-    async testConnection() {
-        try {
-            await this.gitlab.Users.showCurrentUser();
-            return true;
-        }
-        catch (error) {
-            this.logger.error('GitLab connection test failed:', error);
-            return false;
-        }
-    }
-    async getCurrentUser() {
-        try {
-            return await this.gitlab.Users.showCurrentUser();
-        }
-        catch (error) {
-            this.logger.error('Failed to get current user:', error);
-            throw new common_1.BadRequestException('Unable to authenticate with GitLab');
-        }
-    }
-    async getCommitDiff(projectId, fromCommit, toCommit) {
-        try {
-            const comparison = await this.gitlab.Repositories.compare(projectId, fromCommit, toCommit);
-            return comparison;
-        }
-        catch (error) {
-            this.logger.error(`Failed to get commit diff for project ${projectId}:`, error);
-            throw new common_1.BadRequestException(`Unable to get commit comparison: ${fromCommit}...${toCommit}`);
-        }
-    }
-    async createWebhook(projectId, webhookUrl, secretToken) {
-        try {
-            const webhook = await this.gitlab.ProjectHooks.add(projectId, webhookUrl, {
-                pushEvents: true,
-                mergeRequestsEvents: true,
-                issuesEvents: false,
-                confidentialIssuesEvents: false,
-                tagPushEvents: true,
-                noteEvents: false,
-                jobEvents: false,
-                pipelineEvents: false,
-                wikiPageEvents: false,
-                deploymentEvents: false,
-                releasesEvents: false,
-                subgroupEvents: false,
-                enableSslVerification: true,
-                token: secretToken,
-            });
-            this.logger.log(`Webhook created for project ${projectId}: ${webhook.id}`);
-            return webhook;
-        }
-        catch (error) {
-            this.logger.error(`Failed to create webhook for project ${projectId}:`, error);
-            throw new common_1.BadRequestException(`Unable to create webhook for project: ${projectId}`);
-        }
-    }
-    async listWebhooks(projectId) {
-        try {
-            const webhooks = await this.gitlab.ProjectHooks.all(projectId);
-            return webhooks;
-        }
-        catch (error) {
-            this.logger.error(`Failed to list webhooks for project ${projectId}:`, error);
-            throw new common_1.BadRequestException(`Unable to list webhooks for project: ${projectId}`);
-        }
-    }
-    async deleteWebhook(projectId, webhookId) {
-        try {
-            await this.gitlab.ProjectHooks.remove(projectId, webhookId);
-            this.logger.log(`Webhook ${webhookId} deleted for project ${projectId}`);
-        }
-        catch (error) {
-            this.logger.error(`Failed to delete webhook ${webhookId} for project ${projectId}:`, error);
-            throw new common_1.BadRequestException(`Unable to delete webhook: ${webhookId}`);
-        }
-    }
-    async getRepositoryArchive(projectId, options = {}) {
-        const gitlabUrl = this.configService.get('GITLAB_URL', 'https://gitlab.com');
-        const archiveUrl = `${gitlabUrl}/api/v4/projects/${encodeURIComponent(projectId.toString())}/repository/archive.${options.format || 'zip'}`;
-        this.logger.log(`Repository archive URL generated for project ${projectId}: ${archiveUrl}`);
-        return archiveUrl;
-    }
-    isValidGitlabUrl(url) {
-        try {
-            const parsedUrl = new URL(url);
-            const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
-            if (pathParts.length > 0 && pathParts[pathParts.length - 1].endsWith('.git')) {
-                pathParts[pathParts.length - 1] = pathParts[pathParts.length - 1].replace('.git', '');
-            }
-            return pathParts.length >= 2;
-        }
-        catch {
-            return false;
-        }
-    }
-    async getProjectLanguages(projectId) {
-        try {
-            const languages = await this.gitlab.Projects.showLanguages(projectId);
-            return languages;
-        }
-        catch (error) {
-            this.logger.error(`Failed to get languages for project ${projectId}:`, error);
-            throw new common_1.BadRequestException(`Unable to get project languages: ${projectId}`);
-        }
-    }
-    async getFileRaw(projectId, filePath, ref = 'main') {
-        try {
-            const file = await this.gitlab.RepositoryFiles.showRaw(projectId, filePath, ref);
-            return file;
-        }
-        catch (error) {
-            this.logger.error(`Failed to get raw file for ${filePath} in project ${projectId}:`, error);
-            throw new common_1.BadRequestException(`Unable to get raw file: ${filePath}`);
-        }
-    }
-};
-exports.GitlabService = GitlabService;
-exports.GitlabService = GitlabService = GitlabService_1 = __decorate([
-    (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
-], GitlabService);
-
-
-/***/ }),
-/* 35 */
-/***/ ((module) => {
-
-module.exports = require("@gitbeaker/rest");
-
-/***/ }),
-/* 36 */
+/* 33 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -2350,61 +2134,429 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var DocumentService_1;
-var _a, _b, _c;
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.GitlabService = void 0;
+const common_1 = __webpack_require__(2);
+const config_1 = __webpack_require__(4);
+const nest_winston_1 = __webpack_require__(5);
+const rest_1 = __webpack_require__(34);
+const config_2 = __webpack_require__(35);
+let GitlabService = class GitlabService {
+    constructor(configService, logger) {
+        this.logger = logger;
+        this.logger.debug('[GITLAB-SERVICE] Initializing GitLab service', 'GitlabService');
+        this.gitConfig = config_2.GitConfiguration.getInstance(configService);
+        const gitlabConfig = this.gitConfig.getGitLabConfig();
+        this.logger.debug('[GITLAB-SERVICE] GitLab configuration loaded', 'GitlabService');
+        this.logger.debug({
+            url: gitlabConfig.url,
+            hasToken: !!gitlabConfig.token,
+            tokenLength: gitlabConfig.token?.length || 0
+        }, 'GitlabService');
+        if (!gitlabConfig.token) {
+            this.logger.error('[GITLAB-SERVICE] GitLab token is missing from configuration', 'GitlabService');
+            throw new Error('GITLAB_TOKEN is required');
+        }
+        this.gitlab = new rest_1.Gitlab({
+            host: gitlabConfig.url,
+            token: gitlabConfig.token,
+        });
+        this.logger.log('[GITLAB-SERVICE] GitLab service initialized successfully', {
+            url: gitlabConfig.url
+        });
+        this.logger.log(`GitLab service initialized with URL: ${gitlabConfig.url}`);
+    }
+    extractProjectIdFromUrl(gitlabUrl) {
+        this.logger.debug('[GITLAB-SERVICE] Extracting project ID from GitLab URL', {
+            gitlabUrl
+        });
+        try {
+            const url = new URL(gitlabUrl);
+            let pathParts = url.pathname.split('/').filter(Boolean);
+            this.logger.debug('[GITLAB-SERVICE] URL parsed successfully', {
+                host: url.host,
+                pathname: url.pathname,
+                pathParts,
+                pathPartsCount: pathParts.length
+            });
+            if (pathParts.length > 0 && pathParts[pathParts.length - 1].endsWith('.git')) {
+                const originalLastPart = pathParts[pathParts.length - 1];
+                pathParts[pathParts.length - 1] = pathParts[pathParts.length - 1].replace('.git', '');
+                this.logger.debug('[GITLAB-SERVICE] Removed .git suffix', {
+                    originalLastPart,
+                    newLastPart: pathParts[pathParts.length - 1]
+                });
+            }
+            const ignoredPrefixes = ['-', 'tree', 'blob', 'commits', 'merge_requests', 'issues'];
+            const treeIndex = pathParts.findIndex(part => ignoredPrefixes.includes(part));
+            this.logger.debug('[GITLAB-SERVICE] Checking for ignored prefixes', {
+                ignoredPrefixes,
+                treeIndex,
+                foundIgnoredPrefix: treeIndex >= 0 ? pathParts[treeIndex] : null
+            });
+            if (treeIndex > 0) {
+                const originalPathParts = [...pathParts];
+                pathParts = pathParts.slice(0, treeIndex);
+                this.logger.debug('[GITLAB-SERVICE] Trimmed path parts after ignored prefix', {
+                    originalPathParts,
+                    trimmedPathParts: pathParts,
+                    removedParts: originalPathParts.slice(treeIndex)
+                });
+            }
+            if (pathParts.length < 2) {
+                this.logger.error('[GITLAB-SERVICE] Invalid GitLab URL format - insufficient path parts', {
+                    pathParts,
+                    pathPartsCount: pathParts.length,
+                    gitlabUrl
+                });
+                throw new Error('Invalid GitLab URL format - must contain at least namespace/project');
+            }
+            const projectPath = pathParts.join('/');
+            this.logger.debug('[GITLAB-SERVICE] Project ID extracted successfully', {
+                projectPath,
+                pathParts,
+                gitlabUrl
+            });
+            return projectPath;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('[GITLAB-SERVICE] Failed to extract project ID from URL', {
+                gitlabUrl,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            this.logger.error(`Failed to extract project ID from URL: ${gitlabUrl}`, error);
+            throw new common_1.BadRequestException(`Invalid GitLab URL format: ${gitlabUrl}`);
+        }
+    }
+    async getRepository(projectId) {
+        this.logger.debug('[GITLAB-SERVICE] Getting repository information', {
+            projectId
+        });
+        try {
+            const requestStartTime = Date.now();
+            const project = await this.gitlab.Projects.show(projectId);
+            const requestDuration = Date.now() - requestStartTime;
+            this.logger.debug('[GITLAB-SERVICE] Repository information retrieved successfully', {
+                projectId,
+                projectName: project.name,
+                projectPath: project.path_with_namespace,
+                defaultBranch: project.default_branch,
+                visibility: project.visibility,
+                requestDurationMs: requestDuration
+            });
+            return project;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('[GITLAB-SERVICE] Failed to get repository information', {
+                projectId,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            this.logger.error(`Failed to get repository info for project ${projectId}:`, error);
+            throw new common_1.BadRequestException(`Unable to access GitLab project: ${projectId}`);
+        }
+    }
+};
+exports.GitlabService = GitlabService;
+exports.GitlabService = GitlabService = __decorate([
+    (0, common_1.Injectable)(),
+    __param(1, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object, typeof (_b = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _b : Object])
+], GitlabService);
+
+
+/***/ }),
+/* 34 */
+/***/ ((module) => {
+
+module.exports = require("@gitbeaker/rest");
+
+/***/ }),
+/* 35 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(36), exports);
+
+
+/***/ }),
+/* 36 */
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.createGitConfiguration = exports.GitConfiguration = void 0;
+class GitConfiguration {
+    constructor(configService) {
+        this.configService = configService;
+    }
+    static getInstance(configService) {
+        if (!GitConfiguration.instance) {
+            GitConfiguration.instance = new GitConfiguration(configService);
+        }
+        return GitConfiguration.instance;
+    }
+    getDefaultGitConfig() {
+        return {
+            username: this.configService.get('GIT_DEFAULT_USERNAME'),
+            accessToken: this.configService.get('GIT_DEFAULT_ACCESS_TOKEN'),
+            sshKey: this.configService.get('GIT_DEFAULT_SSH_KEY'),
+        };
+    }
+    getGitLabConfig() {
+        return {
+            url: this.configService.get('GITLAB_URL', 'https://gitlab.com'),
+            token: this.configService.get('GITLAB_TOKEN', ''),
+            apiVersion: this.configService.get('GITLAB_API_VERSION', 'v4'),
+            timeout: this.configService.get('GITLAB_TIMEOUT', 30000),
+            retries: this.configService.get('GITLAB_RETRIES', 3),
+            retryDelay: this.configService.get('GITLAB_RETRY_DELAY', 1000),
+        };
+    }
+    getTimeouts() {
+        return {
+            cloneTimeout: this.configService.get('GIT_CLONE_TIMEOUT', 600000),
+            pullTimeout: this.configService.get('GIT_PULL_TIMEOUT', 300000),
+            commandTimeout: this.configService.get('GIT_COMMAND_TIMEOUT', 60000),
+        };
+    }
+    getOptions() {
+        return {
+            defaultBranch: this.configService.get('GIT_DEFAULT_BRANCH', 'main'),
+            maxDepth: this.configService.get('GIT_MAX_DEPTH'),
+            enableSparseCheckout: this.configService.get('GIT_ENABLE_SPARSE_CHECKOUT', false),
+            ignoredPatterns: this.getIgnoredPatterns(),
+            ignoredDirectories: this.getIgnoredDirectories(),
+        };
+    }
+    mergeWithDefaults(codebaseGitConfig) {
+        const defaults = this.getDefaultGitConfig();
+        return {
+            username: codebaseGitConfig?.username || defaults.username,
+            accessToken: codebaseGitConfig?.accessToken || defaults.accessToken,
+            sshKey: codebaseGitConfig?.sshKey || defaults.sshKey,
+        };
+    }
+    getIgnoredPatterns() {
+        const defaultPatterns = [
+            'node_modules',
+            '.git',
+            'dist/',
+            'build/',
+            '.DS_Store',
+            '.env',
+            '*.log'
+        ];
+        const customPatterns = this.configService.get('GIT_IGNORED_PATTERNS', '');
+        const additionalPatterns = customPatterns ? customPatterns.split(',').map(p => p.trim()) : [];
+        return [...defaultPatterns, ...additionalPatterns];
+    }
+    getIgnoredDirectories() {
+        const defaultDirectories = [
+            '.git',
+            'node_modules',
+            'dist',
+            'build',
+            '.next',
+            'coverage',
+            '.cache'
+        ];
+        const customDirectories = this.configService.get('GIT_IGNORED_DIRECTORIES', '');
+        const additionalDirectories = customDirectories ? customDirectories.split(',').map(d => d.trim()) : [];
+        return [...defaultDirectories, ...additionalDirectories];
+    }
+    validateGitConfig(gitConfig) {
+        return !!(gitConfig.accessToken || gitConfig.sshKey || gitConfig.username);
+    }
+    shouldProcessFile(filePath) {
+        const patterns = this.getIgnoredPatterns();
+        const regexPatterns = patterns.map(pattern => new RegExp(pattern.replace(/\*/g, '.*').replace(/\?/g, '.')));
+        return !regexPatterns.some(pattern => pattern.test(filePath));
+    }
+    shouldIgnoreDirectory(dirName) {
+        const ignoredDirs = this.getIgnoredDirectories();
+        return ignoredDirs.includes(dirName);
+    }
+}
+exports.GitConfiguration = GitConfiguration;
+const createGitConfiguration = (configService) => {
+    return GitConfiguration.getInstance(configService);
+};
+exports.createGitConfiguration = createGitConfiguration;
+
+
+/***/ }),
+/* 37 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var _a, _b, _c, _d, _e;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DocumentService = void 0;
 const common_1 = __webpack_require__(2);
 const typeorm_1 = __webpack_require__(10);
+const config_1 = __webpack_require__(4);
+const nest_winston_1 = __webpack_require__(5);
 const typeorm_2 = __webpack_require__(13);
 const entities_1 = __webpack_require__(11);
-const adapters_1 = __webpack_require__(29);
-const fs = __webpack_require__(22);
-const path = __webpack_require__(23);
-const crypto = __webpack_require__(24);
-let DocumentService = DocumentService_1 = class DocumentService {
-    constructor(docsBucketRepository, documentRepository, tekProjectRepository) {
+const adapters_1 = __webpack_require__(28);
+const fs = __webpack_require__(21);
+const path = __webpack_require__(22);
+const crypto = __webpack_require__(23);
+let DocumentService = class DocumentService {
+    constructor(docsBucketRepository, documentRepository, tekProjectRepository, configService, logger) {
         this.docsBucketRepository = docsBucketRepository;
         this.documentRepository = documentRepository;
         this.tekProjectRepository = tekProjectRepository;
-        this.logger = new common_1.Logger(DocumentService_1.name);
+        this.configService = configService;
+        this.logger = logger;
+        this.storagePath = this.configService.get('STORAGE_PATH', './storage');
     }
     async createDefaultBuckets(tekProject) {
-        const buckets = adapters_1.DocumentAdapter.createDefaultDocsBuckets(tekProject);
-        return await this.docsBucketRepository.save(buckets);
+        this.logger.debug('[DOCUMENT-SERVICE] Creating default docs buckets for project', {
+            projectId: tekProject.id,
+            projectName: tekProject.name,
+            storagePath: this.storagePath
+        });
+        const buckets = adapters_1.DocumentAdapter.createDefaultDocsBuckets(tekProject, this.storagePath);
+        this.logger.debug('[DOCUMENT-SERVICE] Default buckets created by adapter', {
+            projectId: tekProject.id,
+            bucketCount: buckets.length,
+            bucketNames: buckets.map(b => b.name)
+        });
+        const savedBuckets = await this.docsBucketRepository.save(buckets);
+        this.logger.log('[DOCUMENT-SERVICE] Default docs buckets created successfully', {
+            projectId: tekProject.id,
+            projectName: tekProject.name,
+            bucketCount: savedBuckets.length,
+            bucketIds: savedBuckets.map(b => b.id)
+        });
+        return savedBuckets;
     }
     async createBucket(createData) {
+        this.logger.log('[DOCUMENT-SERVICE] Creating custom docs bucket', {
+            bucketName: createData.name,
+            projectId: createData.projectId,
+            description: createData.description
+        });
         this.logger.log(`Creating docs bucket: ${createData.name} for project: ${createData.projectId}`);
+        this.logger.debug('[DOCUMENT-SERVICE] Finding project for bucket creation');
         const tekProject = await this.findTekProjectById(createData.projectId);
-        const bucket = adapters_1.DocumentAdapter.fromCreateBucketData(createData, tekProject);
-        return await this.docsBucketRepository.save(bucket);
+        this.logger.debug('[DOCUMENT-SERVICE] Creating bucket entity from adapter');
+        const bucket = adapters_1.DocumentAdapter.fromCreateBucketData(createData, tekProject, this.storagePath);
+        this.logger.debug('[DOCUMENT-SERVICE] Saving bucket to database', {
+            bucketName: bucket.name,
+            bucketStoragePath: bucket.storagePath,
+            projectId: bucket.project.id
+        });
+        const savedBucket = await this.docsBucketRepository.save(bucket);
+        this.logger.log('[DOCUMENT-SERVICE] Custom docs bucket created successfully', {
+            bucketId: savedBucket.id,
+            bucketName: savedBucket.name,
+            projectId: savedBucket.project.id
+        });
+        return savedBucket;
     }
     async findBucketsByProjectId(projectId) {
-        return await this.docsBucketRepository.find({
+        this.logger.debug('[DOCUMENT-SERVICE] Finding docs buckets for project', {
+            projectId
+        });
+        const buckets = await this.docsBucketRepository.find({
             where: { project: { id: projectId }, status: entities_1.BucketStatus.ACTIVE },
             order: { createdAt: 'ASC' },
         });
+        this.logger.debug('[DOCUMENT-SERVICE] Found docs buckets for project', {
+            projectId,
+            bucketCount: buckets.length,
+            bucketIds: buckets.map(b => b.id)
+        });
+        return buckets;
     }
     async findBucketById(id) {
+        this.logger.debug('[DOCUMENT-SERVICE] Finding docs bucket by ID', {
+            bucketId: id
+        });
         const bucket = await this.docsBucketRepository.findOne({
             where: { id },
             relations: ['project', 'documents'],
         });
         if (!bucket) {
+            this.logger.error('[DOCUMENT-SERVICE] Docs bucket not found', {
+                bucketId: id
+            });
             throw new common_1.NotFoundException(`Docs bucket ${id} not found`);
         }
+        this.logger.debug('[DOCUMENT-SERVICE] Docs bucket found successfully', {
+            bucketId: bucket.id,
+            bucketName: bucket.name,
+            projectId: bucket.project.id,
+            documentCount: bucket.documents?.length || 0
+        });
         return bucket;
     }
     async updateBucket(id, updateData) {
+        this.logger.log('[DOCUMENT-SERVICE] Updating docs bucket', {
+            bucketId: id,
+            updateFields: Object.keys(updateData)
+        });
         const existingBucket = await this.findBucketById(id);
+        this.logger.debug('[DOCUMENT-SERVICE] Creating updated bucket entity from adapter');
         const updatedBucket = adapters_1.DocumentAdapter.fromUpdateBucketData(existingBucket, updateData);
-        return await this.docsBucketRepository.save(updatedBucket);
+        const savedBucket = await this.docsBucketRepository.save(updatedBucket);
+        this.logger.log('[DOCUMENT-SERVICE] Docs bucket updated successfully', {
+            bucketId: savedBucket.id,
+            bucketName: savedBucket.name
+        });
+        return savedBucket;
     }
     async deleteBucket(id) {
+        this.logger.log('[DOCUMENT-SERVICE] Deleting (archiving) docs bucket', {
+            bucketId: id
+        });
         const bucket = await this.findBucketById(id);
+        this.logger.debug('[DOCUMENT-SERVICE] Updating bucket status to archived', {
+            bucketId: bucket.id,
+            bucketName: bucket.name,
+            previousStatus: bucket.status
+        });
         bucket.status = entities_1.BucketStatus.ARCHIVED;
         bucket.updatedAt = new Date();
         await this.docsBucketRepository.save(bucket);
+        this.logger.log('[DOCUMENT-SERVICE] Docs bucket archived successfully', {
+            bucketId: id,
+            bucketName: bucket.name
+        });
         this.logger.log(`Docs bucket archived: ${id}`);
     }
     async uploadDocument(file, uploadData) {
@@ -2472,17 +2624,18 @@ let DocumentService = DocumentService_1 = class DocumentService {
     }
 };
 exports.DocumentService = DocumentService;
-exports.DocumentService = DocumentService = DocumentService_1 = __decorate([
+exports.DocumentService = DocumentService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(entities_1.DocsBucket)),
     __param(1, (0, typeorm_1.InjectRepository)(entities_1.Document)),
     __param(2, (0, typeorm_1.InjectRepository)(entities_1.TekProject)),
-    __metadata("design:paramtypes", [typeof (_a = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _a : Object, typeof (_b = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _b : Object, typeof (_c = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _c : Object])
+    __param(4, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _a : Object, typeof (_b = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _b : Object, typeof (_c = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _c : Object, typeof (_d = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _d : Object, typeof (_e = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _e : Object])
 ], DocumentService);
 
 
 /***/ }),
-/* 37 */
+/* 38 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -2498,42 +2651,94 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var TekProjectController_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.TekProjectController = void 0;
 const common_1 = __webpack_require__(2);
-const tekproject_service_1 = __webpack_require__(28);
-const document_service_1 = __webpack_require__(36);
-const dto_1 = __webpack_require__(38);
-let TekProjectController = TekProjectController_1 = class TekProjectController {
-    constructor(tekProjectService, documentService) {
+const nest_winston_1 = __webpack_require__(5);
+const tekproject_service_1 = __webpack_require__(27);
+const document_service_1 = __webpack_require__(37);
+const dto_1 = __webpack_require__(39);
+const pagination_dto_1 = __webpack_require__(47);
+let TekProjectController = class TekProjectController {
+    constructor(tekProjectService, documentService, logger) {
         this.tekProjectService = tekProjectService;
         this.documentService = documentService;
-        this.logger = new common_1.Logger(TekProjectController_1.name);
+        this.logger = logger;
     }
     async createTekProject(createDto) {
+        const requestId = Math.random().toString(36).substring(2, 8);
+        this.logger.log(`[${requestId}] [CREATE-TEKPROJECT] Starting TekProject creation request`, {
+            name: createDto.name,
+            description: createDto.description
+        });
         this.logger.log(`Creating TekProject: ${createDto.name}`);
-        const tekProject = await this.tekProjectService.create(createDto);
-        await this.documentService.createDefaultBuckets(tekProject);
-        return {
-            success: true,
-            data: tekProject,
-            message: 'TekProject created successfully',
-        };
+        try {
+            this.logger.debug(`[${requestId}] [CREATE-TEKPROJECT] Calling TekProject service`);
+            const tekProject = await this.tekProjectService.create(createDto);
+            this.logger.debug(`[${requestId}] [CREATE-TEKPROJECT] TekProject created, creating default docs buckets`, {
+                tekProjectId: tekProject.id,
+                tekProjectName: tekProject.name
+            });
+            await this.documentService.createDefaultBuckets(tekProject);
+            this.logger.log(`[${requestId}] [CREATE-TEKPROJECT] TekProject creation completed successfully`, {
+                tekProjectId: tekProject.id,
+                tekProjectName: tekProject.name,
+                slug: tekProject.slug
+            });
+            return {
+                success: true,
+                data: tekProject,
+                message: 'TekProject created successfully',
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[${requestId}] [CREATE-TEKPROJECT] TekProject creation failed`, {
+                name: createDto.name,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            throw error;
+        }
     }
-    async listTekProjects(page, perPage, sort, orderBy) {
+    async listTekProjects(paginationDto) {
+        const requestId = Math.random().toString(36).substring(2, 8);
+        this.logger.log(`[${requestId}] [LIST-TEKPROJECTS] Starting TekProjects list request`, {
+            page: paginationDto.page,
+            limit: paginationDto.limit,
+            sortBy: paginationDto.sortBy,
+            sortOrder: paginationDto.sortOrder
+        });
         const options = {
-            page: page || 1,
-            perPage: perPage || 20,
-            sort: sort || 'createdAt',
-            orderBy: orderBy || 'desc',
+            page: paginationDto.page || 1,
+            perPage: paginationDto.limit || 20,
+            sort: paginationDto.sortBy || 'createdAt',
+            orderBy: paginationDto.sortOrder || 'desc',
         };
-        const result = await this.tekProjectService.findAll(options);
-        return {
-            success: true,
-            data: result,
-        };
+        try {
+            const result = await this.tekProjectService.findAll(options);
+            this.logger.log(`[${requestId}] [LIST-TEKPROJECTS] TekProjects list completed successfully`, {
+                totalResults: result.total,
+                page: result.page,
+                perPage: result.perPage,
+                totalPages: result.totalPages
+            });
+            return {
+                success: true,
+                data: result,
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[${requestId}] [LIST-TEKPROJECTS] TekProjects list failed`, {
+                page: paginationDto.page,
+                limit: paginationDto.limit,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            throw error;
+        }
     }
     async getTekProject(id) {
         const tekProject = await this.tekProjectService.findById(id);
@@ -2561,33 +2766,30 @@ __decorate([
     (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [typeof (_c = typeof dto_1.CreateTekProjectDto !== "undefined" && dto_1.CreateTekProjectDto) === "function" ? _c : Object]),
-    __metadata("design:returntype", typeof (_d = typeof Promise !== "undefined" && Promise) === "function" ? _d : Object)
+    __metadata("design:paramtypes", [typeof (_d = typeof dto_1.CreateTekProjectDto !== "undefined" && dto_1.CreateTekProjectDto) === "function" ? _d : Object]),
+    __metadata("design:returntype", typeof (_e = typeof Promise !== "undefined" && Promise) === "function" ? _e : Object)
 ], TekProjectController.prototype, "createTekProject", null);
 __decorate([
     (0, common_1.Get)(),
-    __param(0, (0, common_1.Query)('page')),
-    __param(1, (0, common_1.Query)('perPage')),
-    __param(2, (0, common_1.Query)('sort')),
-    __param(3, (0, common_1.Query)('orderBy')),
+    __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, Number, String, String]),
-    __metadata("design:returntype", typeof (_e = typeof Promise !== "undefined" && Promise) === "function" ? _e : Object)
+    __metadata("design:paramtypes", [typeof (_f = typeof pagination_dto_1.PaginationDto !== "undefined" && pagination_dto_1.PaginationDto) === "function" ? _f : Object]),
+    __metadata("design:returntype", typeof (_g = typeof Promise !== "undefined" && Promise) === "function" ? _g : Object)
 ], TekProjectController.prototype, "listTekProjects", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", typeof (_f = typeof Promise !== "undefined" && Promise) === "function" ? _f : Object)
+    __metadata("design:returntype", typeof (_h = typeof Promise !== "undefined" && Promise) === "function" ? _h : Object)
 ], TekProjectController.prototype, "getTekProject", null);
 __decorate([
     (0, common_1.Put)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, typeof (_g = typeof dto_1.UpdateTekProjectDto !== "undefined" && dto_1.UpdateTekProjectDto) === "function" ? _g : Object]),
-    __metadata("design:returntype", typeof (_h = typeof Promise !== "undefined" && Promise) === "function" ? _h : Object)
+    __metadata("design:paramtypes", [String, typeof (_j = typeof dto_1.UpdateTekProjectDto !== "undefined" && dto_1.UpdateTekProjectDto) === "function" ? _j : Object]),
+    __metadata("design:returntype", typeof (_k = typeof Promise !== "undefined" && Promise) === "function" ? _k : Object)
 ], TekProjectController.prototype, "updateTekProject", null);
 __decorate([
     (0, common_1.Delete)(':id'),
@@ -2595,16 +2797,17 @@ __decorate([
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", typeof (_j = typeof Promise !== "undefined" && Promise) === "function" ? _j : Object)
+    __metadata("design:returntype", typeof (_l = typeof Promise !== "undefined" && Promise) === "function" ? _l : Object)
 ], TekProjectController.prototype, "deleteTekProject", null);
-exports.TekProjectController = TekProjectController = TekProjectController_1 = __decorate([
+exports.TekProjectController = TekProjectController = __decorate([
     (0, common_1.Controller)('tekprojects'),
-    __metadata("design:paramtypes", [typeof (_a = typeof tekproject_service_1.TekProjectService !== "undefined" && tekproject_service_1.TekProjectService) === "function" ? _a : Object, typeof (_b = typeof document_service_1.DocumentService !== "undefined" && document_service_1.DocumentService) === "function" ? _b : Object])
+    __param(2, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof tekproject_service_1.TekProjectService !== "undefined" && tekproject_service_1.TekProjectService) === "function" ? _a : Object, typeof (_b = typeof document_service_1.DocumentService !== "undefined" && document_service_1.DocumentService) === "function" ? _b : Object, typeof (_c = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _c : Object])
 ], TekProjectController);
 
 
 /***/ }),
-/* 38 */
+/* 39 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -2623,16 +2826,16 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-__exportStar(__webpack_require__(39), exports);
-__exportStar(__webpack_require__(41), exports);
+__exportStar(__webpack_require__(40), exports);
 __exportStar(__webpack_require__(42), exports);
 __exportStar(__webpack_require__(43), exports);
 __exportStar(__webpack_require__(44), exports);
 __exportStar(__webpack_require__(45), exports);
+__exportStar(__webpack_require__(46), exports);
 
 
 /***/ }),
-/* 39 */
+/* 40 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -2647,7 +2850,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CreateTekProjectDto = void 0;
-const class_validator_1 = __webpack_require__(40);
+const class_validator_1 = __webpack_require__(41);
 class CreateTekProjectDto {
 }
 exports.CreateTekProjectDto = CreateTekProjectDto;
@@ -2669,13 +2872,13 @@ __decorate([
 
 
 /***/ }),
-/* 40 */
+/* 41 */
 /***/ ((module) => {
 
 module.exports = require("class-validator");
 
 /***/ }),
-/* 41 */
+/* 42 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -2691,7 +2894,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UpdateTekProjectDto = void 0;
-const class_validator_1 = __webpack_require__(40);
+const class_validator_1 = __webpack_require__(41);
 const entities_1 = __webpack_require__(11);
 class UpdateTekProjectDto {
 }
@@ -2720,7 +2923,7 @@ __decorate([
 
 
 /***/ }),
-/* 42 */
+/* 43 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -2735,7 +2938,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CreateCodebaseDto = void 0;
-const class_validator_1 = __webpack_require__(40);
+const class_validator_1 = __webpack_require__(41);
 class CreateCodebaseDto {
 }
 exports.CreateCodebaseDto = CreateCodebaseDto;
@@ -2769,7 +2972,7 @@ __decorate([
 
 
 /***/ }),
-/* 43 */
+/* 44 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -2784,7 +2987,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CreateDocsBucketDto = void 0;
-const class_validator_1 = __webpack_require__(40);
+const class_validator_1 = __webpack_require__(41);
 class CreateDocsBucketDto {
 }
 exports.CreateDocsBucketDto = CreateDocsBucketDto;
@@ -2808,7 +3011,7 @@ __decorate([
 
 
 /***/ }),
-/* 44 */
+/* 45 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -2823,7 +3026,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UpdateDocsBucketDto = void 0;
-const class_validator_1 = __webpack_require__(40);
+const class_validator_1 = __webpack_require__(41);
 class UpdateDocsBucketDto {
 }
 exports.UpdateDocsBucketDto = UpdateDocsBucketDto;
@@ -2845,7 +3048,7 @@ __decorate([
 
 
 /***/ }),
-/* 45 */
+/* 46 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -2860,7 +3063,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UploadDocumentDto = void 0;
-const class_validator_1 = __webpack_require__(40);
+const class_validator_1 = __webpack_require__(41);
 class UploadDocumentDto {
 }
 exports.UploadDocumentDto = UploadDocumentDto;
@@ -2878,7 +3081,7 @@ __decorate([
     __metadata("design:type", String)
 ], UploadDocumentDto.prototype, "description", void 0);
 __decorate([
-    (0, class_validator_1.IsIn)(['markdown', 'pdf', 'text', 'html', 'other']),
+    (0, class_validator_1.IsIn)(['markdown', 'pdf', 'text', 'html', 'documentation', 'specification', 'guide', 'other']),
     __metadata("design:type", String)
 ], UploadDocumentDto.prototype, "type", void 0);
 __decorate([
@@ -2887,186 +3090,6 @@ __decorate([
     (0, class_validator_1.IsString)({ each: true }),
     __metadata("design:type", Array)
 ], UploadDocumentDto.prototype, "tags", void 0);
-
-
-/***/ }),
-/* 46 */
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
-var __param = (this && this.__param) || function (paramIndex, decorator) {
-    return function (target, key) { decorator(target, key, paramIndex); }
-};
-var CodebaseController_1;
-var _a, _b, _c, _d, _e, _f, _g, _h;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.CodebaseController = void 0;
-const common_1 = __webpack_require__(2);
-const codebase_service_1 = __webpack_require__(33);
-const pipeline_orchestrator_service_1 = __webpack_require__(47);
-const index_pipeline_entity_1 = __webpack_require__(18);
-const dto_1 = __webpack_require__(38);
-let CodebaseController = CodebaseController_1 = class CodebaseController {
-    constructor(codebaseService, pipelineOrchestrator) {
-        this.codebaseService = codebaseService;
-        this.pipelineOrchestrator = pipelineOrchestrator;
-        this.logger = new common_1.Logger(CodebaseController_1.name);
-    }
-    async createCodebase(createDto) {
-        this.logger.log(`Creating codebase: ${createDto.name} for TekProject: ${createDto.projectId}`);
-        const codebase = await this.codebaseService.create(createDto);
-        return {
-            success: true,
-            data: codebase,
-            message: 'Codebase created successfully',
-        };
-    }
-    async listCodebases(projectId) {
-        if (!projectId) {
-            throw new Error('projectId query parameter is required');
-        }
-        const codebases = await this.codebaseService.findByProjectId(projectId);
-        return {
-            success: true,
-            data: codebases,
-        };
-    }
-    async getCodebase(id) {
-        const codebase = await this.codebaseService.findById(id);
-        return {
-            success: true,
-            data: codebase,
-        };
-    }
-    async startIndexingJob(codebaseId, options = {}) {
-        this.logger.log(`Starting indexing job for codebase: ${codebaseId}`);
-        const { codebase } = await this.codebaseService.findForIndexing(codebaseId);
-        const job = await this.pipelineOrchestrator.createPipeline({
-            projectId: codebase.project.id,
-            codebaseId: codebase.id,
-            type: this.mapPipelineType(options.type) || index_pipeline_entity_1.IndexPipelineType.INCREMENTAL,
-            baseCommit: options.baseCommit,
-            targetCommit: options.targetCommit,
-            priority: 1,
-            customConfiguration: options.customConfiguration,
-        });
-        return {
-            success: true,
-            data: {
-                jobId: job.id,
-                type: job.type,
-                status: job.status,
-            },
-            message: 'Indexing job started successfully',
-        };
-    }
-    async getCodebaseIndexStatus(codebaseId) {
-        const codebase = await this.codebaseService.findById(codebaseId);
-        const { activePipelines, recentPipelines, summary } = await this.pipelineOrchestrator.getPipelinesForCodebase(codebaseId);
-        const indexStatus = {
-            codebase: {
-                id: codebase.id,
-                name: codebase.name,
-                status: codebase.status,
-                lastIndexAt: codebase.lastSyncAt,
-                lastIndexCommit: codebase.lastSyncCommit,
-            },
-            activeJobs: activePipelines.map(pipeline => ({
-                id: pipeline.id,
-                type: pipeline.type,
-                status: pipeline.status,
-                progress: pipeline.progress,
-                currentStep: pipeline.currentStep,
-                startedAt: pipeline.startedAt,
-                description: pipeline.description,
-            })),
-            recentJobs: recentPipelines.map(pipeline => ({
-                id: pipeline.id,
-                type: pipeline.type,
-                status: pipeline.status,
-                progress: pipeline.progress,
-                startedAt: pipeline.startedAt,
-                completedAt: pipeline.completedAt,
-                duration: pipeline.completedAt && pipeline.startedAt
-                    ? pipeline.completedAt.getTime() - pipeline.startedAt.getTime()
-                    : null,
-                description: pipeline.description,
-                error: pipeline.error,
-            })),
-            summary: {
-                activeJobCount: summary.activeCount,
-                recentJobCount: summary.recentCount,
-                hasRunningJob: summary.hasRunning,
-            },
-        };
-        return {
-            success: true,
-            data: indexStatus,
-        };
-    }
-    mapPipelineType(pipelineType) {
-        switch (pipelineType) {
-            case 'full':
-                return index_pipeline_entity_1.IndexPipelineType.FULL;
-            case 'incremental':
-                return index_pipeline_entity_1.IndexPipelineType.INCREMENTAL;
-            default:
-                return undefined;
-        }
-    }
-};
-exports.CodebaseController = CodebaseController;
-__decorate([
-    (0, common_1.Post)(),
-    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [typeof (_c = typeof dto_1.CreateCodebaseDto !== "undefined" && dto_1.CreateCodebaseDto) === "function" ? _c : Object]),
-    __metadata("design:returntype", typeof (_d = typeof Promise !== "undefined" && Promise) === "function" ? _d : Object)
-], CodebaseController.prototype, "createCodebase", null);
-__decorate([
-    (0, common_1.Get)(),
-    __param(0, (0, common_1.Query)('projectId')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", typeof (_e = typeof Promise !== "undefined" && Promise) === "function" ? _e : Object)
-], CodebaseController.prototype, "listCodebases", null);
-__decorate([
-    (0, common_1.Get)(':id'),
-    __param(0, (0, common_1.Param)('id')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", typeof (_f = typeof Promise !== "undefined" && Promise) === "function" ? _f : Object)
-], CodebaseController.prototype, "getCodebase", null);
-__decorate([
-    (0, common_1.Post)(':id/index'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.ACCEPTED),
-    __param(0, (0, common_1.Param)('id')),
-    __param(1, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
-    __metadata("design:returntype", typeof (_g = typeof Promise !== "undefined" && Promise) === "function" ? _g : Object)
-], CodebaseController.prototype, "startIndexingJob", null);
-__decorate([
-    (0, common_1.Get)(':id/index/status'),
-    __param(0, (0, common_1.Param)('id')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", typeof (_h = typeof Promise !== "undefined" && Promise) === "function" ? _h : Object)
-], CodebaseController.prototype, "getCodebaseIndexStatus", null);
-exports.CodebaseController = CodebaseController = CodebaseController_1 = __decorate([
-    (0, common_1.Controller)('codebases'),
-    __metadata("design:paramtypes", [typeof (_a = typeof codebase_service_1.CodebaseService !== "undefined" && codebase_service_1.CodebaseService) === "function" ? _a : Object, typeof (_b = typeof pipeline_orchestrator_service_1.PipelineOrchestratorService !== "undefined" && pipeline_orchestrator_service_1.PipelineOrchestratorService) === "function" ? _b : Object])
-], CodebaseController);
 
 
 /***/ }),
@@ -3083,377 +3106,76 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var __param = (this && this.__param) || function (paramIndex, decorator) {
-    return function (target, key) { decorator(target, key, paramIndex); }
-};
-var PipelineOrchestratorService_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.PipelineOrchestratorService = void 0;
-const common_1 = __webpack_require__(2);
-const typeorm_1 = __webpack_require__(10);
-const typeorm_2 = __webpack_require__(13);
-const config_1 = __webpack_require__(4);
-const entities_1 = __webpack_require__(11);
-const index_pipeline_entity_1 = __webpack_require__(18);
-const git_sync_task_1 = __webpack_require__(48);
-const code_parsing_task_1 = __webpack_require__(53);
-const graph_update_task_1 = __webpack_require__(55);
-const cleanup_task_1 = __webpack_require__(56);
-const pipeline_config_service_1 = __webpack_require__(57);
-const pipeline_worker_service_1 = __webpack_require__(58);
-const fs = __webpack_require__(22);
-const path = __webpack_require__(23);
-const os = __webpack_require__(59);
-let PipelineOrchestratorService = PipelineOrchestratorService_1 = class PipelineOrchestratorService {
-    constructor(pipelineRepository, projectRepository, codebaseRepository, configService, pipelineConfigService, pipelineWorkerService, gitSyncTask, codeParsingTask, graphUpdateTask, cleanupTask) {
-        this.pipelineRepository = pipelineRepository;
-        this.projectRepository = projectRepository;
-        this.codebaseRepository = codebaseRepository;
-        this.configService = configService;
-        this.pipelineConfigService = pipelineConfigService;
-        this.pipelineWorkerService = pipelineWorkerService;
-        this.gitSyncTask = gitSyncTask;
-        this.codeParsingTask = codeParsingTask;
-        this.graphUpdateTask = graphUpdateTask;
-        this.cleanupTask = cleanupTask;
-        this.logger = new common_1.Logger(PipelineOrchestratorService_1.name);
-        this.runningPipelines = new Map();
+exports.PaginationDto = void 0;
+const class_validator_1 = __webpack_require__(41);
+const class_transformer_1 = __webpack_require__(48);
+const swagger_1 = __webpack_require__(3);
+class PaginationDto {
+    constructor() {
+        this.page = 1;
+        this.limit = 20;
+        this.sortOrder = 'desc';
     }
-    async createPipeline(request) {
-        this.logger.log(`Creating pipeline: ${request.type} for project ${request.projectId}`);
-        const project = await this.projectRepository.findOne({
-            where: { id: request.projectId },
-        });
-        if (!project) {
-            throw new Error(`Project ${request.projectId} not found`);
-        }
-        let codebase;
-        if (request.codebaseId) {
-            codebase = await this.codebaseRepository.findOne({
-                where: { id: request.codebaseId },
-                relations: ['project'],
-            });
-            if (!codebase) {
-                throw new Error(`Codebase ${request.codebaseId} not found`);
-            }
-            if (codebase.project.id !== request.projectId) {
-                throw new Error(`Codebase ${request.codebaseId} does not belong to project ${request.projectId}`);
-            }
-        }
-        const configuration = this.pipelineConfigService.getDefaultConfiguration(request.type, request.customConfiguration);
-        const pipeline = new index_pipeline_entity_1.IndexPipeline();
-        pipeline.type = request.type;
-        pipeline.status = index_pipeline_entity_1.IndexPipelineStatus.PENDING;
-        pipeline.priority = request.priority || 0;
-        pipeline.description = request.description;
-        pipeline.configuration = configuration;
-        pipeline.metadata = this.createInitialMetadata();
-        pipeline.project = project;
-        pipeline.codebase = codebase;
-        const savedPipeline = await this.pipelineRepository.save(pipeline);
-        const executionPromise = this.pipelineWorkerService.submitPipeline(savedPipeline.id, savedPipeline.type, () => this.executePipeline(savedPipeline.id));
-        this.runningPipelines.set(savedPipeline.id, executionPromise);
-        executionPromise
-            .then(result => {
-            this.logger.log(`Pipeline ${savedPipeline.id} completed with status: ${result.status}`);
-        })
-            .catch(error => {
-            this.logger.error(`Pipeline ${savedPipeline.id} execution failed:`, error);
-        })
-            .finally(() => {
-            this.runningPipelines.delete(savedPipeline.id);
-        });
-        return savedPipeline;
+    get skip() {
+        return (this.page - 1) * this.limit;
     }
-    async executePipeline(pipelineId) {
-        const startTime = Date.now();
-        let tasksExecuted = 0;
-        let tasksSucceeded = 0;
-        let tasksFailed = 0;
-        let finalError;
-        try {
-            const pipeline = await this.pipelineRepository.findOne({
-                where: { id: pipelineId },
-                relations: ['project', 'codebase'],
-            });
-            if (!pipeline) {
-                throw new Error(`Pipeline ${pipelineId} not found`);
-            }
-            this.logger.log(`Starting pipeline execution: ${pipelineId}`);
-            await this.updatePipelineStatus(pipeline, index_pipeline_entity_1.IndexPipelineStatus.RUNNING);
-            const context = await this.createPipelineContext(pipeline);
-            const tasks = this.getTaskInstances();
-            for (const task of tasks) {
-                if (!task.shouldExecute(context)) {
-                    context.logger.info(`Skipping task: ${task.name} (conditions not met)`);
-                    continue;
-                }
-                tasksExecuted++;
-                context.logger.info(`Executing task: ${task.name}`);
-                try {
-                    pipeline.currentStep = task.name;
-                    pipeline.progress = Math.round((tasksExecuted / tasks.length) * 100);
-                    await this.pipelineRepository.save(pipeline);
-                    const result = await task.execute(context);
-                    if (result.success) {
-                        tasksSucceeded++;
-                        context.logger.info(`Task completed successfully: ${task.name}`, {
-                            duration: result.duration,
-                            metrics: result.metrics,
-                        });
-                    }
-                    else {
-                        tasksFailed++;
-                        finalError = result.error;
-                        context.logger.error(`Task failed: ${task.name}`, { error: result.error });
-                        break;
-                    }
-                }
-                catch (error) {
-                    tasksFailed++;
-                    finalError = error.message;
-                    context.logger.error(`Task execution error: ${task.name}`, { error: error.message });
-                    break;
-                }
-                finally {
-                    try {
-                        await task.cleanup(context);
-                    }
-                    catch (cleanupError) {
-                        context.logger.warn(`Task cleanup failed: ${task.name}`, { error: cleanupError.message });
-                    }
-                }
-            }
-            const finalStatus = tasksFailed > 0 ? index_pipeline_entity_1.IndexPipelineStatus.FAILED : index_pipeline_entity_1.IndexPipelineStatus.COMPLETED;
-            pipeline.progress = finalStatus === index_pipeline_entity_1.IndexPipelineStatus.COMPLETED ? 100 : pipeline.progress;
-            await this.updatePipelineStatus(pipeline, finalStatus, finalError);
-            await this.cleanupPipelineContext(context);
-            const duration = Date.now() - startTime;
-            this.logger.log(`Pipeline ${pipelineId} execution completed`, {
-                status: finalStatus,
-                duration,
-                tasksExecuted,
-                tasksSucceeded,
-                tasksFailed,
-            });
-            return {
-                pipelineId,
-                status: finalStatus,
-                duration,
-                tasksExecuted,
-                tasksSucceeded,
-                tasksFailed,
-                finalError,
-            };
-        }
-        catch (error) {
-            this.logger.error(`Pipeline ${pipelineId} execution failed:`, error);
-            try {
-                const pipeline = await this.pipelineRepository.findOne({ where: { id: pipelineId } });
-                if (pipeline) {
-                    await this.updatePipelineStatus(pipeline, index_pipeline_entity_1.IndexPipelineStatus.FAILED, error.message);
-                }
-            }
-            catch (updateError) {
-                this.logger.error(`Failed to update pipeline status:`, updateError);
-            }
-            const duration = Date.now() - startTime;
-            return {
-                pipelineId,
-                status: index_pipeline_entity_1.IndexPipelineStatus.FAILED,
-                duration,
-                tasksExecuted,
-                tasksSucceeded,
-                tasksFailed: tasksExecuted - tasksSucceeded,
-                finalError: error.message,
-            };
-        }
-    }
-    async getPipelineStatus(pipelineId) {
-        const pipeline = await this.pipelineRepository.findOne({
-            where: { id: pipelineId },
-            relations: ['project', 'codebase'],
-        });
-        if (!pipeline) {
-            throw new Error(`Pipeline ${pipelineId} not found`);
-        }
-        return pipeline;
-    }
-    async cancelPipeline(pipelineId) {
-        const pipeline = await this.pipelineRepository.findOne({
-            where: { id: pipelineId },
-        });
-        if (!pipeline) {
-            throw new Error(`Pipeline ${pipelineId} not found`);
-        }
-        if (pipeline.status === index_pipeline_entity_1.IndexPipelineStatus.COMPLETED || pipeline.status === index_pipeline_entity_1.IndexPipelineStatus.FAILED) {
-            throw new Error(`Cannot cancel pipeline in status: ${pipeline.status}`);
-        }
-        const cancelledFromQueue = await this.pipelineWorkerService.cancelQueuedPipeline(pipelineId);
-        await this.updatePipelineStatus(pipeline, index_pipeline_entity_1.IndexPipelineStatus.CANCELLED);
-        this.runningPipelines.delete(pipelineId);
-        this.logger.log(`Pipeline ${pipelineId} cancelled ${cancelledFromQueue ? '(removed from queue)' : '(marked as cancelled)'}`);
-    }
-    async createPipelineContext(pipeline) {
-        const workingDirectory = path.join(os.tmpdir(), 'tekaicontextengine', 'pipelines', pipeline.id);
-        const tempDirectory = path.join(workingDirectory, 'temp');
-        await fs.mkdir(workingDirectory, { recursive: true });
-        await fs.mkdir(tempDirectory, { recursive: true });
-        const codebaseStoragePath = pipeline.codebase?.storagePath ||
-            path.join(this.configService.get('STORAGE_ROOT', './storage'), 'codebases', pipeline.codebase?.id || 'unknown');
-        await fs.mkdir(codebaseStoragePath, { recursive: true });
-        const logger = {
-            info: (message, meta) => this.logger.log(`[${pipeline.id}] ${message}`, meta),
-            warn: (message, meta) => this.logger.warn(`[${pipeline.id}] ${message}`, meta),
-            error: (message, meta) => this.logger.error(`[${pipeline.id}] ${message}`, meta),
-            debug: (message, meta) => this.logger.debug(`[${pipeline.id}] ${message}`, meta),
-        };
-        return {
-            pipeline,
-            project: pipeline.project,
-            codebase: pipeline.codebase,
-            config: pipeline.configuration,
-            workingDirectory,
-            tempDirectory,
-            codebaseStoragePath,
-            data: {},
-            metrics: {
-                startTime: new Date(),
-                stepTimes: {},
-                totalFilesProcessed: 0,
-                totalSymbolsExtracted: 0,
-                errors: [],
-                warnings: [],
-            },
-            logger,
-        };
-    }
-    async cleanupPipelineContext(context) {
-        context.logger.debug('Pipeline context cleanup completed');
-    }
-    getTaskInstances() {
-        return [
-            this.gitSyncTask,
-            this.codeParsingTask,
-            this.graphUpdateTask,
-            this.cleanupTask,
-        ];
-    }
-    async updatePipelineStatus(pipeline, status, error) {
-        pipeline.status = status;
-        pipeline.updatedAt = new Date();
-        if (status === index_pipeline_entity_1.IndexPipelineStatus.RUNNING) {
-            pipeline.startedAt = new Date();
-        }
-        else if (status === index_pipeline_entity_1.IndexPipelineStatus.COMPLETED || status === index_pipeline_entity_1.IndexPipelineStatus.FAILED) {
-            pipeline.completedAt = new Date();
-        }
-        if (error) {
-            pipeline.error = error;
-        }
-        await this.pipelineRepository.save(pipeline);
-    }
-    createInitialMetadata() {
-        return {
-            filesProcessed: 0,
-            symbolsExtracted: 0,
-            duration: 0,
-            steps: {},
-            metrics: {
-                linesOfCode: 0,
-                languages: {},
-                fileTypes: {},
-                errors: [],
-                warnings: [],
-            },
-        };
-    }
-    getWorkerPoolStats() {
-        return this.pipelineWorkerService.getPoolStats();
-    }
-    resizeWorkerPool(newSize) {
-        this.pipelineWorkerService.resizePool(newSize);
-        this.logger.log(`Worker pool resized to ${newSize} workers`);
-    }
-    getActivePipelines() {
-        return this.pipelineWorkerService.getActivePipelines();
-    }
-    isPipelineActive(pipelineId) {
-        return this.runningPipelines.has(pipelineId) || this.pipelineWorkerService.isPipelineActive(pipelineId);
-    }
-    async getSystemStatus() {
-        const poolStats = this.getWorkerPoolStats();
-        const activePipelines = Array.from(this.runningPipelines.keys());
-        return {
-            workerPool: poolStats,
-            runningPipelines: activePipelines.length,
-            activePipelineIds: activePipelines,
-            systemHealth: {
-                queueBacklog: poolStats?.queuedTasks || 0,
-                utilization: poolStats?.utilization || 0,
-                isHealthy: (poolStats?.utilization || 0) < 0.9,
-            },
-        };
-    }
-    async getPipelinesForCodebase(codebaseId) {
-        const activePipelines = await this.pipelineRepository.find({
-            where: {
-                codebase: { id: codebaseId },
-                status: index_pipeline_entity_1.IndexPipelineStatus.RUNNING,
-            },
-            order: { createdAt: 'DESC' },
-            take: 10,
-        });
-        const recentPipelines = await this.pipelineRepository.find({
-            where: [
-                {
-                    codebase: { id: codebaseId },
-                    status: index_pipeline_entity_1.IndexPipelineStatus.COMPLETED,
-                },
-                {
-                    codebase: { id: codebaseId },
-                    status: index_pipeline_entity_1.IndexPipelineStatus.FAILED,
-                },
-                {
-                    codebase: { id: codebaseId },
-                    status: index_pipeline_entity_1.IndexPipelineStatus.CANCELLED,
-                },
-            ],
-            order: { completedAt: 'DESC' },
-            take: 20,
-        });
-        return {
-            activePipelines,
-            recentPipelines,
-            summary: {
-                activeCount: activePipelines.length,
-                recentCount: recentPipelines.length,
-                hasRunning: activePipelines.length > 0,
-            },
-        };
-    }
-    async getPipelinesForProject(projectId, limit = 50) {
-        return await this.pipelineRepository.find({
-            where: { project: { id: projectId } },
-            relations: ['project', 'codebase'],
-            order: { createdAt: 'DESC' },
-            take: limit,
-        });
-    }
-};
-exports.PipelineOrchestratorService = PipelineOrchestratorService;
-exports.PipelineOrchestratorService = PipelineOrchestratorService = PipelineOrchestratorService_1 = __decorate([
-    (0, common_1.Injectable)(),
-    __param(0, (0, typeorm_1.InjectRepository)(index_pipeline_entity_1.IndexPipeline)),
-    __param(1, (0, typeorm_1.InjectRepository)(entities_1.TekProject)),
-    __param(2, (0, typeorm_1.InjectRepository)(entities_1.Codebase)),
-    __metadata("design:paramtypes", [typeof (_a = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _a : Object, typeof (_b = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _b : Object, typeof (_c = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _c : Object, typeof (_d = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _d : Object, typeof (_e = typeof pipeline_config_service_1.PipelineConfigService !== "undefined" && pipeline_config_service_1.PipelineConfigService) === "function" ? _e : Object, typeof (_f = typeof pipeline_worker_service_1.PipelineWorkerService !== "undefined" && pipeline_worker_service_1.PipelineWorkerService) === "function" ? _f : Object, typeof (_g = typeof git_sync_task_1.GitSyncTask !== "undefined" && git_sync_task_1.GitSyncTask) === "function" ? _g : Object, typeof (_h = typeof code_parsing_task_1.CodeParsingTask !== "undefined" && code_parsing_task_1.CodeParsingTask) === "function" ? _h : Object, typeof (_j = typeof graph_update_task_1.GraphUpdateTask !== "undefined" && graph_update_task_1.GraphUpdateTask) === "function" ? _j : Object, typeof (_k = typeof cleanup_task_1.CleanupTask !== "undefined" && cleanup_task_1.CleanupTask) === "function" ? _k : Object])
-], PipelineOrchestratorService);
+}
+exports.PaginationDto = PaginationDto;
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Page number (1-based)',
+        minimum: 1,
+        default: 1,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    __metadata("design:type", Number)
+], PaginationDto.prototype, "page", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Number of items per page',
+        minimum: 1,
+        maximum: 100,
+        default: 20,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(100),
+    __metadata("design:type", Number)
+], PaginationDto.prototype, "limit", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Field to sort by',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], PaginationDto.prototype, "sortBy", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Sort order',
+        enum: ['asc', 'desc'],
+        default: 'desc',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(['asc', 'desc']),
+    __metadata("design:type", String)
+], PaginationDto.prototype, "sortOrder", void 0);
 
 
 /***/ }),
 /* 48 */
+/***/ ((module) => {
+
+module.exports = require("class-transformer");
+
+/***/ }),
+/* 49 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -3466,238 +3188,142 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var _a;
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var _a, _b, _c, _d, _e, _f, _g;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.GitSyncTask = void 0;
+exports.CodebaseController = void 0;
 const common_1 = __webpack_require__(2);
-const base_task_interface_1 = __webpack_require__(49);
-const index_pipeline_entity_1 = __webpack_require__(18);
-const git_client_service_1 = __webpack_require__(50);
-let GitSyncTask = class GitSyncTask extends base_task_interface_1.BaseTask {
-    constructor(gitClient) {
-        super();
-        this.gitClient = gitClient;
-        this.name = 'git_sync';
-        this.description = 'Synchronize Git repository and prepare workspace';
-        this.requiredSteps = [];
-        this.optionalSteps = [];
+const nest_winston_1 = __webpack_require__(5);
+const codebase_service_1 = __webpack_require__(32);
+const dto_1 = __webpack_require__(39);
+const pagination_dto_1 = __webpack_require__(47);
+let CodebaseController = class CodebaseController {
+    constructor(codebaseService, logger) {
+        this.codebaseService = codebaseService;
+        this.logger = logger;
     }
-    shouldExecute(context) {
-        return !!context.codebase?.gitlabUrl;
-    }
-    async validate(context) {
-        if (!context.codebase) {
-            throw new Error('Codebase is required for Git sync');
-        }
-        if (!context.codebase.gitlabUrl) {
-            throw new Error('GitLab URL is required for Git sync');
-        }
-        if (!context.workingDirectory) {
-            throw new Error('Working directory is required for Git sync');
-        }
-    }
-    async executeTask(context) {
-        const { pipeline, codebase, codebaseStoragePath, config } = context;
-        const isIncremental = pipeline.type === index_pipeline_entity_1.IndexPipelineType.INCREMENTAL &&
-            await this.gitClient.isValidRepository(codebaseStoragePath);
+    async createCodebase(createDto) {
+        const requestId = Math.random().toString(36).substring(2, 8);
+        this.logger.log(`[${requestId}] [CREATE-CODEBASE] Starting codebase creation request`, {
+            name: createDto.name,
+            projectId: createDto.projectId,
+            gitlabUrl: createDto.gitlabUrl,
+            branch: createDto.branch
+        });
+        this.logger.log(`Creating codebase: ${createDto.name} for TekProject: ${createDto.projectId}`);
         try {
-            let commitHash;
-            let filesChanged = [];
-            let filesAdded = [];
-            let filesDeleted = [];
-            if (isIncremental) {
-                context.logger.info('Starting incremental Git sync', {
-                    path: codebaseStoragePath,
-                    branch: codebase.branch
-                });
-                const beforeCommit = await this.gitClient.getCurrentCommit(codebaseStoragePath);
-                commitHash = await this.gitClient.pullRepository(codebaseStoragePath, {
-                    branch: codebase.branch,
-                    gitConfig: codebase.metadata?.gitConfig
-                });
-                const changes = await this.gitClient.getDiff(codebaseStoragePath, {
-                    fromCommit: beforeCommit,
-                    nameOnly: true
-                });
-                for (const change of changes) {
-                    switch (change.operation) {
-                        case 'A':
-                            filesAdded.push(change.path);
-                            break;
-                        case 'D':
-                            filesDeleted.push(change.path);
-                            break;
-                        case 'M':
-                            filesChanged.push(change.path);
-                            break;
-                        case 'R':
-                            if (change.oldPath)
-                                filesDeleted.push(change.oldPath);
-                            filesAdded.push(change.path);
-                            break;
-                    }
-                }
-            }
-            else {
-                context.logger.info('Starting full Git clone', {
-                    url: codebase.gitlabUrl,
-                    branch: codebase.branch,
-                    destination: codebaseStoragePath
-                });
-                if (await this.gitClient.isValidRepository(codebaseStoragePath)) {
-                    await this.gitClient.deleteRepository(codebaseStoragePath);
-                }
-                commitHash = await this.gitClient.cloneRepository(codebase.gitlabUrl, codebaseStoragePath, {
-                    branch: codebase.branch,
-                    depth: config.gitSync.shallow ? 1 : undefined,
-                    gitConfig: codebase.metadata?.gitConfig
-                });
-                filesAdded = await this.gitClient.listFiles(codebaseStoragePath);
-            }
-            const totalFiles = filesAdded.length + filesChanged.length;
-            context.logger.info('Git sync completed', {
-                mode: isIncremental ? 'incremental' : 'full',
-                commitHash,
-                filesAdded: filesAdded.length,
-                filesChanged: filesChanged.length,
-                filesDeleted: filesDeleted.length,
-                totalFiles,
+            this.logger.debug(`[${requestId}] [CREATE-CODEBASE] Calling codebase service`);
+            const codebase = await this.codebaseService.create(createDto);
+            this.logger.log(`[${requestId}] [CREATE-CODEBASE] Codebase creation completed successfully`, {
+                codebaseId: codebase.id,
+                codebaseName: codebase.name,
+                projectId: codebase.project.id,
+                gitlabUrl: codebase.gitlabUrl,
+                branch: codebase.branch,
+                status: codebase.status
             });
-            context.data.gitSync = {
-                clonePath: codebaseStoragePath,
-                commitHash,
-                filesChanged,
-                filesAdded,
-                filesDeleted,
-            };
             return {
                 success: true,
-                duration: 0,
-                data: context.data.gitSync,
-                metrics: {
-                    filesProcessed: totalFiles,
-                },
+                data: codebase,
+                message: 'Codebase created successfully',
             };
         }
         catch (error) {
-            context.logger.error('Git sync failed', { error: error.message });
-            return {
-                success: false,
-                duration: 0,
-                error: `Git sync failed: ${error.message}`,
-            };
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[${requestId}] [CREATE-CODEBASE] Codebase creation failed`, {
+                name: createDto.name,
+                projectId: createDto.projectId,
+                gitlabUrl: createDto.gitlabUrl,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            throw error;
         }
     }
-    async cleanup(context) {
-        context.logger.debug('Git sync cleanup completed');
-    }
-    getEstimatedDuration(context) {
-        const baseTime = 30000;
-        const isIncremental = context.pipeline.type === index_pipeline_entity_1.IndexPipelineType.INCREMENTAL;
-        return isIncremental ? baseTime * 0.3 : baseTime;
-    }
-};
-exports.GitSyncTask = GitSyncTask;
-exports.GitSyncTask = GitSyncTask = __decorate([
-    (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [typeof (_a = typeof git_client_service_1.GitClientService !== "undefined" && git_client_service_1.GitClientService) === "function" ? _a : Object])
-], GitSyncTask);
-
-
-/***/ }),
-/* 49 */
-/***/ ((__unused_webpack_module, exports) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.BaseTask = exports.TaskStatus = void 0;
-var TaskStatus;
-(function (TaskStatus) {
-    TaskStatus["PENDING"] = "PENDING";
-    TaskStatus["RUNNING"] = "RUNNING";
-    TaskStatus["COMPLETED"] = "COMPLETED";
-    TaskStatus["FAILED"] = "FAILED";
-    TaskStatus["SKIPPED"] = "SKIPPED";
-})(TaskStatus || (exports.TaskStatus = TaskStatus = {}));
-class BaseTask {
-    constructor() {
-        this.status = TaskStatus.PENDING;
-    }
-    shouldExecute(context) {
-        return true;
-    }
-    async validate(context) {
-        for (const requiredStep of this.requiredSteps) {
-            if (!context.data[requiredStep]) {
-                throw new Error(`Required step '${requiredStep}' not completed before ${this.name}`);
-            }
+    async listCodebases(projectId, paginationDto) {
+        const requestId = Math.random().toString(36).substring(2, 8);
+        this.logger.log(`[${requestId}] [LIST-CODEBASES] Starting codebases list request`, {
+            projectId,
+            page: paginationDto.page,
+            limit: paginationDto.limit,
+            sortBy: paginationDto.sortBy,
+            sortOrder: paginationDto.sortOrder
+        });
+        if (!projectId) {
+            this.logger.error(`[${requestId}] [LIST-CODEBASES] Missing required projectId parameter`);
+            throw new Error('projectId query parameter is required');
         }
-    }
-    async execute(context) {
-        this.status = TaskStatus.RUNNING;
-        this.startTime = new Date();
+        const options = {
+            page: paginationDto.page || 1,
+            perPage: paginationDto.limit || 20,
+            sort: paginationDto.sortBy || 'createdAt',
+            orderBy: paginationDto.sortOrder || 'desc',
+        };
         try {
-            context.logger.info(`Starting task: ${this.name}`);
-            context.metrics.stepTimes[this.name] = { start: this.startTime };
-            await this.validate(context);
-            const result = await this.executeTask(context);
-            this.endTime = new Date();
-            this.status = result.success ? TaskStatus.COMPLETED : TaskStatus.FAILED;
-            const duration = this.endTime.getTime() - this.startTime.getTime();
-            context.metrics.stepTimes[this.name].end = this.endTime;
-            context.metrics.stepTimes[this.name].duration = duration;
-            if (result.success) {
-                context.logger.info(`Task completed: ${this.name}`, { duration });
-            }
-            else {
-                context.logger.error(`Task failed: ${this.name}`, { error: result.error, duration });
-                context.metrics.errors.push({
-                    step: this.name,
-                    error: result.error || 'Unknown error',
-                    timestamp: new Date(),
-                });
-            }
-            return {
-                ...result,
-                duration,
-            };
-        }
-        catch (error) {
-            this.endTime = new Date();
-            this.status = TaskStatus.FAILED;
-            const duration = this.endTime.getTime() - this.startTime.getTime();
-            context.metrics.stepTimes[this.name].end = this.endTime;
-            context.metrics.stepTimes[this.name].duration = duration;
-            context.logger.error(`Task error: ${this.name}`, { error: error.message, duration });
-            context.metrics.errors.push({
-                step: this.name,
-                error: error.message,
-                timestamp: new Date(),
+            const result = await this.codebaseService.findByProjectId(projectId, options);
+            this.logger.log(`[${requestId}] [LIST-CODEBASES] Codebases list completed successfully`, {
+                projectId,
+                totalResults: result.total,
+                page: result.page,
+                perPage: result.perPage,
+                totalPages: result.totalPages
             });
             return {
-                success: false,
-                duration,
-                error: error.message,
+                success: true,
+                data: result,
             };
         }
-    }
-    async cleanup(context) {
-        context.logger.debug(`Cleanup completed for task: ${this.name}`);
-    }
-    getEstimatedDuration(context) {
-        return 30000;
-    }
-    getStatus() {
-        return this.status;
-    }
-    getDuration() {
-        if (this.startTime && this.endTime) {
-            return this.endTime.getTime() - this.startTime.getTime();
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[${requestId}] [LIST-CODEBASES] Codebases list failed`, {
+                projectId,
+                page: paginationDto.page,
+                limit: paginationDto.limit,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            throw error;
         }
-        return null;
     }
-}
-exports.BaseTask = BaseTask;
+    async getCodebase(id) {
+        const codebase = await this.codebaseService.findById(id);
+        return {
+            success: true,
+            data: codebase,
+        };
+    }
+};
+exports.CodebaseController = CodebaseController;
+__decorate([
+    (0, common_1.Post)(),
+    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [typeof (_c = typeof dto_1.CreateCodebaseDto !== "undefined" && dto_1.CreateCodebaseDto) === "function" ? _c : Object]),
+    __metadata("design:returntype", typeof (_d = typeof Promise !== "undefined" && Promise) === "function" ? _d : Object)
+], CodebaseController.prototype, "createCodebase", null);
+__decorate([
+    (0, common_1.Get)(),
+    __param(0, (0, common_1.Query)('projectId')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, typeof (_e = typeof pagination_dto_1.PaginationDto !== "undefined" && pagination_dto_1.PaginationDto) === "function" ? _e : Object]),
+    __metadata("design:returntype", typeof (_f = typeof Promise !== "undefined" && Promise) === "function" ? _f : Object)
+], CodebaseController.prototype, "listCodebases", null);
+__decorate([
+    (0, common_1.Get)(':id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", typeof (_g = typeof Promise !== "undefined" && Promise) === "function" ? _g : Object)
+], CodebaseController.prototype, "getCodebase", null);
+exports.CodebaseController = CodebaseController = __decorate([
+    (0, common_1.Controller)('codebases'),
+    __param(1, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof codebase_service_1.CodebaseService !== "undefined" && codebase_service_1.CodebaseService) === "function" ? _a : Object, typeof (_b = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _b : Object])
+], CodebaseController);
 
 
 /***/ }),
@@ -3714,61 +3340,467 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var GitClientService_1;
-var _a;
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.GitClientService = void 0;
+exports.DocumentController = exports.DocsBucketController = void 0;
+const common_1 = __webpack_require__(2);
+const nest_winston_1 = __webpack_require__(5);
+const platform_express_1 = __webpack_require__(51);
+const document_service_1 = __webpack_require__(37);
+const pagination_dto_1 = __webpack_require__(47);
+const dto_1 = __webpack_require__(39);
+let DocsBucketController = class DocsBucketController {
+    constructor(documentService, logger) {
+        this.documentService = documentService;
+        this.logger = logger;
+    }
+    async createDocsBucket(createDto) {
+        this.logger.log(`Creating docs bucket: ${createDto.name} for project: ${createDto.projectId}`);
+        const bucket = await this.documentService.createBucket(createDto);
+        return {
+            success: true,
+            data: bucket,
+            message: 'Docs bucket created successfully',
+        };
+    }
+    async listDocsBuckets(projectId) {
+        if (!projectId) {
+            throw new Error('projectId query parameter is required');
+        }
+        const buckets = await this.documentService.findBucketsByProjectId(projectId);
+        return {
+            success: true,
+            data: buckets,
+        };
+    }
+    async getDocsBucket(id) {
+        const bucket = await this.documentService.findBucketById(id);
+        return {
+            success: true,
+            data: bucket,
+        };
+    }
+    async updateDocsBucket(id, updateDto) {
+        const bucket = await this.documentService.updateBucket(id, updateDto);
+        return {
+            success: true,
+            data: bucket,
+            message: 'Docs bucket updated successfully',
+        };
+    }
+    async deleteDocsBucket(id) {
+        await this.documentService.deleteBucket(id);
+        this.logger.log(`Docs bucket deleted: ${id}`);
+    }
+};
+exports.DocsBucketController = DocsBucketController;
+__decorate([
+    (0, common_1.Post)(),
+    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [typeof (_c = typeof dto_1.CreateDocsBucketDto !== "undefined" && dto_1.CreateDocsBucketDto) === "function" ? _c : Object]),
+    __metadata("design:returntype", typeof (_d = typeof Promise !== "undefined" && Promise) === "function" ? _d : Object)
+], DocsBucketController.prototype, "createDocsBucket", null);
+__decorate([
+    (0, common_1.Get)(),
+    __param(0, (0, common_1.Query)('projectId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", typeof (_e = typeof Promise !== "undefined" && Promise) === "function" ? _e : Object)
+], DocsBucketController.prototype, "listDocsBuckets", null);
+__decorate([
+    (0, common_1.Get)(':id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", typeof (_f = typeof Promise !== "undefined" && Promise) === "function" ? _f : Object)
+], DocsBucketController.prototype, "getDocsBucket", null);
+__decorate([
+    (0, common_1.Put)(':id'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, typeof (_g = typeof dto_1.UpdateDocsBucketDto !== "undefined" && dto_1.UpdateDocsBucketDto) === "function" ? _g : Object]),
+    __metadata("design:returntype", typeof (_h = typeof Promise !== "undefined" && Promise) === "function" ? _h : Object)
+], DocsBucketController.prototype, "updateDocsBucket", null);
+__decorate([
+    (0, common_1.Delete)(':id'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", typeof (_j = typeof Promise !== "undefined" && Promise) === "function" ? _j : Object)
+], DocsBucketController.prototype, "deleteDocsBucket", null);
+exports.DocsBucketController = DocsBucketController = __decorate([
+    (0, common_1.Controller)('docsbuckets'),
+    __param(1, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof document_service_1.DocumentService !== "undefined" && document_service_1.DocumentService) === "function" ? _a : Object, typeof (_b = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _b : Object])
+], DocsBucketController);
+let DocumentController = class DocumentController {
+    constructor(documentService, logger) {
+        this.documentService = documentService;
+        this.logger = logger;
+    }
+    async uploadDocument(file, uploadDto) {
+        const requestId = Math.random().toString(36).substring(2, 8);
+        this.logger.log(`[${requestId}] [UPLOAD-DOCUMENT] Starting document upload request`, {
+            title: uploadDto.title,
+            bucketId: uploadDto.bucketId,
+            fileName: file?.originalname,
+            fileSize: file?.size,
+            mimeType: file?.mimetype
+        });
+        this.logger.log(`Uploading document: ${uploadDto.title} to bucket: ${uploadDto.bucketId}`);
+        try {
+            this.logger.debug(`[${requestId}] [UPLOAD-DOCUMENT] Validating file upload`, {
+                hasFile: !!file,
+                fileName: file?.originalname,
+                fileSize: file?.size,
+                fileSizeMB: file?.size ? Math.round(file.size / (1024 * 1024) * 100) / 100 : 0
+            });
+            this.logger.debug(`[${requestId}] [UPLOAD-DOCUMENT] Calling document service`);
+            const document = await this.documentService.uploadDocument(file, uploadDto);
+            this.logger.log(`[${requestId}] [UPLOAD-DOCUMENT] Document upload completed successfully`, {
+                documentId: document.id,
+                documentTitle: document.title,
+                bucketId: document.bucket.id,
+                filePath: document.path,
+                fileSize: document.size,
+                status: document.status
+            });
+            return {
+                success: true,
+                data: document,
+                message: 'Document uploaded successfully',
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[${requestId}] [UPLOAD-DOCUMENT] Document upload failed`, {
+                title: uploadDto.title,
+                bucketId: uploadDto.bucketId,
+                fileName: file?.originalname,
+                fileSize: file?.size,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            throw error;
+        }
+    }
+    async listDocuments(bucketId, paginationDto) {
+        const requestId = Math.random().toString(36).substring(2, 8);
+        this.logger.log(`[${requestId}] [LIST-DOCUMENTS] Starting documents list request`, {
+            bucketId,
+            page: paginationDto.page,
+            limit: paginationDto.limit,
+            sortBy: paginationDto.sortBy,
+            sortOrder: paginationDto.sortOrder
+        });
+        if (!bucketId) {
+            this.logger.error(`[${requestId}] [LIST-DOCUMENTS] Missing required bucketId parameter`);
+            throw new common_1.BadRequestException('bucketId query parameter is required');
+        }
+        const options = {
+            page: paginationDto.page || 1,
+            perPage: paginationDto.limit || 20,
+            sort: paginationDto.sortBy || 'createdAt',
+            orderBy: paginationDto.sortOrder || 'desc',
+        };
+        try {
+            const result = await this.documentService.findDocumentsByBucketId(bucketId, options);
+            this.logger.log(`[${requestId}] [LIST-DOCUMENTS] Documents list completed successfully`, {
+                bucketId,
+                totalResults: result.total,
+                page: result.page,
+                perPage: result.perPage,
+                totalPages: result.totalPages
+            });
+            return {
+                success: true,
+                data: result,
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[${requestId}] [LIST-DOCUMENTS] Documents list failed`, {
+                bucketId,
+                page: paginationDto.page,
+                limit: paginationDto.limit,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            throw error;
+        }
+    }
+    async getDocument(id) {
+        const document = await this.documentService.findDocumentById(id);
+        return {
+            success: true,
+            data: document,
+        };
+    }
+    async deleteDocument(id) {
+        await this.documentService.deleteDocument(id);
+        this.logger.log(`Document deleted: ${id}`);
+    }
+};
+exports.DocumentController = DocumentController;
+__decorate([
+    (0, common_1.Post)('upload'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
+    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
+    __param(0, (0, common_1.UploadedFile)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, typeof (_m = typeof dto_1.UploadDocumentDto !== "undefined" && dto_1.UploadDocumentDto) === "function" ? _m : Object]),
+    __metadata("design:returntype", typeof (_o = typeof Promise !== "undefined" && Promise) === "function" ? _o : Object)
+], DocumentController.prototype, "uploadDocument", null);
+__decorate([
+    (0, common_1.Get)(),
+    __param(0, (0, common_1.Query)('bucketId')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, typeof (_p = typeof pagination_dto_1.PaginationDto !== "undefined" && pagination_dto_1.PaginationDto) === "function" ? _p : Object]),
+    __metadata("design:returntype", typeof (_q = typeof Promise !== "undefined" && Promise) === "function" ? _q : Object)
+], DocumentController.prototype, "listDocuments", null);
+__decorate([
+    (0, common_1.Get)(':id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", typeof (_r = typeof Promise !== "undefined" && Promise) === "function" ? _r : Object)
+], DocumentController.prototype, "getDocument", null);
+__decorate([
+    (0, common_1.Delete)(':id'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", typeof (_s = typeof Promise !== "undefined" && Promise) === "function" ? _s : Object)
+], DocumentController.prototype, "deleteDocument", null);
+exports.DocumentController = DocumentController = __decorate([
+    (0, common_1.Controller)('documents'),
+    __param(1, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_k = typeof document_service_1.DocumentService !== "undefined" && document_service_1.DocumentService) === "function" ? _k : Object, typeof (_l = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _l : Object])
+], DocumentController);
+
+
+/***/ }),
+/* 51 */
+/***/ ((module) => {
+
+module.exports = require("@nestjs/platform-express");
+
+/***/ }),
+/* 52 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.GitlabModule = void 0;
 const common_1 = __webpack_require__(2);
 const config_1 = __webpack_require__(4);
-const child_process_1 = __webpack_require__(51);
-const git_config_1 = __webpack_require__(52);
-const fs = __webpack_require__(22);
-const path = __webpack_require__(23);
-const crypto = __webpack_require__(24);
-let GitClientService = GitClientService_1 = class GitClientService {
-    constructor(configService) {
-        this.logger = new common_1.Logger(GitClientService_1.name);
+const typeorm_1 = __webpack_require__(10);
+const gitlab_service_1 = __webpack_require__(33);
+const git_client_service_1 = __webpack_require__(53);
+const entities_1 = __webpack_require__(11);
+let GitlabModule = class GitlabModule {
+};
+exports.GitlabModule = GitlabModule;
+exports.GitlabModule = GitlabModule = __decorate([
+    (0, common_1.Module)({
+        imports: [
+            config_1.ConfigModule,
+            typeorm_1.TypeOrmModule.forFeature([entities_1.Codebase]),
+        ],
+        providers: [
+            gitlab_service_1.GitlabService,
+            git_client_service_1.GitClientService,
+        ],
+        exports: [
+            gitlab_service_1.GitlabService,
+            git_client_service_1.GitClientService,
+        ],
+    })
+], GitlabModule);
+
+
+/***/ }),
+/* 53 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.GitClientService = exports.DiffOptions = exports.CloneOptions = exports.GitFileChange = exports.GitCommit = void 0;
+const common_1 = __webpack_require__(2);
+const config_1 = __webpack_require__(4);
+const nest_winston_1 = __webpack_require__(5);
+const child_process_1 = __webpack_require__(54);
+const git_config_1 = __webpack_require__(36);
+const fs = __webpack_require__(21);
+const path = __webpack_require__(22);
+const crypto = __webpack_require__(23);
+const dto_1 = __webpack_require__(55);
+Object.defineProperty(exports, "GitCommit", ({ enumerable: true, get: function () { return dto_1.GitCommit; } }));
+Object.defineProperty(exports, "GitFileChange", ({ enumerable: true, get: function () { return dto_1.GitFileChange; } }));
+Object.defineProperty(exports, "CloneOptions", ({ enumerable: true, get: function () { return dto_1.CloneOptions; } }));
+Object.defineProperty(exports, "DiffOptions", ({ enumerable: true, get: function () { return dto_1.DiffOptions; } }));
+let GitClientService = class GitClientService {
+    constructor(configService, logger) {
+        this.logger = logger;
         this.gitConfiguration = git_config_1.GitConfiguration.getInstance(configService);
         this.timeouts = this.gitConfiguration.getTimeouts();
     }
     async cloneRepository(gitlabUrl, localPath, options = {}) {
+        this.logger.log('[GIT-CLIENT] Starting repository clone operation', {
+            gitlabUrl,
+            localPath,
+            options: {
+                depth: options.depth,
+                branch: options.branch,
+                hasSparseCheckout: !!(options.sparseCheckout?.length),
+                sparseCheckoutCount: options.sparseCheckout?.length || 0,
+                hasGitConfig: !!options.gitConfig
+            }
+        });
         this.logger.log(`Cloning repository ${gitlabUrl} to ${localPath}`);
-        await fs.mkdir(path.dirname(localPath), { recursive: true });
+        const parentDir = path.dirname(localPath);
+        this.logger.debug('[GIT-CLIENT] Creating parent directory if needed', {
+            parentDir,
+            localPath
+        });
+        await fs.mkdir(parentDir, { recursive: true });
+        this.logger.debug('[GIT-CLIENT] Parent directory ensured');
         const args = ['clone'];
         if (options.depth) {
             args.push('--depth', options.depth.toString());
+            this.logger.debug('[GIT-CLIENT] Added depth option to clone command', {
+                depth: options.depth
+            });
         }
         if (options.branch) {
             args.push('--branch', options.branch);
+            this.logger.debug('[GIT-CLIENT] Added branch option to clone command', {
+                branch: options.branch
+            });
         }
+        this.logger.debug('[GIT-CLIENT] Adding authentication to URL');
         const authenticatedUrl = this.addAuthentication(gitlabUrl, options);
         args.push(authenticatedUrl, localPath);
+        this.logger.debug('[GIT-CLIENT] Git clone command prepared', {
+            argsCount: args.length,
+            timeout: this.timeouts.cloneTimeout,
+            hasAuthentication: authenticatedUrl !== gitlabUrl
+        });
+        const cloneStartTime = Date.now();
         await this.executeGitCommand(args, {
             timeout: this.timeouts.cloneTimeout
         });
+        const cloneDuration = Date.now() - cloneStartTime;
+        this.logger.debug('[GIT-CLIENT] Git clone command completed', {
+            durationMs: cloneDuration,
+            durationSec: Math.round(cloneDuration / 1000)
+        });
         if (options.sparseCheckout && options.sparseCheckout.length > 0) {
+            this.logger.debug('[GIT-CLIENT] Setting up sparse checkout', {
+                sparseCheckoutPaths: options.sparseCheckout
+            });
             await this.setupSparseCheckout(localPath, options.sparseCheckout);
+            this.logger.debug('[GIT-CLIENT] Sparse checkout configured successfully');
         }
+        this.logger.debug('[GIT-CLIENT] Getting initial commit hash');
         const initialCommit = await this.getCurrentCommit(localPath);
+        this.logger.log('[GIT-CLIENT] Repository clone completed successfully', {
+            gitlabUrl,
+            localPath,
+            initialCommit: initialCommit.substring(0, 8),
+            fullCommit: initialCommit,
+            cloneDurationMs: cloneDuration,
+            hasSparseCheckout: !!(options.sparseCheckout?.length)
+        });
         this.logger.log(`Successfully cloned repository to ${localPath}, commit: ${initialCommit}`);
         return initialCommit;
     }
     async pullRepository(localPath, options = {}) {
+        this.logger.log('[GIT-CLIENT] Starting repository pull operation', {
+            localPath,
+            branch: options.branch,
+            hasGitConfig: !!options.gitConfig
+        });
         this.logger.log(`Pulling updates for repository at ${localPath}`);
+        this.logger.debug('[GIT-CLIENT] Getting current commit before pull');
         const beforeCommit = await this.getCurrentCommit(localPath);
+        this.logger.debug('[GIT-CLIENT] Current commit before pull', {
+            beforeCommit: beforeCommit.substring(0, 8),
+            fullCommit: beforeCommit
+        });
         const args = ['pull', 'origin'];
         if (options.branch) {
             args.push(options.branch);
+            this.logger.debug('[GIT-CLIENT] Added branch to pull command', {
+                branch: options.branch
+            });
         }
+        this.logger.debug('[GIT-CLIENT] Git pull command prepared', {
+            args,
+            timeout: this.timeouts.pullTimeout,
+            workingDirectory: localPath
+        });
+        const pullStartTime = Date.now();
         await this.executeGitCommand(args, {
             cwd: localPath,
             timeout: this.timeouts.pullTimeout
         });
+        const pullDuration = Date.now() - pullStartTime;
+        this.logger.debug('[GIT-CLIENT] Git pull command completed', {
+            durationMs: pullDuration,
+            durationSec: Math.round(pullDuration / 1000)
+        });
+        this.logger.debug('[GIT-CLIENT] Getting current commit after pull');
         const afterCommit = await this.getCurrentCommit(localPath);
-        if (beforeCommit !== afterCommit) {
+        const hasChanges = beforeCommit !== afterCommit;
+        this.logger.debug('[GIT-CLIENT] Pull operation analysis', {
+            beforeCommit: beforeCommit.substring(0, 8),
+            afterCommit: afterCommit.substring(0, 8),
+            hasChanges,
+            pullDurationMs: pullDuration
+        });
+        if (hasChanges) {
+            this.logger.log('[GIT-CLIENT] Repository updated with new changes', {
+                fromCommit: beforeCommit.substring(0, 8),
+                toCommit: afterCommit.substring(0, 8),
+                pullDurationMs: pullDuration
+            });
             this.logger.log(`Repository updated from ${beforeCommit} to ${afterCommit}`);
         }
         else {
+            this.logger.log('[GIT-CLIENT] Repository already up to date', {
+                currentCommit: afterCommit.substring(0, 8),
+                pullDurationMs: pullDuration
+            });
             this.logger.log(`Repository already up to date at ${afterCommit}`);
         }
         return afterCommit;
@@ -3976,37 +4008,96 @@ let GitClientService = GitClientService_1 = class GitClientService {
         });
     }
     async executeGitCommand(args, options = {}) {
+        const commandId = Math.random().toString(36).substring(2, 8);
+        const { timeout = this.timeouts.commandTimeout, ...spawnOptions } = options;
+        const sanitizedArgs = args.map(arg => {
+            if (arg.includes('@') && (arg.includes('http') || arg.includes('git'))) {
+                return arg.replace(/:\/\/[^@]+@/, '://***:***@');
+            }
+            return arg;
+        });
+        this.logger.debug(`[GIT-CLIENT] [${commandId}] Executing git command`, {
+            command: `git ${sanitizedArgs.join(' ')}`,
+            timeout,
+            workingDirectory: spawnOptions.cwd || process.cwd(),
+            argsCount: args.length
+        });
         return new Promise((resolve, reject) => {
-            const { timeout = this.timeouts.commandTimeout, ...spawnOptions } = options;
+            const startTime = Date.now();
             const process = (0, child_process_1.spawn)('git', args, {
                 stdio: ['pipe', 'pipe', 'pipe'],
                 ...spawnOptions,
             });
             let stdout = '';
             let stderr = '';
+            let stdoutLines = 0;
+            let stderrLines = 0;
             process.stdout?.on('data', (data) => {
-                stdout += data.toString();
+                const chunk = data.toString();
+                stdout += chunk;
+                stdoutLines += (chunk.match(/\n/g) || []).length;
             });
             process.stderr?.on('data', (data) => {
-                stderr += data.toString();
+                const chunk = data.toString();
+                stderr += chunk;
+                stderrLines += (chunk.match(/\n/g) || []).length;
             });
             const timeoutId = setTimeout(() => {
+                const duration = Date.now() - startTime;
+                this.logger.error(`[GIT-CLIENT] [${commandId}] Git command timed out`, {
+                    command: `git ${sanitizedArgs.join(' ')}`,
+                    timeout,
+                    actualDuration: duration,
+                    stdoutLines,
+                    stderrLines,
+                    workingDirectory: spawnOptions.cwd
+                });
                 process.kill('SIGTERM');
                 reject(new Error(`Git command timed out after ${timeout}ms: git ${args.join(' ')}`));
             }, timeout);
             process.on('close', (code) => {
                 clearTimeout(timeoutId);
+                const duration = Date.now() - startTime;
                 if (code === 0) {
+                    this.logger.debug(`[GIT-CLIENT] [${commandId}] Git command completed successfully`, {
+                        command: `git ${sanitizedArgs.join(' ')}`,
+                        exitCode: code,
+                        duration,
+                        stdoutLines,
+                        stderrLines,
+                        stdoutLength: stdout.length,
+                        stderrLength: stderr.length
+                    });
                     resolve({ stdout, stderr });
                 }
                 else {
                     const error = new Error(`Git command failed with code ${code}: ${stderr || stdout}`);
+                    this.logger.error(`[GIT-CLIENT] [${commandId}] Git command failed`, {
+                        command: `git ${sanitizedArgs.join(' ')}`,
+                        exitCode: code,
+                        duration,
+                        stdoutLines,
+                        stderrLines,
+                        stdoutLength: stdout.length,
+                        stderrLength: stderr.length,
+                        stderr: stderr.substring(0, 500) + (stderr.length > 500 ? '...' : ''),
+                        stdout: stdout.substring(0, 200) + (stdout.length > 200 ? '...' : ''),
+                        workingDirectory: spawnOptions.cwd
+                    });
                     this.logger.error(`Git command failed: git ${args.join(' ')}`, error);
                     reject(error);
                 }
             });
             process.on('error', (error) => {
                 clearTimeout(timeoutId);
+                const duration = Date.now() - startTime;
+                this.logger.error(`[GIT-CLIENT] [${commandId}] Git command process error`, {
+                    command: `git ${sanitizedArgs.join(' ')}`,
+                    error: error.message,
+                    duration,
+                    workingDirectory: spawnOptions.cwd,
+                    stack: error.stack
+                });
                 this.logger.error(`Git command error: git ${args.join(' ')}`, error);
                 reject(error);
             });
@@ -4014,116 +4105,52 @@ let GitClientService = GitClientService_1 = class GitClientService {
     }
 };
 exports.GitClientService = GitClientService;
-exports.GitClientService = GitClientService = GitClientService_1 = __decorate([
+exports.GitClientService = GitClientService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object])
+    __param(1, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _a : Object, typeof (_b = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _b : Object])
 ], GitClientService);
 
 
 /***/ }),
-/* 51 */
+/* 54 */
 /***/ ((module) => {
 
 module.exports = require("child_process");
 
 /***/ }),
-/* 52 */
+/* 55 */
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DiffOptions = exports.CloneOptions = exports.GitFileChange = exports.GitCommit = void 0;
+var git_commit_dto_1 = __webpack_require__(56);
+Object.defineProperty(exports, "GitCommit", ({ enumerable: true, get: function () { return git_commit_dto_1.GitCommit; } }));
+Object.defineProperty(exports, "GitFileChange", ({ enumerable: true, get: function () { return git_commit_dto_1.GitFileChange; } }));
+var git_options_dto_1 = __webpack_require__(57);
+Object.defineProperty(exports, "CloneOptions", ({ enumerable: true, get: function () { return git_options_dto_1.CloneOptions; } }));
+Object.defineProperty(exports, "DiffOptions", ({ enumerable: true, get: function () { return git_options_dto_1.DiffOptions; } }));
+
+
+/***/ }),
+/* 56 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.createGitConfiguration = exports.GitConfiguration = void 0;
-class GitConfiguration {
-    constructor(configService) {
-        this.configService = configService;
-    }
-    static getInstance(configService) {
-        if (!GitConfiguration.instance) {
-            GitConfiguration.instance = new GitConfiguration(configService);
-        }
-        return GitConfiguration.instance;
-    }
-    getDefaultGitConfig() {
-        return {
-            username: this.configService.get('GIT_DEFAULT_USERNAME'),
-            accessToken: this.configService.get('GIT_DEFAULT_ACCESS_TOKEN'),
-            sshKey: this.configService.get('GIT_DEFAULT_SSH_KEY'),
-        };
-    }
-    getTimeouts() {
-        return {
-            cloneTimeout: this.configService.get('GIT_CLONE_TIMEOUT', 600000),
-            pullTimeout: this.configService.get('GIT_PULL_TIMEOUT', 300000),
-            commandTimeout: this.configService.get('GIT_COMMAND_TIMEOUT', 60000),
-        };
-    }
-    getOptions() {
-        return {
-            defaultBranch: this.configService.get('GIT_DEFAULT_BRANCH', 'main'),
-            maxDepth: this.configService.get('GIT_MAX_DEPTH'),
-            enableSparseCheckout: this.configService.get('GIT_ENABLE_SPARSE_CHECKOUT', false),
-            ignoredPatterns: this.getIgnoredPatterns(),
-            ignoredDirectories: this.getIgnoredDirectories(),
-        };
-    }
-    mergeWithDefaults(codebaseGitConfig) {
-        const defaults = this.getDefaultGitConfig();
-        return {
-            username: codebaseGitConfig?.username || defaults.username,
-            accessToken: codebaseGitConfig?.accessToken || defaults.accessToken,
-            sshKey: codebaseGitConfig?.sshKey || defaults.sshKey,
-        };
-    }
-    getIgnoredPatterns() {
-        const defaultPatterns = [
-            'node_modules',
-            '.git',
-            'dist/',
-            'build/',
-            '.DS_Store',
-            '.env',
-            '*.log'
-        ];
-        const customPatterns = this.configService.get('GIT_IGNORED_PATTERNS', '');
-        const additionalPatterns = customPatterns ? customPatterns.split(',').map(p => p.trim()) : [];
-        return [...defaultPatterns, ...additionalPatterns];
-    }
-    getIgnoredDirectories() {
-        const defaultDirectories = [
-            '.git',
-            'node_modules',
-            'dist',
-            'build',
-            '.next',
-            'coverage',
-            '.cache'
-        ];
-        const customDirectories = this.configService.get('GIT_IGNORED_DIRECTORIES', '');
-        const additionalDirectories = customDirectories ? customDirectories.split(',').map(d => d.trim()) : [];
-        return [...defaultDirectories, ...additionalDirectories];
-    }
-    validateGitConfig(gitConfig) {
-        return !!(gitConfig.accessToken || gitConfig.sshKey || gitConfig.username);
-    }
-    shouldProcessFile(filePath) {
-        const patterns = this.getIgnoredPatterns();
-        const regexPatterns = patterns.map(pattern => new RegExp(pattern.replace(/\*/g, '.*').replace(/\?/g, '.')));
-        return !regexPatterns.some(pattern => pattern.test(filePath));
-    }
-    shouldIgnoreDirectory(dirName) {
-        const ignoredDirs = this.getIgnoredDirectories();
-        return ignoredDirs.includes(dirName);
-    }
-}
-exports.GitConfiguration = GitConfiguration;
-const createGitConfiguration = (configService) => {
-    return GitConfiguration.getInstance(configService);
-};
-exports.createGitConfiguration = createGitConfiguration;
 
 
 /***/ }),
-/* 53 */
+/* 57 */
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+
+
+/***/ }),
+/* 58 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -4134,49 +4161,1127 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.IndexingModule = void 0;
+const common_1 = __webpack_require__(2);
+const typeorm_1 = __webpack_require__(10);
+const entities_1 = __webpack_require__(11);
+const index_pipeline_entity_1 = __webpack_require__(18);
+const pipeline_orchestrator_service_1 = __webpack_require__(59);
+const pipeline_worker_service_1 = __webpack_require__(67);
+const pipeline_config_service_1 = __webpack_require__(66);
+const git_sync_task_1 = __webpack_require__(60);
+const code_parsing_task_1 = __webpack_require__(62);
+const graph_update_task_1 = __webpack_require__(64);
+const cleanup_task_1 = __webpack_require__(65);
+const indexing_controller_1 = __webpack_require__(69);
+const gitlab_module_1 = __webpack_require__(52);
+let IndexingModule = class IndexingModule {
+};
+exports.IndexingModule = IndexingModule;
+exports.IndexingModule = IndexingModule = __decorate([
+    (0, common_1.Module)({
+        imports: [
+            typeorm_1.TypeOrmModule.forFeature([
+                entities_1.TekProject,
+                entities_1.Codebase,
+                index_pipeline_entity_1.IndexPipeline,
+            ]),
+            (0, common_1.forwardRef)(() => gitlab_module_1.GitlabModule),
+        ],
+        controllers: [indexing_controller_1.IndexingController],
+        providers: [
+            pipeline_orchestrator_service_1.PipelineOrchestratorService,
+            pipeline_worker_service_1.PipelineWorkerService,
+            pipeline_config_service_1.PipelineConfigService,
+            git_sync_task_1.GitSyncTask,
+            code_parsing_task_1.CodeParsingTask,
+            graph_update_task_1.GraphUpdateTask,
+            cleanup_task_1.CleanupTask,
+        ],
+        exports: [
+            pipeline_orchestrator_service_1.PipelineOrchestratorService,
+            pipeline_worker_service_1.PipelineWorkerService,
+            pipeline_config_service_1.PipelineConfigService,
+        ],
+    })
+], IndexingModule);
+
+
+/***/ }),
+/* 59 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PipelineOrchestratorService = void 0;
+const common_1 = __webpack_require__(2);
+const typeorm_1 = __webpack_require__(10);
+const nest_winston_1 = __webpack_require__(5);
+const typeorm_2 = __webpack_require__(13);
+const config_1 = __webpack_require__(4);
+const entities_1 = __webpack_require__(11);
+const index_pipeline_entity_1 = __webpack_require__(18);
+const git_sync_task_1 = __webpack_require__(60);
+const code_parsing_task_1 = __webpack_require__(62);
+const graph_update_task_1 = __webpack_require__(64);
+const cleanup_task_1 = __webpack_require__(65);
+const pipeline_config_service_1 = __webpack_require__(66);
+const pipeline_worker_service_1 = __webpack_require__(67);
+const fs = __webpack_require__(21);
+const path = __webpack_require__(22);
+const os = __webpack_require__(68);
+let PipelineOrchestratorService = class PipelineOrchestratorService {
+    constructor(pipelineRepository, projectRepository, codebaseRepository, configService, pipelineConfigService, pipelineWorkerService, gitSyncTask, codeParsingTask, graphUpdateTask, cleanupTask, logger) {
+        this.pipelineRepository = pipelineRepository;
+        this.projectRepository = projectRepository;
+        this.codebaseRepository = codebaseRepository;
+        this.configService = configService;
+        this.pipelineConfigService = pipelineConfigService;
+        this.pipelineWorkerService = pipelineWorkerService;
+        this.gitSyncTask = gitSyncTask;
+        this.codeParsingTask = codeParsingTask;
+        this.graphUpdateTask = graphUpdateTask;
+        this.cleanupTask = cleanupTask;
+        this.logger = logger;
+        this.runningPipelines = new Map();
+    }
+    async createPipeline(request) {
+        this.logger.log(`[PIPELINE-ORCHESTRATOR] Creating pipeline: ${request.type} for project ${request.projectId}`);
+        this.logger.debug(`[PIPELINE-ORCHESTRATOR] Full request: ${JSON.stringify(request)}`);
+        this.logger.log(`[PIPELINE-ORCHESTRATOR] Validating project: ${request.projectId}`);
+        const project = await this.projectRepository.findOne({
+            where: { id: request.projectId },
+        });
+        if (!project) {
+            this.logger.error(`[PIPELINE-ORCHESTRATOR] Project not found: ${request.projectId}`);
+            throw new Error(`Project ${request.projectId} not found`);
+        }
+        this.logger.log(`[PIPELINE-ORCHESTRATOR] Project found: ${project.name}`);
+        this.logger.debug(`[PIPELINE-ORCHESTRATOR] Project details: { id: "${project.id}", name: "${project.name}" }`);
+        let codebase;
+        if (request.codebaseId) {
+            this.logger.log(`[PIPELINE-ORCHESTRATOR] Validating codebase: ${request.codebaseId}`);
+            codebase = await this.codebaseRepository.findOne({
+                where: { id: request.codebaseId },
+                relations: ['project'],
+            });
+            if (!codebase) {
+                this.logger.error(`[PIPELINE-ORCHESTRATOR] Codebase not found: ${request.codebaseId}`);
+                throw new Error(`Codebase ${request.codebaseId} not found`);
+            }
+            if (codebase.project.id !== request.projectId) {
+                this.logger.error(`[PIPELINE-ORCHESTRATOR] Codebase project mismatch: codebase.projectId=${codebase.project.id}, request.projectId=${request.projectId}`);
+                throw new Error(`Codebase ${request.codebaseId} does not belong to project ${request.projectId}`);
+            }
+            this.logger.log(`[PIPELINE-ORCHESTRATOR] Codebase found: ${codebase.name}`);
+            this.logger.debug(`[PIPELINE-ORCHESTRATOR] Codebase details: { id: "${codebase.id}", name: "${codebase.name}", gitlabUrl: "${codebase.gitlabUrl}" }`);
+        }
+        this.logger.log(`[PIPELINE-ORCHESTRATOR] Getting configuration for pipeline type: ${request.type}`);
+        const configuration = this.pipelineConfigService.getDefaultConfiguration(request.type, request.customConfiguration);
+        this.logger.debug(`[PIPELINE-ORCHESTRATOR] Pipeline configuration: ${JSON.stringify(configuration)}`);
+        this.logger.log(`[PIPELINE-ORCHESTRATOR] Creating pipeline entity`);
+        const pipeline = new index_pipeline_entity_1.IndexPipeline();
+        pipeline.type = request.type;
+        pipeline.status = index_pipeline_entity_1.IndexPipelineStatus.PENDING;
+        pipeline.priority = request.priority || 0;
+        pipeline.description = request.description;
+        pipeline.configuration = configuration;
+        pipeline.metadata = this.createInitialMetadata();
+        pipeline.project = project;
+        pipeline.codebase = codebase;
+        this.logger.log(`[PIPELINE-ORCHESTRATOR] Saving pipeline to database`);
+        const savedPipeline = await this.pipelineRepository.save(pipeline);
+        this.logger.log(`[PIPELINE-ORCHESTRATOR] Pipeline saved with ID: ${savedPipeline.id}`);
+        this.logger.log(`[PIPELINE-ORCHESTRATOR] Submitting pipeline to worker pool: ${savedPipeline.id}`);
+        const executionPromise = this.pipelineWorkerService.submitPipeline(savedPipeline.id, savedPipeline.type, () => this.executePipeline(savedPipeline.id));
+        this.runningPipelines.set(savedPipeline.id, executionPromise);
+        this.logger.log(`[PIPELINE-ORCHESTRATOR] Pipeline submitted to worker pool. Running pipelines count: ${this.runningPipelines.size}`);
+        executionPromise
+            .then(result => {
+            this.logger.log(`[PIPELINE-ORCHESTRATOR] Pipeline ${savedPipeline.id} completed with status: ${result.status}`);
+        })
+            .catch(error => {
+            this.logger.error(`[PIPELINE-ORCHESTRATOR] Pipeline ${savedPipeline.id} execution failed:`, error);
+        })
+            .finally(() => {
+            this.runningPipelines.delete(savedPipeline.id);
+            this.logger.log(`[PIPELINE-ORCHESTRATOR] Pipeline ${savedPipeline.id} removed from running pipelines. Count: ${this.runningPipelines.size}`);
+        });
+        this.logger.log(`[PIPELINE-ORCHESTRATOR] Pipeline creation completed successfully: ${savedPipeline.id}`);
+        return savedPipeline;
+    }
+    async executePipeline(pipelineId) {
+        const startTime = Date.now();
+        let tasksExecuted = 0;
+        let tasksSucceeded = 0;
+        let tasksFailed = 0;
+        let finalError;
+        this.logger.log(`[${pipelineId}] [PIPELINE-EXECUTOR] Starting pipeline execution`, {
+            pipelineId,
+            startTime: new Date(startTime).toISOString()
+        });
+        try {
+            this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Loading pipeline from database`);
+            const pipeline = await this.pipelineRepository.findOne({
+                where: { id: pipelineId },
+                relations: ['project', 'codebase'],
+            });
+            if (!pipeline) {
+                this.logger.error(`[${pipelineId}] [PIPELINE-EXECUTOR] Pipeline not found in database`);
+                throw new Error(`Pipeline ${pipelineId} not found`);
+            }
+            this.logger.log(`[${pipelineId}] [PIPELINE-EXECUTOR] Pipeline loaded successfully`, {
+                type: pipeline.type,
+                status: pipeline.status,
+                projectId: pipeline.project.id,
+                projectName: pipeline.project.name,
+                codebaseId: pipeline.codebase?.id,
+                codebaseName: pipeline.codebase?.name,
+                priority: pipeline.priority,
+                description: pipeline.description
+            });
+            this.logger.log(`Starting pipeline execution: ${pipelineId}`);
+            this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Updating pipeline status to RUNNING`);
+            await this.updatePipelineStatus(pipeline, index_pipeline_entity_1.IndexPipelineStatus.RUNNING);
+            this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Creating pipeline context`);
+            const context = await this.createPipelineContext(pipeline);
+            this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Pipeline context created successfully`, {
+                workingDirectory: context.workingDirectory,
+                tempDirectory: context.tempDirectory,
+                codebaseStoragePath: context.codebaseStoragePath
+            });
+            this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Getting task instances`);
+            const tasks = this.getTaskInstances();
+            this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Task instances retrieved`, {
+                taskCount: tasks.length,
+                taskNames: tasks.map(t => t.name)
+            });
+            this.logger.log(`[${pipelineId}] [PIPELINE-EXECUTOR] Starting task execution sequence`, {
+                totalTasks: tasks.length
+            });
+            for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
+                const task = tasks[taskIndex];
+                const taskNumber = taskIndex + 1;
+                this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Evaluating task ${taskNumber}/${tasks.length}: ${task.name}`);
+                if (!task.shouldExecute(context)) {
+                    this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Skipping task: ${task.name} (conditions not met)`);
+                    context.logger.info(`Skipping task: ${task.name} (conditions not met)`);
+                    continue;
+                }
+                tasksExecuted++;
+                this.logger.log(`[${pipelineId}] [PIPELINE-EXECUTOR] Executing task ${taskNumber}/${tasks.length}: ${task.name}`, {
+                    taskName: task.name,
+                    taskDescription: task.description,
+                    tasksExecuted,
+                    totalTasks: tasks.length
+                });
+                context.logger.info(`Executing task: ${task.name}`);
+                try {
+                    pipeline.currentStep = task.name;
+                    pipeline.progress = Math.round((tasksExecuted / tasks.length) * 100);
+                    this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Updating pipeline progress`, {
+                        currentStep: pipeline.currentStep,
+                        progress: pipeline.progress,
+                        tasksExecuted,
+                        totalTasks: tasks.length
+                    });
+                    await this.pipelineRepository.save(pipeline);
+                    this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Starting task execution: ${task.name}`);
+                    const taskStartTime = Date.now();
+                    const result = await task.execute(context);
+                    const taskDuration = Date.now() - taskStartTime;
+                    if (result.success) {
+                        tasksSucceeded++;
+                        this.logger.log(`[${pipelineId}] [PIPELINE-EXECUTOR] Task completed successfully: ${task.name}`, {
+                            taskName: task.name,
+                            duration: result.duration || taskDuration,
+                            metrics: result.metrics,
+                            tasksSucceeded,
+                            tasksExecuted
+                        });
+                        context.logger.info(`Task completed successfully: ${task.name}`, {
+                            duration: result.duration,
+                            metrics: result.metrics,
+                        });
+                    }
+                    else {
+                        tasksFailed++;
+                        finalError = result.error;
+                        this.logger.error(`[${pipelineId}] [PIPELINE-EXECUTOR] Task failed: ${task.name}`, {
+                            taskName: task.name,
+                            error: result.error,
+                            duration: result.duration || taskDuration,
+                            tasksFailed,
+                            tasksExecuted
+                        });
+                        context.logger.error(`Task failed: ${task.name}`, { error: result.error });
+                        this.logger.warn(`[${pipelineId}] [PIPELINE-EXECUTOR] Stopping pipeline execution due to task failure`);
+                        break;
+                    }
+                }
+                catch (error) {
+                    tasksFailed++;
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    finalError = errorMessage;
+                    this.logger.error(`[${pipelineId}] [PIPELINE-EXECUTOR] Task execution error: ${task.name}`, {
+                        taskName: task.name,
+                        error: errorMessage,
+                        stack: error instanceof Error ? error.stack : undefined,
+                        tasksFailed,
+                        tasksExecuted
+                    });
+                    context.logger.error(`Task execution error: ${task.name}`, { error: errorMessage });
+                    this.logger.warn(`[${pipelineId}] [PIPELINE-EXECUTOR] Stopping pipeline execution due to task error`);
+                    break;
+                }
+                finally {
+                    this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Running task cleanup: ${task.name}`);
+                    try {
+                        await task.cleanup(context);
+                        this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Task cleanup completed: ${task.name}`);
+                    }
+                    catch (cleanupError) {
+                        const cleanupErrorMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+                        this.logger.warn(`[${pipelineId}] [PIPELINE-EXECUTOR] Task cleanup failed: ${task.name}`, {
+                            taskName: task.name,
+                            error: cleanupErrorMessage,
+                            stack: cleanupError instanceof Error ? cleanupError.stack : undefined
+                        });
+                        context.logger.warn(`Task cleanup failed: ${task.name}`, { error: cleanupErrorMessage });
+                    }
+                }
+            }
+            const finalStatus = tasksFailed > 0 ? index_pipeline_entity_1.IndexPipelineStatus.FAILED : index_pipeline_entity_1.IndexPipelineStatus.COMPLETED;
+            pipeline.progress = finalStatus === index_pipeline_entity_1.IndexPipelineStatus.COMPLETED ? 100 : pipeline.progress;
+            this.logger.log(`[${pipelineId}] [PIPELINE-EXECUTOR] Updating final pipeline status`, {
+                finalStatus,
+                progress: pipeline.progress,
+                tasksExecuted,
+                tasksSucceeded,
+                tasksFailed,
+                finalError
+            });
+            await this.updatePipelineStatus(pipeline, finalStatus, finalError);
+            this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Starting final context cleanup`);
+            await this.cleanupPipelineContext(context);
+            this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Final context cleanup completed`);
+            const duration = Date.now() - startTime;
+            this.logger.log(`[${pipelineId}] [PIPELINE-EXECUTOR] Pipeline execution completed successfully`, {
+                pipelineId,
+                status: finalStatus,
+                duration,
+                durationMin: Math.round(duration / 60000),
+                tasksExecuted,
+                tasksSucceeded,
+                tasksFailed,
+                finalError,
+                successRate: tasksExecuted > 0 ? Math.round((tasksSucceeded / tasksExecuted) * 100) : 0
+            });
+            this.logger.log(`Pipeline ${pipelineId} execution completed`, {
+                status: finalStatus,
+                duration,
+                tasksExecuted,
+                tasksSucceeded,
+                tasksFailed,
+            });
+            return {
+                pipelineId,
+                status: finalStatus,
+                duration,
+                tasksExecuted,
+                tasksSucceeded,
+                tasksFailed,
+                finalError,
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const duration = Date.now() - startTime;
+            this.logger.error(`[${pipelineId}] [PIPELINE-EXECUTOR] Pipeline execution failed with unhandled error`, {
+                pipelineId,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined,
+                duration,
+                durationMin: Math.round(duration / 60000),
+                tasksExecuted,
+                tasksSucceeded,
+                tasksFailed
+            });
+            this.logger.error(`Pipeline ${pipelineId} execution failed:`, error);
+            try {
+                this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Attempting to update pipeline status to FAILED`);
+                const pipeline = await this.pipelineRepository.findOne({ where: { id: pipelineId } });
+                if (pipeline) {
+                    await this.updatePipelineStatus(pipeline, index_pipeline_entity_1.IndexPipelineStatus.FAILED, errorMessage);
+                    this.logger.debug(`[${pipelineId}] [PIPELINE-EXECUTOR] Pipeline status updated to FAILED`);
+                }
+                else {
+                    this.logger.warn(`[${pipelineId}] [PIPELINE-EXECUTOR] Pipeline not found when trying to update status to FAILED`);
+                }
+            }
+            catch (updateError) {
+                const updateErrorMessage = updateError instanceof Error ? updateError.message : String(updateError);
+                this.logger.error(`[${pipelineId}] [PIPELINE-EXECUTOR] Failed to update pipeline status to FAILED`, {
+                    error: updateErrorMessage,
+                    stack: updateError instanceof Error ? updateError.stack : undefined
+                });
+                this.logger.error(`Failed to update pipeline status:`, updateError);
+            }
+            return {
+                pipelineId,
+                status: index_pipeline_entity_1.IndexPipelineStatus.FAILED,
+                duration,
+                tasksExecuted,
+                tasksSucceeded,
+                tasksFailed: tasksExecuted - tasksSucceeded,
+                finalError: errorMessage,
+            };
+        }
+    }
+    async getPipelineStatus(pipelineId) {
+        this.logger.debug(`[${pipelineId}] [PIPELINE-STATUS] Retrieving pipeline status from database`);
+        const pipeline = await this.pipelineRepository.findOne({
+            where: { id: pipelineId },
+            relations: ['project', 'codebase'],
+        });
+        if (!pipeline) {
+            this.logger.error(`[${pipelineId}] [PIPELINE-STATUS] Pipeline not found in database`);
+            throw new Error(`Pipeline ${pipelineId} not found`);
+        }
+        this.logger.debug(`[${pipelineId}] [PIPELINE-STATUS] Pipeline status retrieved successfully`, {
+            pipelineId: pipeline.id,
+            type: pipeline.type,
+            status: pipeline.status,
+            progress: pipeline.progress,
+            currentStep: pipeline.currentStep,
+            projectId: pipeline.project.id,
+            codebaseId: pipeline.codebase?.id,
+            createdAt: pipeline.createdAt,
+            startedAt: pipeline.startedAt,
+            completedAt: pipeline.completedAt,
+            hasError: !!pipeline.error
+        });
+        return pipeline;
+    }
+    async cancelPipeline(pipelineId) {
+        this.logger.log(`[${pipelineId}] [PIPELINE-CANCEL] Attempting to cancel pipeline`);
+        const pipeline = await this.pipelineRepository.findOne({
+            where: { id: pipelineId },
+        });
+        if (!pipeline) {
+            this.logger.error(`[${pipelineId}] [PIPELINE-CANCEL] Pipeline not found in database`);
+            throw new Error(`Pipeline ${pipelineId} not found`);
+        }
+        this.logger.debug(`[${pipelineId}] [PIPELINE-CANCEL] Pipeline found, checking cancellation eligibility`, {
+            currentStatus: pipeline.status,
+            progress: pipeline.progress,
+            currentStep: pipeline.currentStep
+        });
+        if (pipeline.status === index_pipeline_entity_1.IndexPipelineStatus.COMPLETED || pipeline.status === index_pipeline_entity_1.IndexPipelineStatus.FAILED) {
+            this.logger.warn(`[${pipelineId}] [PIPELINE-CANCEL] Cannot cancel pipeline in final status`, {
+                status: pipeline.status
+            });
+            throw new Error(`Cannot cancel pipeline in status: ${pipeline.status}`);
+        }
+        this.logger.debug(`[${pipelineId}] [PIPELINE-CANCEL] Attempting to cancel from worker pool queue`);
+        const cancelledFromQueue = await this.pipelineWorkerService.cancelQueuedPipeline(pipelineId);
+        this.logger.debug(`[${pipelineId}] [PIPELINE-CANCEL] Worker pool cancellation result`, {
+            cancelledFromQueue
+        });
+        this.logger.debug(`[${pipelineId}] [PIPELINE-CANCEL] Updating pipeline status to CANCELLED`);
+        await this.updatePipelineStatus(pipeline, index_pipeline_entity_1.IndexPipelineStatus.CANCELLED);
+        this.runningPipelines.delete(pipelineId);
+        this.logger.log(`[${pipelineId}] [PIPELINE-CANCEL] Pipeline cancelled successfully`, {
+            cancelledFromQueue,
+            previousStatus: pipeline.status,
+            runningPipelinesCount: this.runningPipelines.size
+        });
+        this.logger.log(`Pipeline ${pipelineId} cancelled ${cancelledFromQueue ? '(removed from queue)' : '(marked as cancelled)'}`);
+    }
+    async createPipelineContext(pipeline) {
+        const pipelineId = pipeline.id;
+        this.logger.debug(`[${pipelineId}] [PIPELINE-CONTEXT] Creating pipeline context`);
+        const workingDirectory = path.join(os.tmpdir(), 'tekaicontextengine', 'pipelines', pipeline.id);
+        const tempDirectory = path.join(workingDirectory, 'temp');
+        this.logger.debug(`[${pipelineId}] [PIPELINE-CONTEXT] Creating working directories`, {
+            workingDirectory,
+            tempDirectory
+        });
+        await fs.mkdir(workingDirectory, { recursive: true });
+        await fs.mkdir(tempDirectory, { recursive: true });
+        this.logger.debug(`[${pipelineId}] [PIPELINE-CONTEXT] Working directories created successfully`);
+        const storageRoot = this.configService.get('STORAGE_ROOT', './storage');
+        const codebaseStoragePath = pipeline.codebase?.storagePath ||
+            path.join(storageRoot, 'codebases', pipeline.codebase?.id || 'unknown');
+        this.logger.debug(`[${pipelineId}] [PIPELINE-CONTEXT] Determining codebase storage path`, {
+            storageRoot,
+            codebaseId: pipeline.codebase?.id,
+            codebaseStoragePath,
+            hasCustomStoragePath: !!pipeline.codebase?.storagePath
+        });
+        await fs.mkdir(codebaseStoragePath, { recursive: true });
+        this.logger.debug(`[${pipelineId}] [PIPELINE-CONTEXT] Codebase storage directory ensured`);
+        const logger = {
+            info: (message, meta) => this.logger.log(`[${pipeline.id}] ${message}`, meta),
+            warn: (message, meta) => this.logger.warn(`[${pipeline.id}] ${message}`, meta),
+            error: (message, meta) => this.logger.error(`[${pipeline.id}] ${message}`, meta),
+            debug: (message, meta) => this.logger.debug(`[${pipeline.id}] ${message}`, meta),
+        };
+        const context = {
+            pipeline,
+            project: pipeline.project,
+            codebase: pipeline.codebase,
+            config: pipeline.configuration,
+            workingDirectory,
+            tempDirectory,
+            codebaseStoragePath,
+            data: {},
+            metrics: {
+                startTime: new Date(),
+                stepTimes: {},
+                totalFilesProcessed: 0,
+                totalSymbolsExtracted: 0,
+                errors: [],
+                warnings: [],
+            },
+            logger,
+        };
+        this.logger.debug(`[${pipelineId}] [PIPELINE-CONTEXT] Pipeline context created successfully`, {
+            projectId: context.project.id,
+            projectName: context.project.name,
+            codebaseId: context.codebase?.id,
+            codebaseName: context.codebase?.name,
+            workingDirectory: context.workingDirectory,
+            tempDirectory: context.tempDirectory,
+            codebaseStoragePath: context.codebaseStoragePath,
+            configKeys: Object.keys(context.config || {})
+        });
+        return context;
+    }
+    async cleanupPipelineContext(context) {
+        const pipelineId = context.pipeline.id;
+        this.logger.debug(`[${pipelineId}] [PIPELINE-CONTEXT] Starting pipeline context cleanup`);
+        this.logger.debug(`[${pipelineId}] [PIPELINE-CONTEXT] Pipeline context cleanup completed`);
+        context.logger.debug('Pipeline context cleanup completed');
+    }
+    getTaskInstances() {
+        return [
+            this.gitSyncTask,
+            this.codeParsingTask,
+            this.graphUpdateTask,
+            this.cleanupTask,
+        ];
+    }
+    async updatePipelineStatus(pipeline, status, error) {
+        pipeline.status = status;
+        pipeline.updatedAt = new Date();
+        if (status === index_pipeline_entity_1.IndexPipelineStatus.RUNNING) {
+            pipeline.startedAt = new Date();
+        }
+        else if (status === index_pipeline_entity_1.IndexPipelineStatus.COMPLETED || status === index_pipeline_entity_1.IndexPipelineStatus.FAILED) {
+            pipeline.completedAt = new Date();
+        }
+        if (error) {
+            pipeline.error = error;
+        }
+        await this.pipelineRepository.save(pipeline);
+    }
+    createInitialMetadata() {
+        return {
+            filesProcessed: 0,
+            symbolsExtracted: 0,
+            duration: 0,
+            steps: {},
+            metrics: {
+                linesOfCode: 0,
+                languages: {},
+                fileTypes: {},
+                errors: [],
+                warnings: [],
+            },
+        };
+    }
+    getActivePipelines() {
+        return Array.from(this.runningPipelines.keys());
+    }
+    isPipelineActive(pipelineId) {
+        return this.runningPipelines.has(pipelineId);
+    }
+    async getSystemStatus() {
+        this.logger.debug('[PIPELINE-ORCHESTRATOR] Getting comprehensive system status');
+        const statusStartTime = Date.now();
+        const activePipelines = Array.from(this.runningPipelines.keys());
+        const isHealthy = activePipelines.length < 10;
+        const systemStatus = {
+            runningPipelines: activePipelines.length,
+            activePipelineIds: activePipelines,
+            systemHealth: {
+                queueBacklog: 0,
+                utilization: activePipelines.length / 10,
+                isHealthy,
+                status: isHealthy ? 'healthy' : 'degraded',
+                lastChecked: new Date().toISOString()
+            },
+            performance: {
+                totalPipelinesRun: this.runningPipelines.size,
+                systemUptime: process.uptime(),
+                memoryUsage: process.memoryUsage(),
+                cpuUsage: process.cpuUsage()
+            }
+        };
+        const statusDuration = Date.now() - statusStartTime;
+        this.logger.debug('[PIPELINE-ORCHESTRATOR] System status collected successfully', {
+            activePipelines: activePipelines.length,
+            utilization: systemStatus.systemHealth.utilization,
+            isHealthy,
+            queueBacklog: 0,
+            statusCollectionDuration: statusDuration,
+            memoryUsageMB: Math.round(systemStatus.performance.memoryUsage.heapUsed / (1024 * 1024))
+        });
+        return systemStatus;
+    }
+    async getPipelinesForCodebase(codebaseId) {
+        const activePipelines = await this.pipelineRepository.find({
+            where: {
+                codebase: { id: codebaseId },
+                status: index_pipeline_entity_1.IndexPipelineStatus.RUNNING,
+            },
+            order: { createdAt: 'DESC' },
+            take: 10,
+        });
+        const recentPipelines = await this.pipelineRepository.find({
+            where: [
+                {
+                    codebase: { id: codebaseId },
+                    status: index_pipeline_entity_1.IndexPipelineStatus.COMPLETED,
+                },
+                {
+                    codebase: { id: codebaseId },
+                    status: index_pipeline_entity_1.IndexPipelineStatus.FAILED,
+                },
+                {
+                    codebase: { id: codebaseId },
+                    status: index_pipeline_entity_1.IndexPipelineStatus.CANCELLED,
+                },
+            ],
+            order: { completedAt: 'DESC' },
+            take: 20,
+        });
+        return {
+            activePipelines,
+            recentPipelines,
+            summary: {
+                activeCount: activePipelines.length,
+                recentCount: recentPipelines.length,
+                hasRunning: activePipelines.length > 0,
+            },
+        };
+    }
+    async getPipelinesForProject(projectId, limit = 50) {
+        return await this.pipelineRepository.find({
+            where: { project: { id: projectId } },
+            relations: ['project', 'codebase'],
+            order: { createdAt: 'DESC' },
+            take: limit,
+        });
+    }
+};
+exports.PipelineOrchestratorService = PipelineOrchestratorService;
+exports.PipelineOrchestratorService = PipelineOrchestratorService = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, typeorm_1.InjectRepository)(index_pipeline_entity_1.IndexPipeline)),
+    __param(1, (0, typeorm_1.InjectRepository)(entities_1.TekProject)),
+    __param(2, (0, typeorm_1.InjectRepository)(entities_1.Codebase)),
+    __param(10, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _a : Object, typeof (_b = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _b : Object, typeof (_c = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _c : Object, typeof (_d = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _d : Object, typeof (_e = typeof pipeline_config_service_1.PipelineConfigService !== "undefined" && pipeline_config_service_1.PipelineConfigService) === "function" ? _e : Object, typeof (_f = typeof pipeline_worker_service_1.PipelineWorkerService !== "undefined" && pipeline_worker_service_1.PipelineWorkerService) === "function" ? _f : Object, typeof (_g = typeof git_sync_task_1.GitSyncTask !== "undefined" && git_sync_task_1.GitSyncTask) === "function" ? _g : Object, typeof (_h = typeof code_parsing_task_1.CodeParsingTask !== "undefined" && code_parsing_task_1.CodeParsingTask) === "function" ? _h : Object, typeof (_j = typeof graph_update_task_1.GraphUpdateTask !== "undefined" && graph_update_task_1.GraphUpdateTask) === "function" ? _j : Object, typeof (_k = typeof cleanup_task_1.CleanupTask !== "undefined" && cleanup_task_1.CleanupTask) === "function" ? _k : Object, typeof (_l = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _l : Object])
+], PipelineOrchestratorService);
+
+
+/***/ }),
+/* 60 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var _a, _b;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.GitSyncTask = void 0;
+const common_1 = __webpack_require__(2);
+const nest_winston_1 = __webpack_require__(5);
+const base_task_interface_1 = __webpack_require__(61);
+const index_pipeline_entity_1 = __webpack_require__(18);
+const git_client_service_1 = __webpack_require__(53);
+let GitSyncTask = class GitSyncTask extends base_task_interface_1.BaseTask {
+    constructor(gitClient, logger) {
+        super();
+        this.gitClient = gitClient;
+        this.logger = logger;
+        this.name = 'git_sync';
+        this.description = 'Synchronize Git repository and prepare workspace';
+        this.requiredSteps = [];
+        this.optionalSteps = [];
+    }
+    shouldExecute(context) {
+        const { pipeline, codebase } = context;
+        const pipelineId = pipeline.id;
+        const shouldRun = !!codebase?.gitlabUrl;
+        this.logger.debug(`[${pipelineId}] [GIT-SYNC] Checking if task should execute`, {
+            codebaseId: codebase?.id,
+            codebaseName: codebase?.name,
+            hasGitlabUrl: !!codebase?.gitlabUrl,
+            shouldExecute: shouldRun
+        });
+        return shouldRun;
+    }
+    async validate(context) {
+        const { pipeline, codebase, workingDirectory } = context;
+        const pipelineId = pipeline.id;
+        this.logger.debug(`[${pipelineId}] [GIT-SYNC] Validating task prerequisites`);
+        if (!codebase) {
+            this.logger.error(`[${pipelineId}] [GIT-SYNC] Validation failed: No codebase provided`);
+            throw new Error('Codebase is required for Git sync');
+        }
+        if (!codebase.gitlabUrl) {
+            this.logger.error(`[${pipelineId}] [GIT-SYNC] Validation failed: No GitLab URL`, {
+                codebaseId: codebase.id,
+                codebaseName: codebase.name
+            });
+            throw new Error('GitLab URL is required for Git sync');
+        }
+        if (!workingDirectory) {
+            this.logger.error(`[${pipelineId}] [GIT-SYNC] Validation failed: No working directory`);
+            throw new Error('Working directory is required for Git sync');
+        }
+        this.logger.debug(`[${pipelineId}] [GIT-SYNC] Task validation completed successfully`, {
+            codebaseId: codebase.id,
+            codebaseName: codebase.name,
+            gitlabUrl: codebase.gitlabUrl,
+            branch: codebase.branch,
+            workingDirectory
+        });
+    }
+    async executeTask(context) {
+        const { pipeline, codebase, codebaseStoragePath, config } = context;
+        const pipelineId = pipeline.id;
+        context.logger.info(`[${pipelineId}] [GIT-SYNC] Starting Git sync task`, {
+            pipelineType: pipeline.type,
+            codebaseId: codebase.id,
+            codebaseName: codebase.name,
+            gitlabUrl: codebase.gitlabUrl,
+            branch: codebase.branch,
+            storagePath: codebaseStoragePath
+        });
+        const isValidRepo = await this.gitClient.isValidRepository(codebaseStoragePath);
+        const isIncremental = pipeline.type === index_pipeline_entity_1.IndexPipelineType.INCREMENTAL && isValidRepo;
+        context.logger.info(`[${pipelineId}] [GIT-SYNC] Sync mode determined`, {
+            mode: isIncremental ? 'incremental' : 'full',
+            existingRepoValid: isValidRepo,
+            pipelineType: pipeline.type
+        });
+        try {
+            let commitHash;
+            let filesChanged = [];
+            let filesAdded = [];
+            let filesDeleted = [];
+            if (isIncremental) {
+                context.logger.info(`[${pipelineId}] [GIT-SYNC] Starting incremental Git sync`, {
+                    path: codebaseStoragePath,
+                    branch: codebase.branch
+                });
+                context.logger.debug(`[${pipelineId}] [GIT-SYNC] Getting current commit hash`);
+                const beforeCommit = await this.gitClient.getCurrentCommit(codebaseStoragePath);
+                context.logger.debug(`[${pipelineId}] [GIT-SYNC] Current commit before pull`, {
+                    beforeCommit: beforeCommit.substring(0, 8)
+                });
+                context.logger.info(`[${pipelineId}] [GIT-SYNC] Pulling latest changes from remote`);
+                commitHash = await this.gitClient.pullRepository(codebaseStoragePath, {
+                    branch: codebase.branch,
+                    gitConfig: codebase.metadata?.gitConfig
+                });
+                context.logger.info(`[${pipelineId}] [GIT-SYNC] Pull completed`, {
+                    newCommit: commitHash.substring(0, 8),
+                    hasChanges: beforeCommit !== commitHash
+                });
+                if (beforeCommit === commitHash) {
+                    context.logger.info(`[${pipelineId}] [GIT-SYNC] No new commits found, repository is up to date`);
+                }
+                else {
+                    context.logger.debug(`[${pipelineId}] [GIT-SYNC] Analyzing changes between commits`, {
+                        fromCommit: beforeCommit.substring(0, 8),
+                        toCommit: commitHash.substring(0, 8)
+                    });
+                    const changes = await this.gitClient.getDiff(codebaseStoragePath, {
+                        fromCommit: beforeCommit,
+                        nameOnly: true
+                    });
+                    context.logger.debug(`[${pipelineId}] [GIT-SYNC] Found ${changes.length} file changes`);
+                    for (const change of changes) {
+                        switch (change.operation) {
+                            case 'A':
+                                filesAdded.push(change.path);
+                                break;
+                            case 'D':
+                                filesDeleted.push(change.path);
+                                break;
+                            case 'M':
+                                filesChanged.push(change.path);
+                                break;
+                            case 'R':
+                                if (change.oldPath)
+                                    filesDeleted.push(change.oldPath);
+                                filesAdded.push(change.path);
+                                break;
+                        }
+                    }
+                    context.logger.info(`[${pipelineId}] [GIT-SYNC] Changes categorized`, {
+                        added: filesAdded.length,
+                        modified: filesChanged.length,
+                        deleted: filesDeleted.length,
+                        renamed: changes.filter(c => c.operation === 'R').length
+                    });
+                }
+            }
+            else {
+                context.logger.info(`[${pipelineId}] [GIT-SYNC] Starting full Git clone`, {
+                    url: codebase.gitlabUrl,
+                    branch: codebase.branch,
+                    destination: codebaseStoragePath,
+                    shallow: config.gitSync.shallow
+                });
+                if (isValidRepo) {
+                    context.logger.debug(`[${pipelineId}] [GIT-SYNC] Removing existing repository`);
+                    await this.gitClient.deleteRepository(codebaseStoragePath);
+                    context.logger.debug(`[${pipelineId}] [GIT-SYNC] Existing repository removed`);
+                }
+                context.logger.info(`[${pipelineId}] [GIT-SYNC] Cloning repository from remote`);
+                const cloneStartTime = Date.now();
+                commitHash = await this.gitClient.cloneRepository(codebase.gitlabUrl, codebaseStoragePath, {
+                    branch: codebase.branch,
+                    depth: config.gitSync.shallow ? 1 : undefined,
+                    gitConfig: codebase.metadata?.gitConfig
+                });
+                const cloneDuration = Date.now() - cloneStartTime;
+                context.logger.info(`[${pipelineId}] [GIT-SYNC] Repository cloned successfully`, {
+                    commitHash: commitHash.substring(0, 8),
+                    cloneDurationMs: cloneDuration
+                });
+                context.logger.debug(`[${pipelineId}] [GIT-SYNC] Listing all files in repository`);
+                filesAdded = await this.gitClient.listFiles(codebaseStoragePath);
+                context.logger.info(`[${pipelineId}] [GIT-SYNC] Repository file inventory completed`, {
+                    totalFiles: filesAdded.length
+                });
+            }
+            const totalFiles = filesAdded.length + filesChanged.length;
+            context.logger.info(`[${pipelineId}] [GIT-SYNC] Git sync completed successfully`, {
+                mode: isIncremental ? 'incremental' : 'full',
+                commitHash: commitHash.substring(0, 8),
+                filesAdded: filesAdded.length,
+                filesChanged: filesChanged.length,
+                filesDeleted: filesDeleted.length,
+                totalFiles,
+            });
+            this.logger.log(`[${pipelineId}] [GIT-SYNC] Task completed successfully`, {
+                mode: isIncremental ? 'incremental' : 'full',
+                commitHash: commitHash.substring(0, 8),
+                totalFilesProcessed: totalFiles,
+                codebaseId: codebase.id,
+                codebaseName: codebase.name
+            });
+            context.data.gitSync = {
+                clonePath: codebaseStoragePath,
+                commitHash,
+                filesChanged,
+                filesAdded,
+                filesDeleted,
+            };
+            return {
+                success: true,
+                duration: 0,
+                data: context.data.gitSync,
+                metrics: {
+                    filesProcessed: totalFiles,
+                },
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[${pipelineId}] [GIT-SYNC] Task failed with error`, {
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined,
+                codebaseId: codebase.id,
+                codebaseName: codebase.name,
+                gitlabUrl: codebase.gitlabUrl,
+                branch: codebase.branch
+            });
+            context.logger.error(`[${pipelineId}] [GIT-SYNC] Git sync failed`, {
+                error: errorMessage
+            });
+            return {
+                success: false,
+                duration: 0,
+                error: `Git sync failed: ${errorMessage}`,
+            };
+        }
+    }
+    async cleanup(context) {
+        const { pipeline } = context;
+        const pipelineId = pipeline.id;
+        this.logger.debug(`[${pipelineId}] [GIT-SYNC] Starting task cleanup`);
+        this.logger.debug(`[${pipelineId}] [GIT-SYNC] Task cleanup completed`);
+        context.logger.debug(`[${pipelineId}] [GIT-SYNC] Git sync cleanup completed`);
+    }
+    getEstimatedDuration(context) {
+        const { pipeline, codebase } = context;
+        const pipelineId = pipeline.id;
+        const baseTime = 30000;
+        const isIncremental = pipeline.type === index_pipeline_entity_1.IndexPipelineType.INCREMENTAL;
+        const estimatedTime = isIncremental ? baseTime * 0.3 : baseTime;
+        this.logger.debug(`[${pipelineId}] [GIT-SYNC] Estimated task duration calculated`, {
+            baseTime,
+            isIncremental,
+            estimatedTime,
+            codebaseId: codebase?.id,
+            codebaseName: codebase?.name
+        });
+        return estimatedTime;
+    }
+};
+exports.GitSyncTask = GitSyncTask;
+exports.GitSyncTask = GitSyncTask = __decorate([
+    (0, common_1.Injectable)(),
+    __param(1, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof git_client_service_1.GitClientService !== "undefined" && git_client_service_1.GitClientService) === "function" ? _a : Object, typeof (_b = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _b : Object])
+], GitSyncTask);
+
+
+/***/ }),
+/* 61 */
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BaseTask = exports.TaskStatus = void 0;
+var TaskStatus;
+(function (TaskStatus) {
+    TaskStatus["PENDING"] = "PENDING";
+    TaskStatus["RUNNING"] = "RUNNING";
+    TaskStatus["COMPLETED"] = "COMPLETED";
+    TaskStatus["FAILED"] = "FAILED";
+    TaskStatus["SKIPPED"] = "SKIPPED";
+})(TaskStatus || (exports.TaskStatus = TaskStatus = {}));
+class BaseTask {
+    constructor() {
+        this.status = TaskStatus.PENDING;
+    }
+    shouldExecute(context) {
+        return true;
+    }
+    async validate(context) {
+        for (const requiredStep of this.requiredSteps) {
+            if (!context.data[requiredStep]) {
+                throw new Error(`Required step '${requiredStep}' not completed before ${this.name}`);
+            }
+        }
+    }
+    async execute(context) {
+        this.status = TaskStatus.RUNNING;
+        this.startTime = new Date();
+        try {
+            context.logger.info(`Starting task: ${this.name}`);
+            context.metrics.stepTimes[this.name] = { start: this.startTime };
+            await this.validate(context);
+            const result = await this.executeTask(context);
+            this.endTime = new Date();
+            this.status = result.success ? TaskStatus.COMPLETED : TaskStatus.FAILED;
+            const duration = this.endTime.getTime() - this.startTime.getTime();
+            context.metrics.stepTimes[this.name].end = this.endTime;
+            context.metrics.stepTimes[this.name].duration = duration;
+            if (result.success) {
+                context.logger.info(`Task completed: ${this.name}`, { duration });
+            }
+            else {
+                context.logger.error(`Task failed: ${this.name}`, { error: result.error, duration });
+                context.metrics.errors.push({
+                    step: this.name,
+                    error: result.error || 'Unknown error',
+                    timestamp: new Date(),
+                });
+            }
+            return {
+                ...result,
+                duration,
+            };
+        }
+        catch (error) {
+            this.endTime = new Date();
+            this.status = TaskStatus.FAILED;
+            const duration = this.endTime.getTime() - this.startTime.getTime();
+            context.metrics.stepTimes[this.name].end = this.endTime;
+            context.metrics.stepTimes[this.name].duration = duration;
+            context.logger.error(`Task error: ${this.name}`, { error: error.message, duration });
+            context.metrics.errors.push({
+                step: this.name,
+                error: error.message,
+                timestamp: new Date(),
+            });
+            return {
+                success: false,
+                duration,
+                error: error.message,
+            };
+        }
+    }
+    async cleanup(context) {
+        context.logger.debug(`Cleanup completed for task: ${this.name}`);
+    }
+    getEstimatedDuration(context) {
+        return 30000;
+    }
+    getStatus() {
+        return this.status;
+    }
+    getDuration() {
+        if (this.startTime && this.endTime) {
+            return this.endTime.getTime() - this.startTime.getTime();
+        }
+        return null;
+    }
+}
+exports.BaseTask = BaseTask;
+
+
+/***/ }),
+/* 62 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CodeParsingTask = void 0;
 const common_1 = __webpack_require__(2);
-const base_task_interface_1 = __webpack_require__(49);
+const nest_winston_1 = __webpack_require__(5);
+const base_task_interface_1 = __webpack_require__(61);
 const index_pipeline_entity_1 = __webpack_require__(18);
-const fs = __webpack_require__(22);
-const path = __webpack_require__(23);
-const child_process_1 = __webpack_require__(51);
-const util_1 = __webpack_require__(54);
+const fs = __webpack_require__(21);
+const path = __webpack_require__(22);
+const child_process_1 = __webpack_require__(54);
+const util_1 = __webpack_require__(63);
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 let CodeParsingTask = class CodeParsingTask extends base_task_interface_1.BaseTask {
-    constructor() {
-        super(...arguments);
+    constructor(logger) {
+        super();
+        this.logger = logger;
         this.name = 'code_parsing';
         this.description = 'Parse source code and extract symbols';
         this.requiredSteps = ['gitSync'];
         this.optionalSteps = [];
     }
     shouldExecute(context) {
-        return !!(context.data.gitSync?.filesChanged?.length);
+        const { pipeline, data } = context;
+        const pipelineId = pipeline.id;
+        const hasFilesToProcess = !!(data.gitSync?.filesAdded?.length || data.gitSync?.filesChanged?.length);
+        this.logger.debug(`[${pipelineId}] [CODE-PARSING] Checking if task should execute`, {
+            hasGitSyncData: !!data.gitSync,
+            filesAdded: data.gitSync?.filesAdded?.length || 0,
+            filesChanged: data.gitSync?.filesChanged?.length || 0,
+            shouldExecute: hasFilesToProcess
+        });
+        return hasFilesToProcess;
     }
     async validate(context) {
+        const { pipeline, data } = context;
+        const pipelineId = pipeline.id;
+        this.logger.debug(`[${pipelineId}] [CODE-PARSING] Validating task prerequisites`);
         await super.validate(context);
-        if (!context.data.gitSync?.clonePath) {
+        if (!data.gitSync?.clonePath) {
+            this.logger.error(`[${pipelineId}] [CODE-PARSING] Validation failed: No git sync data available`);
             throw new Error('Git sync must complete before code parsing');
         }
-        const clonePath = context.data.gitSync.clonePath;
+        const clonePath = data.gitSync.clonePath;
+        this.logger.debug(`[${pipelineId}] [CODE-PARSING] Checking repository path accessibility`, {
+            clonePath
+        });
         try {
             await fs.access(clonePath);
+            this.logger.debug(`[${pipelineId}] [CODE-PARSING] Repository path is accessible`);
         }
         catch (error) {
+            this.logger.error(`[${pipelineId}] [CODE-PARSING] Validation failed: Repository path not accessible`, {
+                clonePath,
+                error: error instanceof Error ? error.message : String(error)
+            });
             throw new Error(`Repository path not accessible: ${clonePath}`);
         }
+        this.logger.debug(`[${pipelineId}] [CODE-PARSING] Task validation completed successfully`, {
+            clonePath,
+            hasGitSyncData: !!data.gitSync,
+            filesAdded: data.gitSync.filesAdded?.length || 0,
+            filesChanged: data.gitSync.filesChanged?.length || 0,
+            filesDeleted: data.gitSync.filesDeleted?.length || 0
+        });
     }
     async executeTask(context) {
         const { pipeline, data, config, logger } = context;
+        const pipelineId = pipeline.id;
         const clonePath = data.gitSync.clonePath;
+        this.logger.log(`[${pipelineId}] [CODE-PARSING] Starting code parsing task`, {
+            pipelineType: pipeline.type,
+            clonePath,
+            gitSyncData: {
+                filesAdded: data.gitSync.filesAdded.length,
+                filesChanged: data.gitSync.filesChanged.length,
+                filesDeleted: data.gitSync.filesDeleted.length
+            }
+        });
         let filesToProcess = [];
         if (pipeline.type === index_pipeline_entity_1.IndexPipelineType.INCREMENTAL) {
             filesToProcess = [
                 ...data.gitSync.filesAdded,
                 ...data.gitSync.filesChanged
             ];
-            logger.info('Incremental parsing mode', {
+            this.logger.debug(`[${pipelineId}] [CODE-PARSING] Incremental parsing mode selected`, {
+                added: data.gitSync.filesAdded.length,
+                changed: data.gitSync.filesChanged.length,
+                deleted: data.gitSync.filesDeleted.length,
+                totalToProcess: filesToProcess.length
+            });
+            logger.info(`[${pipelineId}] [CODE-PARSING] Incremental parsing mode`, {
                 added: data.gitSync.filesAdded.length,
                 changed: data.gitSync.filesChanged.length,
                 deleted: data.gitSync.filesDeleted.length,
@@ -4184,7 +5289,10 @@ let CodeParsingTask = class CodeParsingTask extends base_task_interface_1.BaseTa
         }
         else {
             filesToProcess = data.gitSync.filesAdded;
-            logger.info('Full parsing mode', {
+            this.logger.debug(`[${pipelineId}] [CODE-PARSING] Full parsing mode selected`, {
+                totalFiles: filesToProcess.length
+            });
+            logger.info(`[${pipelineId}] [CODE-PARSING] Full parsing mode`, {
                 totalFiles: filesToProcess.length
             });
         }
@@ -4193,23 +5301,66 @@ let CodeParsingTask = class CodeParsingTask extends base_task_interface_1.BaseTa
         const parsingResults = [];
         const languages = {};
         try {
-            logger.info('Starting code parsing', {
+            const enabledLanguages = Object.keys(config.parsing.languages).filter(lang => config.parsing.languages[lang].enabled);
+            this.logger.debug(`[${pipelineId}] [CODE-PARSING] Starting code parsing process`, {
                 totalFiles: filesToProcess.length,
-                languages: Object.keys(config.parsing.languages).filter(lang => config.parsing.languages[lang].enabled)
+                enabledLanguages,
+                parsingConfig: {
+                    dockerEnabled: config.docker.enabled,
+                    memoryLimit: config.docker.memoryLimit,
+                    cpuLimit: config.docker.cpuLimit
+                }
             });
+            logger.info(`[${pipelineId}] [CODE-PARSING] Starting code parsing`, {
+                totalFiles: filesToProcess.length,
+                languages: enabledLanguages
+            });
+            this.logger.debug(`[${pipelineId}] [CODE-PARSING] Grouping files by language`);
             const filesByLanguage = this.groupFilesByLanguage(filesToProcess);
+            this.logger.debug(`[${pipelineId}] [CODE-PARSING] Files grouped by language`, {
+                languageGroups: Object.keys(filesByLanguage),
+                distribution: Object.entries(filesByLanguage).map(([lang, files]) => ({
+                    language: lang,
+                    fileCount: files.length
+                }))
+            });
             for (const [language, languageFiles] of Object.entries(filesByLanguage)) {
                 if (!config.parsing.languages[language]?.enabled) {
+                    this.logger.debug(`[${pipelineId}] [CODE-PARSING] Skipping disabled language: ${language}`, {
+                        fileCount: languageFiles.length
+                    });
                     continue;
                 }
-                logger.info(`Parsing ${language} files`, { count: languageFiles.length });
+                this.logger.debug(`[${pipelineId}] [CODE-PARSING] Starting to parse ${language} files`, {
+                    language,
+                    fileCount: languageFiles.length,
+                    parsingMethod: config.docker.enabled ? 'docker' : 'local'
+                });
+                logger.info(`[${pipelineId}] [CODE-PARSING] Parsing ${language} files`, {
+                    count: languageFiles.length
+                });
+                const parseStartTime = Date.now();
                 const languageResult = await this.parseLanguageFiles(language, languageFiles, clonePath, config, context);
+                const parseDuration = Date.now() - parseStartTime;
+                this.logger.debug(`[${pipelineId}] [CODE-PARSING] Completed parsing ${language} files`, {
+                    language,
+                    filesProcessed: languageResult.filesProcessed,
+                    symbolsExtracted: languageResult.symbolsExtracted,
+                    durationMs: parseDuration,
+                    avgTimePerFile: Math.round(parseDuration / languageFiles.length)
+                });
                 totalSymbolsExtracted += languageResult.symbolsExtracted;
                 filesProcessed += languageResult.filesProcessed;
                 parsingResults.push(...languageResult.results);
                 languages[language] = languageResult.filesProcessed;
             }
-            logger.info('Code parsing completed', {
+            this.logger.log(`[${pipelineId}] [CODE-PARSING] Code parsing completed successfully`, {
+                filesProcessed,
+                totalSymbolsExtracted,
+                languages,
+                averageSymbolsPerFile: filesProcessed > 0 ? Math.round(totalSymbolsExtracted / filesProcessed) : 0
+            });
+            logger.info(`[${pipelineId}] [CODE-PARSING] Code parsing completed`, {
                 filesProcessed,
                 totalSymbolsExtracted,
                 languages,
@@ -4222,6 +5373,10 @@ let CodeParsingTask = class CodeParsingTask extends base_task_interface_1.BaseTa
             };
             context.metrics.totalFilesProcessed += filesProcessed;
             context.metrics.totalSymbolsExtracted += totalSymbolsExtracted;
+            this.logger.debug(`[${pipelineId}] [CODE-PARSING] Context metrics updated`, {
+                totalFilesProcessed: context.metrics.totalFilesProcessed,
+                totalSymbolsExtracted: context.metrics.totalSymbolsExtracted
+            });
             return {
                 success: true,
                 duration: 0,
@@ -4233,17 +5388,39 @@ let CodeParsingTask = class CodeParsingTask extends base_task_interface_1.BaseTa
             };
         }
         catch (error) {
-            logger.error('Code parsing failed', { error: error.message });
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[${pipelineId}] [CODE-PARSING] Task failed with error`, {
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined,
+                filesProcessed,
+                totalSymbolsExtracted,
+                clonePath
+            });
+            logger.error(`[${pipelineId}] [CODE-PARSING] Code parsing failed`, {
+                error: errorMessage
+            });
             return {
                 success: false,
                 duration: 0,
-                error: `Code parsing failed: ${error.message}`,
+                error: `Code parsing failed: ${errorMessage}`,
             };
         }
     }
     getEstimatedDuration(context) {
-        const files = context.data.gitSync?.filesChanged?.length || 0;
-        return Math.max(60000, files * 100);
+        const { pipeline, data } = context;
+        const pipelineId = pipeline.id;
+        const filesAdded = data.gitSync?.filesAdded?.length || 0;
+        const filesChanged = data.gitSync?.filesChanged?.length || 0;
+        const totalFiles = filesAdded + filesChanged;
+        const estimatedTime = Math.max(60000, totalFiles * 100);
+        this.logger.debug(`[${pipelineId}] [CODE-PARSING] Estimated task duration calculated`, {
+            filesAdded,
+            filesChanged,
+            totalFiles,
+            estimatedTimeMs: estimatedTime,
+            estimatedTimeMin: Math.round(estimatedTime / 60000)
+        });
+        return estimatedTime;
     }
     groupFilesByLanguage(files) {
         const groups = {};
@@ -4288,9 +5465,22 @@ let CodeParsingTask = class CodeParsingTask extends base_task_interface_1.BaseTa
         }
     }
     async parseWithDocker(language, files, repoPath, languageConfig, context) {
-        const { config, tempDirectory, logger } = context;
+        const { config, tempDirectory, logger, pipeline } = context;
+        const pipelineId = pipeline.id;
+        this.logger.debug(`[${pipelineId}] [CODE-PARSING] Starting Docker parsing for ${language}`, {
+            language,
+            fileCount: files.length,
+            dockerImage: languageConfig.dockerImage,
+            repoPath,
+            tempDirectory
+        });
         const fileListPath = path.join(tempDirectory, `${language}-files.txt`);
         await fs.writeFile(fileListPath, files.join('\n'));
+        this.logger.debug(`[${pipelineId}] [CODE-PARSING] Created file list for Docker parsing`, {
+            language,
+            fileListPath,
+            fileCount: files.length
+        });
         const dockerCmd = [
             'docker run',
             '--rm',
@@ -4304,31 +5494,82 @@ let CodeParsingTask = class CodeParsingTask extends base_task_interface_1.BaseTa
             `/output/${language}-results.json`,
             `/output/${language}-files.txt`
         ].join(' ');
-        logger.debug('Running Docker parser', { command: dockerCmd });
+        this.logger.debug(`[${pipelineId}] [CODE-PARSING] Executing Docker command for ${language}`, {
+            command: dockerCmd,
+            timeout: config.docker.timeout
+        });
+        logger.debug(`[${pipelineId}] [CODE-PARSING] Running Docker parser`, {
+            language,
+            command: dockerCmd
+        });
         try {
+            const dockerStartTime = Date.now();
             const { stdout, stderr } = await execAsync(dockerCmd, {
                 timeout: config.docker.timeout,
             });
-            logger.debug('Docker parser output', { stdout, stderr });
+            const dockerDuration = Date.now() - dockerStartTime;
+            this.logger.debug(`[${pipelineId}] [CODE-PARSING] Docker execution completed for ${language}`, {
+                language,
+                durationMs: dockerDuration,
+                hasStdout: !!stdout,
+                hasStderr: !!stderr
+            });
+            logger.debug(`[${pipelineId}] [CODE-PARSING] Docker parser output`, {
+                language,
+                stdout,
+                stderr
+            });
             const resultsPath = path.join(tempDirectory, `${language}-results.json`);
+            this.logger.debug(`[${pipelineId}] [CODE-PARSING] Reading Docker parsing results for ${language}`, {
+                resultsPath
+            });
             const resultsContent = await fs.readFile(resultsPath, 'utf-8');
             const results = JSON.parse(resultsContent);
-            return {
+            const parseResult = {
                 symbolsExtracted: results.symbols?.length || 0,
                 filesProcessed: results.files?.length || 0,
                 results: results.symbols || [],
             };
+            this.logger.debug(`[${pipelineId}] [CODE-PARSING] Docker parsing completed for ${language}`, {
+                language,
+                symbolsExtracted: parseResult.symbolsExtracted,
+                filesProcessed: parseResult.filesProcessed,
+                durationMs: dockerDuration
+            });
+            return parseResult;
         }
         catch (error) {
-            logger.error(`Docker parsing failed for ${language}`, { error: error.message });
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[${pipelineId}] [CODE-PARSING] Docker parsing failed for ${language}`, {
+                language,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined,
+                dockerImage: languageConfig.dockerImage,
+                fileCount: files.length
+            });
+            logger.error(`[${pipelineId}] [CODE-PARSING] Docker parsing failed for ${language}`, {
+                error: errorMessage
+            });
             throw error;
         }
     }
     async parseWithLocalTools(language, files, repoPath, languageConfig, context) {
-        const { logger } = context;
-        logger.warn(`Local parsing not implemented for ${language}, using mock results`);
-        await new Promise(resolve => setTimeout(resolve, 1000 * files.length * 0.1));
-        return {
+        const { logger, pipeline } = context;
+        const pipelineId = pipeline.id;
+        this.logger.warn(`[${pipelineId}] [CODE-PARSING] Local parsing not implemented for ${language}, using mock results`, {
+            language,
+            fileCount: files.length,
+            repoPath
+        });
+        logger.warn(`[${pipelineId}] [CODE-PARSING] Local parsing not implemented for ${language}, using mock results`);
+        const mockProcessingTime = 1000 * files.length * 0.1;
+        this.logger.debug(`[${pipelineId}] [CODE-PARSING] Simulating local parsing for ${language}`, {
+            language,
+            fileCount: files.length,
+            mockProcessingTimeMs: mockProcessingTime
+        });
+        await new Promise(resolve => setTimeout(resolve, mockProcessingTime));
+        const mockResult = {
             symbolsExtracted: files.length * 5,
             filesProcessed: files.length,
             results: files.map(file => ({
@@ -4340,36 +5581,67 @@ let CodeParsingTask = class CodeParsingTask extends base_task_interface_1.BaseTa
                 })),
             })),
         };
+        this.logger.debug(`[${pipelineId}] [CODE-PARSING] Mock local parsing completed for ${language}`, {
+            language,
+            symbolsExtracted: mockResult.symbolsExtracted,
+            filesProcessed: mockResult.filesProcessed,
+            processingTimeMs: mockProcessingTime
+        });
+        return mockResult;
     }
     async cleanup(context) {
-        const { tempDirectory } = context;
+        const { pipeline, tempDirectory } = context;
+        const pipelineId = pipeline.id;
+        this.logger.debug(`[${pipelineId}] [CODE-PARSING] Starting task cleanup`, {
+            tempDirectory
+        });
         try {
             const files = await fs.readdir(tempDirectory);
             const parsingFiles = files.filter(file => file.endsWith('-files.txt') || file.endsWith('-results.json'));
+            this.logger.debug(`[${pipelineId}] [CODE-PARSING] Found ${parsingFiles.length} parsing files to clean up`, {
+                parsingFiles
+            });
+            let cleanedFiles = 0;
             for (const file of parsingFiles) {
-                await fs.rm(path.join(tempDirectory, file), { force: true });
+                const filePath = path.join(tempDirectory, file);
+                await fs.rm(filePath, { force: true });
+                cleanedFiles++;
+                this.logger.debug(`[${pipelineId}] [CODE-PARSING] Cleaned up file: ${file}`);
             }
-            context.logger.debug('Code parsing cleanup completed');
+            this.logger.debug(`[${pipelineId}] [CODE-PARSING] Task cleanup completed`, {
+                cleanedFiles,
+                tempDirectory
+            });
+            context.logger.debug(`[${pipelineId}] [CODE-PARSING] Code parsing cleanup completed`);
         }
         catch (error) {
-            context.logger.warn('Code parsing cleanup failed', { error: error.message });
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.warn(`[${pipelineId}] [CODE-PARSING] Task cleanup failed`, {
+                error: errorMessage,
+                tempDirectory
+            });
+            context.logger.warn(`[${pipelineId}] [CODE-PARSING] Code parsing cleanup failed`, {
+                error: errorMessage
+            });
         }
     }
 };
 exports.CodeParsingTask = CodeParsingTask;
 exports.CodeParsingTask = CodeParsingTask = __decorate([
-    (0, common_1.Injectable)()
+    (0, common_1.Injectable)(),
+    __param(0, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _a : Object])
 ], CodeParsingTask);
 
 
 /***/ }),
-/* 54 */
+/* 63 */
 /***/ ((module) => {
 
 module.exports = require("util");
 
 /***/ }),
-/* 55 */
+/* 64 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -4379,65 +5651,161 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.GraphUpdateTask = void 0;
 const common_1 = __webpack_require__(2);
-const base_task_interface_1 = __webpack_require__(49);
+const nest_winston_1 = __webpack_require__(5);
+const base_task_interface_1 = __webpack_require__(61);
 let GraphUpdateTask = class GraphUpdateTask extends base_task_interface_1.BaseTask {
-    constructor() {
-        super(...arguments);
+    constructor(logger) {
+        super();
+        this.logger = logger;
         this.name = 'update_graph';
         this.description = 'Update Neo4j knowledge graph with parsed symbols';
         this.requiredSteps = ['codeParsing'];
         this.optionalSteps = [];
     }
     shouldExecute(context) {
-        return !!(context.data.codeParsing?.parsingResults?.length);
+        const { pipeline, data } = context;
+        const pipelineId = pipeline.id;
+        const hasParsingResults = !!(data.codeParsing?.parsingResults?.length);
+        this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Checking if task should execute`, 'GraphUpdateTask');
+        this.logger.debug({
+            hasCodeParsingData: !!data.codeParsing,
+            parsingResultsCount: data.codeParsing?.parsingResults?.length || 0,
+            symbolsExtracted: data.codeParsing?.symbolsExtracted || 0,
+            shouldExecute: hasParsingResults
+        }, 'GraphUpdateTask');
+        return hasParsingResults;
     }
     async validate(context) {
+        const { pipeline, data, config } = context;
+        const pipelineId = pipeline.id;
+        this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Validating task prerequisites`, 'GraphUpdateTask');
         await super.validate(context);
-        if (!context.data.codeParsing?.parsingResults) {
+        if (!data.codeParsing?.parsingResults) {
+            this.logger.error(`[${pipelineId}] [GRAPH-UPDATE] Validation failed: No code parsing results available`);
             throw new Error('Code parsing results required for graph update');
         }
-        const { config } = context;
+        this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Code parsing results validation passed`, {
+            parsingResultsCount: data.codeParsing.parsingResults.length,
+            symbolsExtracted: data.codeParsing.symbolsExtracted,
+            filesProcessed: data.codeParsing.filesProcessed
+        });
         if (!config.graph.url || !config.graph.username || !config.graph.password) {
+            this.logger.error(`[${pipelineId}] [GRAPH-UPDATE] Validation failed: Neo4j configuration incomplete`, {
+                hasUrl: !!config.graph.url,
+                hasUsername: !!config.graph.username,
+                hasPassword: !!config.graph.password,
+                database: config.graph.database
+            });
             throw new Error('Neo4j connection configuration is required');
         }
+        this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Task validation completed successfully`, {
+            graphUrl: config.graph.url,
+            graphDatabase: config.graph.database,
+            batchSize: config.graph.batchSize,
+            parsingResultsCount: data.codeParsing.parsingResults.length
+        });
     }
     async executeTask(context) {
-        const { data, config, logger, project, codebase } = context;
+        const { data, config, logger, project, codebase, pipeline } = context;
+        const pipelineId = pipeline.id;
         const parsingResults = data.codeParsing.parsingResults;
+        this.logger.log(`[${pipelineId}] [GRAPH-UPDATE] Starting graph update task`, {
+            totalResults: parsingResults.length,
+            database: config.graph.database,
+            batchSize: config.graph.batchSize,
+            projectId: project.id,
+            projectName: project.name,
+            codebaseId: codebase?.id,
+            codebaseName: codebase?.name
+        });
         let nodesCreated = 0;
         let nodesUpdated = 0;
         let relationshipsCreated = 0;
         let relationshipsUpdated = 0;
         let session;
         try {
-            logger.info('Starting graph update', {
+            logger.info(`[${pipelineId}] [GRAPH-UPDATE] Starting graph update`, {
                 totalResults: parsingResults.length,
                 database: config.graph.database,
             });
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Initializing mock Neo4j session`, {
+                graphUrl: config.graph.url,
+                database: config.graph.database
+            });
             session = {
                 run: async (query, params) => {
-                    logger.debug('Mock Neo4j query', { query, params });
+                    this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Executing mock Neo4j query`, {
+                        query: query.substring(0, 100) + (query.length > 100 ? '...' : ''),
+                        paramKeys: params ? Object.keys(params) : []
+                    });
+                    logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Mock Neo4j query`, { query, params });
                     return { records: [{ get: () => 'created' }] };
                 },
-                close: async () => { },
+                close: async () => {
+                    this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Closing mock Neo4j session`);
+                },
             };
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Verifying Neo4j connection`);
             await session.run('RETURN 1');
-            logger.debug('Neo4j connection established');
-            await this.ensureProjectNodes(session, project, codebase, logger);
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Neo4j connection verified successfully`);
+            logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Neo4j connection established`);
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Ensuring project and codebase nodes exist`);
+            await this.ensureProjectNodes(session, project, codebase, logger, pipelineId);
             const batchSize = config.graph.batchSize;
+            const totalBatches = Math.ceil(parsingResults.length / batchSize);
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Starting batch processing`, {
+                totalResults: parsingResults.length,
+                batchSize,
+                totalBatches
+            });
             for (let i = 0; i < parsingResults.length; i += batchSize) {
                 const batch = parsingResults.slice(i, i + batchSize);
-                logger.debug(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(parsingResults.length / batchSize)}`);
-                const batchResult = await this.processBatch(session, batch, project, codebase, config, logger);
+                const batchNumber = Math.floor(i / batchSize) + 1;
+                this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Processing batch ${batchNumber}/${totalBatches}`, {
+                    batchNumber,
+                    totalBatches,
+                    batchSize: batch.length,
+                    startIndex: i,
+                    endIndex: i + batch.length - 1
+                });
+                logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Processing batch ${batchNumber}/${totalBatches}`);
+                const batchStartTime = Date.now();
+                const batchResult = await this.processBatch(session, batch, project, codebase, config, logger, pipelineId);
+                const batchDuration = Date.now() - batchStartTime;
                 nodesCreated += batchResult.nodesCreated;
                 nodesUpdated += batchResult.nodesUpdated;
                 relationshipsCreated += batchResult.relationshipsCreated;
                 relationshipsUpdated += batchResult.relationshipsUpdated;
+                this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Batch ${batchNumber} completed`, {
+                    batchNumber,
+                    durationMs: batchDuration,
+                    nodesCreated: batchResult.nodesCreated,
+                    nodesUpdated: batchResult.nodesUpdated,
+                    relationshipsCreated: batchResult.relationshipsCreated,
+                    relationshipsUpdated: batchResult.relationshipsUpdated,
+                    totalNodesCreated: nodesCreated,
+                    totalRelationshipsCreated: relationshipsCreated
+                });
             }
-            logger.info('Graph update completed', {
+            this.logger.log(`[${pipelineId}] [GRAPH-UPDATE] Graph update task completed successfully`, {
+                nodesCreated,
+                nodesUpdated,
+                relationshipsCreated,
+                relationshipsUpdated,
+                totalItems: nodesCreated + nodesUpdated + relationshipsCreated + relationshipsUpdated,
+                parsingResultsProcessed: parsingResults.length
+            });
+            logger.info(`[${pipelineId}] [GRAPH-UPDATE] Graph update completed`, {
                 nodesCreated,
                 nodesUpdated,
                 relationshipsCreated,
@@ -4460,28 +5828,57 @@ let GraphUpdateTask = class GraphUpdateTask extends base_task_interface_1.BaseTa
             };
         }
         catch (error) {
-            logger.error('Graph update failed', { error: error.message });
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[${pipelineId}] [GRAPH-UPDATE] Task failed with error`, {
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined,
+                nodesCreated,
+                nodesUpdated,
+                relationshipsCreated,
+                relationshipsUpdated,
+                parsingResultsCount: parsingResults.length
+            });
+            logger.error(`[${pipelineId}] [GRAPH-UPDATE] Graph update failed`, {
+                error: errorMessage
+            });
             return {
                 success: false,
                 duration: 0,
-                error: `Graph update failed: ${error.message}`,
+                error: `Graph update failed: ${errorMessage}`,
             };
         }
         finally {
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Cleaning up resources`);
             if (session) {
+                this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Closing Neo4j session`);
                 await session.close();
             }
             if (this.driver) {
+                this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Closing Neo4j driver`);
                 await this.driver.close();
             }
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Resource cleanup completed`);
         }
     }
     getEstimatedDuration(context) {
-        const results = context.data.codeParsing?.parsingResults?.length || 0;
-        const symbols = context.data.codeParsing?.symbolsExtracted || 0;
-        return Math.max(30000, symbols * 10);
+        const { pipeline, data } = context;
+        const pipelineId = pipeline.id;
+        const results = data.codeParsing?.parsingResults?.length || 0;
+        const symbols = data.codeParsing?.symbolsExtracted || 0;
+        const estimatedTime = Math.max(30000, symbols * 10);
+        this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Estimated task duration calculated`, {
+            parsingResults: results,
+            symbolsExtracted: symbols,
+            estimatedTimeMs: estimatedTime,
+            estimatedTimeMin: Math.round(estimatedTime / 60000)
+        });
+        return estimatedTime;
     }
-    async ensureProjectNodes(session, project, codebase, logger) {
+    async ensureProjectNodes(session, project, codebase, logger, pipelineId) {
+        this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Creating/updating project node`, {
+            projectId: project.id,
+            projectName: project.name
+        });
         await session.run(`
       MERGE (p:Project {id: $projectId})
       SET p.name = $projectName,
@@ -4491,7 +5888,14 @@ let GraphUpdateTask = class GraphUpdateTask extends base_task_interface_1.BaseTa
             projectId: project.id,
             projectName: project.name,
         });
+        this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Project node created/updated successfully`);
         if (codebase) {
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Creating/updating codebase node and relationship`, {
+                codebaseId: codebase.id,
+                codebaseName: codebase.name,
+                gitlabUrl: codebase.gitlabUrl,
+                branch: codebase.branch
+            });
             await session.run(`
         MATCH (p:Project {id: $projectId})
         MERGE (c:Codebase {id: $codebaseId})
@@ -4508,15 +5912,26 @@ let GraphUpdateTask = class GraphUpdateTask extends base_task_interface_1.BaseTa
                 gitlabUrl: codebase.gitlabUrl,
                 branch: codebase.branch,
             });
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Codebase node and relationship created/updated successfully`);
         }
-        logger.debug('Project and codebase nodes ensured');
+        else {
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] No codebase provided, skipping codebase node creation`);
+        }
+        this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Project and codebase nodes ensured successfully`);
+        logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Project and codebase nodes ensured`);
     }
-    async processBatch(session, batch, project, codebase, config, logger) {
+    async processBatch(session, batch, project, codebase, config, logger, pipelineId) {
         let nodesCreated = 0;
         let nodesUpdated = 0;
         let relationshipsCreated = 0;
         let relationshipsUpdated = 0;
-        for (const fileResult of batch) {
+        this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Processing batch of ${batch.length} file results`);
+        for (let fileIndex = 0; fileIndex < batch.length; fileIndex++) {
+            const fileResult = batch[fileIndex];
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Processing file ${fileIndex + 1}/${batch.length}`, {
+                filePath: fileResult.file,
+                symbolCount: fileResult.symbols?.length || 0
+            });
             const fileResult2 = await session.run(`
         MERGE (f:File {path: $filePath, codebaseId: $codebaseId})
         SET f.name = $fileName,
@@ -4604,21 +6019,32 @@ let GraphUpdateTask = class GraphUpdateTask extends base_task_interface_1.BaseTa
         };
     }
     async cleanup(context) {
+        const { pipeline } = context;
+        const pipelineId = pipeline.id;
+        this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Starting task cleanup`);
         if (this.driver) {
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Closing Neo4j driver connection`);
             await this.driver.close();
             this.driver = undefined;
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Neo4j driver closed successfully`);
         }
-        context.logger.debug('Graph update cleanup completed');
+        else {
+            this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] No Neo4j driver to close`);
+        }
+        this.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Task cleanup completed`);
+        context.logger.debug(`[${pipelineId}] [GRAPH-UPDATE] Graph update cleanup completed`);
     }
 };
 exports.GraphUpdateTask = GraphUpdateTask;
 exports.GraphUpdateTask = GraphUpdateTask = __decorate([
-    (0, common_1.Injectable)()
+    (0, common_1.Injectable)(),
+    __param(0, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _a : Object])
 ], GraphUpdateTask);
 
 
 /***/ }),
-/* 56 */
+/* 65 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -4628,49 +6054,116 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CleanupTask = void 0;
 const common_1 = __webpack_require__(2);
-const base_task_interface_1 = __webpack_require__(49);
-const fs = __webpack_require__(22);
-const path = __webpack_require__(23);
+const nest_winston_1 = __webpack_require__(5);
+const base_task_interface_1 = __webpack_require__(61);
+const fs = __webpack_require__(21);
+const path = __webpack_require__(22);
 let CleanupTask = class CleanupTask extends base_task_interface_1.BaseTask {
-    constructor() {
-        super(...arguments);
+    constructor(logger) {
+        super();
+        this.logger = logger;
         this.name = 'cleanup';
         this.description = 'Clean up temporary files and resources';
         this.requiredSteps = [];
         this.optionalSteps = ['gitSync', 'codeParsing', 'graphUpdate'];
     }
     shouldExecute(context) {
+        const { pipeline } = context;
+        const pipelineId = pipeline.id;
+        this.logger.debug(`[${pipelineId}] [CLEANUP] Checking if task should execute`, 'CleanupTask');
+        this.logger.debug(`[${pipelineId}] [CLEANUP] Task will always execute for cleanup purposes`, 'CleanupTask');
         return true;
     }
     async validate(context) {
+        const { pipeline } = context;
+        const pipelineId = pipeline.id;
+        this.logger.debug(`[${pipelineId}] [CLEANUP] Validating task prerequisites`);
+        this.logger.debug(`[${pipelineId}] [CLEANUP] No validation required for cleanup task`);
     }
     async executeTask(context) {
-        const { logger, workingDirectory, tempDirectory, config } = context;
+        const { logger, workingDirectory, tempDirectory, config, pipeline } = context;
+        const pipelineId = pipeline.id;
+        this.logger.log(`[${pipelineId}] [CLEANUP] Starting cleanup task`, {
+            workingDirectory,
+            tempDirectory,
+            enableTempCleanup: config.performance.tempDirCleanup,
+            dockerEnabled: config.docker.enabled,
+            dockerCleanup: config.docker.cleanup,
+            hasGitSyncData: !!context.data.gitSync
+        });
         let tempFilesRemoved = 0;
         let diskSpaceFreed = 0;
         try {
-            logger.info('Starting cleanup', {
+            logger.info(`[${pipelineId}] [CLEANUP] Starting cleanup`, {
                 workingDirectory,
                 tempDirectory,
                 enableTempCleanup: config.performance.tempDirCleanup,
             });
             if (config.performance.tempDirCleanup && tempDirectory) {
-                const tempResult = await this.cleanDirectory(tempDirectory, logger);
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Cleaning temporary directory`, {
+                    tempDirectory
+                });
+                const tempResult = await this.cleanDirectory(tempDirectory, logger, pipelineId);
                 tempFilesRemoved += tempResult.filesRemoved;
                 diskSpaceFreed += tempResult.spaceFreed;
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Temporary directory cleanup completed`, {
+                    tempDirectory,
+                    filesRemoved: tempResult.filesRemoved,
+                    spaceFreedMB: Math.round(tempResult.spaceFreed / (1024 * 1024))
+                });
+            }
+            else {
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Skipping temporary directory cleanup`, {
+                    tempDirCleanupEnabled: config.performance.tempDirCleanup,
+                    hasTempDirectory: !!tempDirectory
+                });
             }
             if (workingDirectory && context.data.gitSync?.clonePath) {
-                const workingResult = await this.cleanDirectory(workingDirectory, logger);
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Cleaning working directory`, {
+                    workingDirectory,
+                    clonePath: context.data.gitSync.clonePath
+                });
+                const workingResult = await this.cleanDirectory(workingDirectory, logger, pipelineId);
                 tempFilesRemoved += workingResult.filesRemoved;
                 diskSpaceFreed += workingResult.spaceFreed;
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Working directory cleanup completed`, {
+                    workingDirectory,
+                    filesRemoved: workingResult.filesRemoved,
+                    spaceFreedMB: Math.round(workingResult.spaceFreed / (1024 * 1024))
+                });
+            }
+            else {
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Skipping working directory cleanup`, {
+                    hasWorkingDirectory: !!workingDirectory,
+                    hasGitSyncClonePath: !!context.data.gitSync?.clonePath
+                });
             }
             if (config.docker.enabled && config.docker.cleanup) {
-                await this.cleanupDockerResources(logger);
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Starting Docker resource cleanup`);
+                await this.cleanupDockerResources(logger, pipelineId);
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Docker resource cleanup completed`);
             }
-            logger.info('Cleanup completed', {
+            else {
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Skipping Docker cleanup`, {
+                    dockerEnabled: config.docker.enabled,
+                    dockerCleanup: config.docker.cleanup
+                });
+            }
+            this.logger.log(`[${pipelineId}] [CLEANUP] Cleanup task completed successfully`, {
+                tempFilesRemoved,
+                diskSpaceFreedMB: Math.round(diskSpaceFreed / (1024 * 1024)),
+            });
+            logger.info(`[${pipelineId}] [CLEANUP] Cleanup completed`, {
                 tempFilesRemoved,
                 diskSpaceFreedMB: Math.round(diskSpaceFreed / (1024 * 1024)),
             });
@@ -4688,35 +6181,84 @@ let CleanupTask = class CleanupTask extends base_task_interface_1.BaseTask {
             };
         }
         catch (error) {
-            logger.error('Cleanup failed', { error: error.message });
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.warn(`[${pipelineId}] [CLEANUP] Cleanup task encountered error but continuing`, {
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined,
+                tempFilesRemoved,
+                diskSpaceFreedMB: Math.round(diskSpaceFreed / (1024 * 1024))
+            });
+            logger.error(`[${pipelineId}] [CLEANUP] Cleanup failed`, {
+                error: errorMessage
+            });
             return {
                 success: true,
                 duration: 0,
-                error: `Cleanup warning: ${error.message}`,
+                error: `Cleanup warning: ${errorMessage}`,
             };
         }
     }
     getEstimatedDuration(context) {
-        return 10000;
+        const { pipeline } = context;
+        const pipelineId = pipeline.id;
+        const estimatedTime = 10000;
+        this.logger.debug(`[${pipelineId}] [CLEANUP] Estimated task duration calculated`, {
+            estimatedTimeMs: estimatedTime,
+            estimatedTimeSec: estimatedTime / 1000
+        });
+        return estimatedTime;
     }
-    async cleanDirectory(dirPath, logger) {
+    async cleanDirectory(dirPath, logger, pipelineId) {
         let filesRemoved = 0;
         let spaceFreed = 0;
         try {
             await fs.access(dirPath);
-            logger.debug(`Cleaning directory: ${dirPath}`);
+            this.logger.debug(`[${pipelineId}] [CLEANUP] Directory exists, starting cleanup`, {
+                dirPath
+            });
+            logger.debug(`[${pipelineId}] [CLEANUP] Cleaning directory: ${dirPath}`);
+            this.logger.debug(`[${pipelineId}] [CLEANUP] Calculating directory size before cleanup`, {
+                dirPath
+            });
             const sizeBefore = await this.getDirectorySize(dirPath);
+            this.logger.debug(`[${pipelineId}] [CLEANUP] Directory size calculated`, {
+                dirPath,
+                sizeMB: Math.round(sizeBefore / (1024 * 1024)),
+                sizeBytes: sizeBefore
+            });
+            this.logger.debug(`[${pipelineId}] [CLEANUP] Removing directory and all contents`, {
+                dirPath
+            });
             await fs.rm(dirPath, { recursive: true, force: true });
             spaceFreed = sizeBefore;
             filesRemoved = await this.countFilesInDirectory(dirPath, true);
-            logger.debug(`Directory cleaned: ${dirPath}`, {
+            this.logger.debug(`[${pipelineId}] [CLEANUP] Directory removal completed`, {
+                dirPath,
+                filesRemoved,
+                spaceFreedMB: Math.round(spaceFreed / (1024 * 1024))
+            });
+            logger.debug(`[${pipelineId}] [CLEANUP] Directory cleaned: ${dirPath}`, {
                 filesRemoved,
                 spaceFreedMB: Math.round(spaceFreed / (1024 * 1024)),
             });
         }
         catch (error) {
-            if (error.code !== 'ENOENT') {
-                logger.warn(`Failed to clean directory: ${dirPath}`, { error: error.message });
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorCode = error instanceof Error && 'code' in error ? error.code : undefined;
+            if (errorCode !== 'ENOENT') {
+                this.logger.warn(`[${pipelineId}] [CLEANUP] Failed to clean directory`, {
+                    dirPath,
+                    error: errorMessage,
+                    errorCode
+                });
+                logger.warn(`[${pipelineId}] [CLEANUP] Failed to clean directory: ${dirPath}`, {
+                    error: errorMessage
+                });
+            }
+            else {
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Directory does not exist, skipping cleanup`, {
+                    dirPath
+                });
             }
         }
         return { filesRemoved, spaceFreed };
@@ -4766,43 +6308,79 @@ let CleanupTask = class CleanupTask extends base_task_interface_1.BaseTask {
         }
         return fileCount;
     }
-    async cleanupDockerResources(logger) {
+    async cleanupDockerResources(logger, pipelineId) {
         try {
-            const { exec } = __webpack_require__(51);
-            const { promisify } = __webpack_require__(54);
+            const { exec } = __webpack_require__(54);
+            const { promisify } = __webpack_require__(63);
             const execAsync = promisify(exec);
-            logger.debug('Cleaning up Docker resources');
+            this.logger.debug(`[${pipelineId}] [CLEANUP] Starting Docker resource cleanup`);
+            logger.debug(`[${pipelineId}] [CLEANUP] Cleaning up Docker resources`);
             try {
-                await execAsync('docker container prune -f --filter "label=tekaicontextengine"');
-                logger.debug('Docker containers cleaned');
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Removing stopped Docker containers with tekaicontextengine label`);
+                const containerResult = await execAsync('docker container prune -f --filter "label=tekaicontextengine"');
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Docker container cleanup completed`, {
+                    output: containerResult.stdout?.trim(),
+                    errors: containerResult.stderr?.trim()
+                });
+                logger.debug(`[${pipelineId}] [CLEANUP] Docker containers cleaned`);
             }
             catch (error) {
-                logger.warn('Failed to clean Docker containers', { error: error.message });
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                this.logger.warn(`[${pipelineId}] [CLEANUP] Failed to clean Docker containers`, {
+                    error: errorMessage
+                });
+                logger.warn(`[${pipelineId}] [CLEANUP] Failed to clean Docker containers`, {
+                    error: errorMessage
+                });
             }
             try {
-                await execAsync('docker image prune -f');
-                logger.debug('Docker images cleaned');
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Removing dangling Docker images`);
+                const imageResult = await execAsync('docker image prune -f');
+                this.logger.debug(`[${pipelineId}] [CLEANUP] Docker image cleanup completed`, {
+                    output: imageResult.stdout?.trim(),
+                    errors: imageResult.stderr?.trim()
+                });
+                logger.debug(`[${pipelineId}] [CLEANUP] Docker images cleaned`);
             }
             catch (error) {
-                logger.warn('Failed to clean Docker images', { error: error.message });
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                this.logger.warn(`[${pipelineId}] [CLEANUP] Failed to clean Docker images`, {
+                    error: errorMessage
+                });
+                logger.warn(`[${pipelineId}] [CLEANUP] Failed to clean Docker images`, {
+                    error: errorMessage
+                });
             }
         }
         catch (error) {
-            logger.warn('Docker cleanup failed', { error: error.message });
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.warn(`[${pipelineId}] [CLEANUP] Docker cleanup failed`, {
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            logger.warn(`[${pipelineId}] [CLEANUP] Docker cleanup failed`, {
+                error: errorMessage
+            });
         }
     }
     async cleanup(context) {
-        context.logger.debug('Cleanup task cleanup completed');
+        const { pipeline } = context;
+        const pipelineId = pipeline.id;
+        this.logger.debug(`[${pipelineId}] [CLEANUP] Starting task cleanup`);
+        this.logger.debug(`[${pipelineId}] [CLEANUP] This task is the cleanup task itself, no additional cleanup needed`);
+        context.logger.debug(`[${pipelineId}] [CLEANUP] Cleanup task cleanup completed`);
     }
 };
 exports.CleanupTask = CleanupTask;
 exports.CleanupTask = CleanupTask = __decorate([
-    (0, common_1.Injectable)()
+    (0, common_1.Injectable)(),
+    __param(0, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _a : Object])
 ], CleanupTask);
 
 
 /***/ }),
-/* 57 */
+/* 66 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -5188,7 +6766,7 @@ exports.PipelineConfigService = PipelineConfigService = __decorate([
 
 
 /***/ }),
-/* 58 */
+/* 67 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -5201,84 +6779,102 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var PipelineWorkerService_1;
-var _a, _b;
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var _a, _b, _c;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PipelineWorkerService = void 0;
 const common_1 = __webpack_require__(2);
-const worker_pool_service_1 = __webpack_require__(26);
+const nest_winston_1 = __webpack_require__(5);
+const worker_pool_service_1 = __webpack_require__(25);
 const config_1 = __webpack_require__(4);
-let PipelineWorkerService = PipelineWorkerService_1 = class PipelineWorkerService {
-    constructor(workerPoolService, configService) {
+let PipelineWorkerService = class PipelineWorkerService {
+    constructor(workerPoolService, configService, logger) {
         this.workerPoolService = workerPoolService;
         this.configService = configService;
-        this.logger = new common_1.Logger(PipelineWorkerService_1.name);
+        this.logger = logger;
         this.PIPELINE_POOL_NAME = 'pipeline-execution';
+        this.logger.debug('[PIPELINE-WORKER] Initializing pipeline worker service', 'PipelineWorkerService');
     }
     async onModuleInit() {
+        this.logger.log('[PIPELINE-WORKER] Module initializing - setting up pipeline worker pool', 'PipelineWorkerService');
         this.initializePipelinePool();
+        this.logger.log('[PIPELINE-WORKER] Module initialization completed', 'PipelineWorkerService');
     }
     async submitPipeline(pipelineId, pipelineType, executeFn) {
+        const timeout = this.getPipelineTimeout(pipelineType);
+        this.logger.debug('[PIPELINE-WORKER] Preparing pipeline task for worker pool', {
+            pipelineId,
+            pipelineType,
+            timeout,
+            poolName: this.PIPELINE_POOL_NAME
+        });
         const task = {
             id: `pipeline-${pipelineId}`,
             pipelineId,
             type: pipelineType,
-            priority: this.getPipelinePriority(pipelineType),
-            timeout: this.getPipelineTimeout(pipelineType),
+            timeout,
             execute: executeFn,
         };
+        this.logger.log('[PIPELINE-WORKER] Submitting pipeline to worker pool', {
+            pipelineId,
+            pipelineType,
+            taskId: task.id,
+            timeout: task.timeout
+        });
         this.logger.log(`Submitting pipeline ${pipelineId} to worker pool`);
         try {
+            const submissionStartTime = Date.now();
             const result = await this.workerPoolService.submitTask(this.PIPELINE_POOL_NAME, task);
+            const submissionDuration = Date.now() - submissionStartTime;
+            this.logger.log('[PIPELINE-WORKER] Pipeline completed successfully in worker pool', {
+                pipelineId,
+                pipelineType,
+                status: result.status,
+                duration: result.duration,
+                submissionDuration,
+                tasksExecuted: result.tasksExecuted,
+                tasksSucceeded: result.tasksSucceeded,
+                tasksFailed: result.tasksFailed
+            });
             this.logger.log(`Pipeline ${pipelineId} completed in worker pool`);
             return result;
         }
         catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('[PIPELINE-WORKER] Pipeline failed in worker pool', {
+                pipelineId,
+                pipelineType,
+                taskId: task.id,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
             this.logger.error(`Pipeline ${pipelineId} failed in worker pool:`, error);
             throw error;
-        }
-    }
-    getPoolStats() {
-        const pool = this.workerPoolService.getPool(this.PIPELINE_POOL_NAME);
-        return pool ? pool.getStats() : null;
-    }
-    resizePool(newSize) {
-        const pool = this.workerPoolService.getPool(this.PIPELINE_POOL_NAME);
-        if (pool) {
-            pool.resize(newSize);
-            this.logger.log(`Resized pipeline worker pool to ${newSize} workers`);
         }
     }
     initializePipelinePool() {
         const maxWorkers = this.configService.get('PIPELINE_MAX_WORKERS', 4);
         const taskTimeout = this.configService.get('PIPELINE_TASK_TIMEOUT', 1800000);
-        const retryAttempts = this.configService.get('PIPELINE_RETRY_ATTEMPTS', 1);
-        const queueSize = this.configService.get('PIPELINE_QUEUE_SIZE', 100);
-        const idleTimeout = this.configService.get('PIPELINE_IDLE_TIMEOUT', 300000);
+        this.logger.debug('[PIPELINE-WORKER] Initializing pipeline worker pool with configuration', {
+            poolName: this.PIPELINE_POOL_NAME,
+            maxWorkers,
+            taskTimeout,
+            taskTimeoutMin: Math.round(taskTimeout / 60000)
+        });
         this.workerPoolService.createPool(this.PIPELINE_POOL_NAME, {
             maxWorkers,
             taskTimeout,
-            retryAttempts,
-            queueSize,
-            idleTimeout,
+        });
+        this.logger.log('[PIPELINE-WORKER] Pipeline worker pool initialized successfully', {
+            poolName: this.PIPELINE_POOL_NAME,
+            maxWorkers,
+            configuration: {
+                taskTimeoutMin: Math.round(taskTimeout / 60000)
+            }
         });
         this.logger.log(`Initialized pipeline worker pool with ${maxWorkers} workers`);
-    }
-    getPipelinePriority(pipelineType) {
-        switch (pipelineType.toUpperCase()) {
-            case 'WEBHOOK':
-                return 10;
-            case 'INCREMENTAL':
-                return 8;
-            case 'FULL':
-                return 5;
-            case 'DOCUMENT':
-                return 6;
-            case 'ANALYSIS':
-                return 3;
-            default:
-                return 5;
-        }
     }
     getPipelineTimeout(pipelineType) {
         const baseTimeout = this.configService.get('PIPELINE_TASK_TIMEOUT', 1800000);
@@ -5295,17 +6891,6 @@ let PipelineWorkerService = PipelineWorkerService_1 = class PipelineWorkerServic
                 return baseTimeout;
         }
     }
-    getActivePipelines() {
-        const pool = this.workerPoolService.getPool(this.PIPELINE_POOL_NAME);
-        if (!pool)
-            return [];
-        const stats = pool.getStats();
-        return Array.from({ length: stats.activeWorkers }, (_, i) => `active-pipeline-${i}`);
-    }
-    isPipelineActive(_pipelineId) {
-        const pool = this.workerPoolService.getPool(this.PIPELINE_POOL_NAME);
-        return pool ? pool.getStats().activeWorkers > 0 : false;
-    }
     getQueuePosition(_pipelineId) {
         return null;
     }
@@ -5315,20 +6900,21 @@ let PipelineWorkerService = PipelineWorkerService_1 = class PipelineWorkerServic
     }
 };
 exports.PipelineWorkerService = PipelineWorkerService;
-exports.PipelineWorkerService = PipelineWorkerService = PipelineWorkerService_1 = __decorate([
+exports.PipelineWorkerService = PipelineWorkerService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [typeof (_a = typeof worker_pool_service_1.WorkerPoolService !== "undefined" && worker_pool_service_1.WorkerPoolService) === "function" ? _a : Object, typeof (_b = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _b : Object])
+    __param(2, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof worker_pool_service_1.WorkerPoolService !== "undefined" && worker_pool_service_1.WorkerPoolService) === "function" ? _a : Object, typeof (_b = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _b : Object, typeof (_c = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _c : Object])
 ], PipelineWorkerService);
 
 
 /***/ }),
-/* 59 */
+/* 68 */
 /***/ ((module) => {
 
 module.exports = require("os");
 
 /***/ }),
-/* 60 */
+/* 69 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -5344,621 +6930,45 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var DocsBucketController_1, DocumentController_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.DocumentController = exports.DocsBucketController = void 0;
-const common_1 = __webpack_require__(2);
-const platform_express_1 = __webpack_require__(61);
-const document_service_1 = __webpack_require__(36);
-const dto_1 = __webpack_require__(38);
-let DocsBucketController = DocsBucketController_1 = class DocsBucketController {
-    constructor(documentService) {
-        this.documentService = documentService;
-        this.logger = new common_1.Logger(DocsBucketController_1.name);
-    }
-    async createDocsBucket(createDto) {
-        this.logger.log(`Creating docs bucket: ${createDto.name} for project: ${createDto.projectId}`);
-        const bucket = await this.documentService.createBucket(createDto);
-        return {
-            success: true,
-            data: bucket,
-            message: 'Docs bucket created successfully',
-        };
-    }
-    async listDocsBuckets(projectId) {
-        if (!projectId) {
-            throw new Error('projectId query parameter is required');
-        }
-        const buckets = await this.documentService.findBucketsByProjectId(projectId);
-        return {
-            success: true,
-            data: buckets,
-        };
-    }
-    async getDocsBucket(id) {
-        const bucket = await this.documentService.findBucketById(id);
-        return {
-            success: true,
-            data: bucket,
-        };
-    }
-    async updateDocsBucket(id, updateDto) {
-        const bucket = await this.documentService.updateBucket(id, updateDto);
-        return {
-            success: true,
-            data: bucket,
-            message: 'Docs bucket updated successfully',
-        };
-    }
-    async deleteDocsBucket(id) {
-        await this.documentService.deleteBucket(id);
-        this.logger.log(`Docs bucket deleted: ${id}`);
-    }
-};
-exports.DocsBucketController = DocsBucketController;
-__decorate([
-    (0, common_1.Post)(),
-    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [typeof (_b = typeof dto_1.CreateDocsBucketDto !== "undefined" && dto_1.CreateDocsBucketDto) === "function" ? _b : Object]),
-    __metadata("design:returntype", typeof (_c = typeof Promise !== "undefined" && Promise) === "function" ? _c : Object)
-], DocsBucketController.prototype, "createDocsBucket", null);
-__decorate([
-    (0, common_1.Get)(),
-    __param(0, (0, common_1.Query)('projectId')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", typeof (_d = typeof Promise !== "undefined" && Promise) === "function" ? _d : Object)
-], DocsBucketController.prototype, "listDocsBuckets", null);
-__decorate([
-    (0, common_1.Get)(':id'),
-    __param(0, (0, common_1.Param)('id')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", typeof (_e = typeof Promise !== "undefined" && Promise) === "function" ? _e : Object)
-], DocsBucketController.prototype, "getDocsBucket", null);
-__decorate([
-    (0, common_1.Put)(':id'),
-    __param(0, (0, common_1.Param)('id')),
-    __param(1, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, typeof (_f = typeof dto_1.UpdateDocsBucketDto !== "undefined" && dto_1.UpdateDocsBucketDto) === "function" ? _f : Object]),
-    __metadata("design:returntype", typeof (_g = typeof Promise !== "undefined" && Promise) === "function" ? _g : Object)
-], DocsBucketController.prototype, "updateDocsBucket", null);
-__decorate([
-    (0, common_1.Delete)(':id'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
-    __param(0, (0, common_1.Param)('id')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", typeof (_h = typeof Promise !== "undefined" && Promise) === "function" ? _h : Object)
-], DocsBucketController.prototype, "deleteDocsBucket", null);
-exports.DocsBucketController = DocsBucketController = DocsBucketController_1 = __decorate([
-    (0, common_1.Controller)('docsbuckets'),
-    __metadata("design:paramtypes", [typeof (_a = typeof document_service_1.DocumentService !== "undefined" && document_service_1.DocumentService) === "function" ? _a : Object])
-], DocsBucketController);
-let DocumentController = DocumentController_1 = class DocumentController {
-    constructor(documentService) {
-        this.documentService = documentService;
-        this.logger = new common_1.Logger(DocumentController_1.name);
-    }
-    async uploadDocument(file, uploadDto) {
-        this.logger.log(`Uploading document: ${uploadDto.title} to bucket: ${uploadDto.bucketId}`);
-        const document = await this.documentService.uploadDocument(file, uploadDto);
-        return {
-            success: true,
-            data: document,
-            message: 'Document uploaded successfully',
-        };
-    }
-    async listDocuments(bucketId, page, perPage) {
-        if (!bucketId) {
-            throw new Error('bucketId query parameter is required');
-        }
-        const options = {
-            page: page || 1,
-            perPage: perPage || 20,
-        };
-        const result = await this.documentService.findDocumentsByBucketId(bucketId, options);
-        return {
-            success: true,
-            data: result,
-        };
-    }
-    async getDocument(id) {
-        const document = await this.documentService.findDocumentById(id);
-        return {
-            success: true,
-            data: document,
-        };
-    }
-    async deleteDocument(id) {
-        await this.documentService.deleteDocument(id);
-        this.logger.log(`Document deleted: ${id}`);
-    }
-};
-exports.DocumentController = DocumentController;
-__decorate([
-    (0, common_1.Post)('upload'),
-    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
-    (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
-    __param(0, (0, common_1.UploadedFile)()),
-    __param(1, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, typeof (_k = typeof dto_1.UploadDocumentDto !== "undefined" && dto_1.UploadDocumentDto) === "function" ? _k : Object]),
-    __metadata("design:returntype", typeof (_l = typeof Promise !== "undefined" && Promise) === "function" ? _l : Object)
-], DocumentController.prototype, "uploadDocument", null);
-__decorate([
-    (0, common_1.Get)(),
-    __param(0, (0, common_1.Query)('bucketId')),
-    __param(1, (0, common_1.Query)('page')),
-    __param(2, (0, common_1.Query)('perPage')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number, Number]),
-    __metadata("design:returntype", typeof (_m = typeof Promise !== "undefined" && Promise) === "function" ? _m : Object)
-], DocumentController.prototype, "listDocuments", null);
-__decorate([
-    (0, common_1.Get)(':id'),
-    __param(0, (0, common_1.Param)('id')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", typeof (_o = typeof Promise !== "undefined" && Promise) === "function" ? _o : Object)
-], DocumentController.prototype, "getDocument", null);
-__decorate([
-    (0, common_1.Delete)(':id'),
-    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
-    __param(0, (0, common_1.Param)('id')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", typeof (_p = typeof Promise !== "undefined" && Promise) === "function" ? _p : Object)
-], DocumentController.prototype, "deleteDocument", null);
-exports.DocumentController = DocumentController = DocumentController_1 = __decorate([
-    (0, common_1.Controller)('documents'),
-    __metadata("design:paramtypes", [typeof (_j = typeof document_service_1.DocumentService !== "undefined" && document_service_1.DocumentService) === "function" ? _j : Object])
-], DocumentController);
-
-
-/***/ }),
-/* 61 */
-/***/ ((module) => {
-
-module.exports = require("@nestjs/platform-express");
-
-/***/ }),
-/* 62 */
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.GitlabModule = void 0;
-const common_1 = __webpack_require__(2);
-const config_1 = __webpack_require__(4);
-const typeorm_1 = __webpack_require__(10);
-const gitlab_service_1 = __webpack_require__(34);
-const git_client_service_1 = __webpack_require__(50);
-const gitlab_webhook_service_1 = __webpack_require__(63);
-const entities_1 = __webpack_require__(11);
-const indexing_module_1 = __webpack_require__(64);
-let GitlabModule = class GitlabModule {
-};
-exports.GitlabModule = GitlabModule;
-exports.GitlabModule = GitlabModule = __decorate([
-    (0, common_1.Module)({
-        imports: [
-            config_1.ConfigModule,
-            typeorm_1.TypeOrmModule.forFeature([entities_1.Codebase]),
-            indexing_module_1.IndexingModule,
-        ],
-        providers: [
-            gitlab_service_1.GitlabService,
-            git_client_service_1.GitClientService,
-            gitlab_webhook_service_1.GitLabWebhookService,
-        ],
-        exports: [
-            gitlab_service_1.GitlabService,
-            git_client_service_1.GitClientService,
-            gitlab_webhook_service_1.GitLabWebhookService,
-        ],
-    })
-], GitlabModule);
-
-
-/***/ }),
-/* 63 */
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
-var __param = (this && this.__param) || function (paramIndex, decorator) {
-    return function (target, key) { decorator(target, key, paramIndex); }
-};
-var GitLabWebhookService_1;
 var _a, _b, _c;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.GitLabWebhookService = void 0;
-const common_1 = __webpack_require__(2);
-const typeorm_1 = __webpack_require__(10);
-const typeorm_2 = __webpack_require__(13);
-const config_1 = __webpack_require__(4);
-const entities_1 = __webpack_require__(11);
-const pipeline_orchestrator_service_1 = __webpack_require__(47);
-const index_pipeline_entity_1 = __webpack_require__(18);
-const crypto = __webpack_require__(24);
-let GitLabWebhookService = GitLabWebhookService_1 = class GitLabWebhookService {
-    constructor(codebaseRepository, pipelineOrchestrator, configService) {
-        this.codebaseRepository = codebaseRepository;
-        this.pipelineOrchestrator = pipelineOrchestrator;
-        this.configService = configService;
-        this.logger = new common_1.Logger(GitLabWebhookService_1.name);
-    }
-    async processWebhook(payload, signature, codebaseId) {
-        this.logger.log(`Processing GitLab webhook: ${payload.object_kind} for project ${payload.project_id}`);
-        try {
-            const codebases = await this.findMatchingCodebases(payload, codebaseId);
-            if (codebases.length === 0) {
-                return {
-                    processed: false,
-                    reason: 'No matching codebases found for webhook',
-                };
-            }
-            const results = [];
-            for (const codebase of codebases) {
-                if (codebase.webhookSecret && signature) {
-                    const isValid = await this.verifyWebhookSignature(JSON.stringify(payload), signature, codebase.webhookSecret);
-                    if (!isValid) {
-                        this.logger.warn(`Invalid webhook signature for codebase ${codebase.id}`);
-                        results.push({
-                            processed: false,
-                            reason: 'Invalid webhook signature',
-                        });
-                        continue;
-                    }
-                }
-                if (codebase.syncMode !== entities_1.SyncMode.WEBHOOK && codebase.syncMode !== entities_1.SyncMode.AUTO) {
-                    this.logger.log(`Codebase ${codebase.id} not configured for webhook sync`);
-                    results.push({
-                        processed: false,
-                        reason: 'Codebase not configured for webhook sync',
-                    });
-                    continue;
-                }
-                const result = await this.processWebhookEvent(payload, codebase);
-                results.push(result);
-            }
-            const successfulResult = results.find(r => r.processed);
-            return successfulResult || results[results.length - 1];
-        }
-        catch (error) {
-            this.logger.error('Failed to process GitLab webhook:', error);
-            return {
-                processed: false,
-                error: error.message,
-            };
-        }
-    }
-    async processWebhookEvent(payload, codebase) {
-        switch (payload.object_kind) {
-            case 'push':
-                return this.processPushEvent(payload, codebase);
-            case 'merge_request':
-                return this.processMergeRequestEvent(payload, codebase);
-            case 'tag_push':
-                return this.processTagPushEvent(payload, codebase);
-            default:
-                this.logger.log(`Unsupported webhook event type: ${payload.object_kind}`);
-                return {
-                    processed: false,
-                    reason: `Unsupported webhook event type: ${payload.object_kind}`,
-                };
-        }
-    }
-    async processPushEvent(payload, codebase) {
-        const branchName = payload.ref.replace('refs/heads/', '');
-        if (branchName !== codebase.branch) {
-            this.logger.log(`Push to non-tracked branch ${branchName}, ignoring`);
-            return {
-                processed: false,
-                reason: `Push to non-tracked branch: ${branchName}`,
-            };
-        }
-        if (payload.after === '0000000000000000000000000000000000000000') {
-            this.logger.log('Branch deletion detected, ignoring');
-            return {
-                processed: false,
-                reason: 'Branch deletion event',
-            };
-        }
-        if (payload.total_commits_count === 0) {
-            this.logger.log('No commits in push event, ignoring');
-            return {
-                processed: false,
-                reason: 'No commits in push event',
-            };
-        }
-        const pipeline = await this.pipelineOrchestrator.createPipeline({
-            projectId: codebase.project.id,
-            codebaseId: codebase.id,
-            type: index_pipeline_entity_1.IndexPipelineType.INCREMENTAL,
-            baseCommit: payload.before !== '0000000000000000000000000000000000000000' ? payload.before : undefined,
-            targetCommit: payload.after,
-            priority: 2,
-            description: `Webhook push: ${payload.commits.length} commits`,
-        });
-        this.logger.log(`Created webhook pipeline ${pipeline.id} for codebase ${codebase.id}`);
-        return {
-            processed: true,
-            pipelineId: pipeline.id,
-        };
-    }
-    async processMergeRequestEvent(payload, codebase) {
-        if (payload.object_attributes?.state !== 'merged') {
-            return {
-                processed: false,
-                reason: 'Merge request not merged',
-            };
-        }
-        const targetBranch = payload.object_attributes?.target_branch;
-        if (targetBranch !== codebase.branch) {
-            return {
-                processed: false,
-                reason: `Merge request target branch ${targetBranch} does not match tracked branch`,
-            };
-        }
-        const pipeline = await this.pipelineOrchestrator.createPipeline({
-            projectId: codebase.project.id,
-            codebaseId: codebase.id,
-            type: index_pipeline_entity_1.IndexPipelineType.INCREMENTAL,
-            priority: 2,
-            description: `Merge request webhook`,
-        });
-        this.logger.log(`Created merge request pipeline ${pipeline.id} for codebase ${codebase.id}`);
-        return {
-            processed: true,
-            pipelineId: pipeline.id,
-        };
-    }
-    async processTagPushEvent(payload, codebase) {
-        if (payload.after === '0000000000000000000000000000000000000000') {
-            return {
-                processed: false,
-                reason: 'Tag deletion event',
-            };
-        }
-        const tagName = payload.ref.replace('refs/tags/', '');
-        const versionTagPattern = /^v?\d+\.\d+\.\d+/;
-        if (!versionTagPattern.test(tagName)) {
-            return {
-                processed: false,
-                reason: `Tag ${tagName} does not match version pattern`,
-            };
-        }
-        const pipeline = await this.pipelineOrchestrator.createPipeline({
-            projectId: codebase.project.id,
-            codebaseId: codebase.id,
-            type: index_pipeline_entity_1.IndexPipelineType.FULL,
-            priority: 1,
-            description: `Tag webhook: ${tagName}`,
-        });
-        this.logger.log(`Created tag pipeline ${pipeline.id} for codebase ${codebase.id} (tag: ${tagName})`);
-        return {
-            processed: true,
-            pipelineId: pipeline.id,
-        };
-    }
-    async findMatchingCodebases(payload, codebaseId) {
-        if (codebaseId) {
-            const codebase = await this.codebaseRepository.findOne({
-                where: { id: codebaseId },
-            });
-            return codebase ? [codebase] : [];
-        }
-        const codebases = await this.codebaseRepository.find({
-            where: [
-                { gitlabProjectId: payload.project_id },
-                { gitlabUrl: payload.project.web_url },
-                { gitlabUrl: payload.project.http_url },
-                { gitlabUrl: payload.project.git_http_url },
-                { gitlabUrl: payload.project.git_ssh_url },
-            ],
-        });
-        return codebases;
-    }
-    async verifyWebhookSignature(payload, signature, secret) {
-        try {
-            if (signature.startsWith('sha256=')) {
-                const expectedSignature = crypto
-                    .createHmac('sha256', secret)
-                    .update(payload)
-                    .digest('hex');
-                const receivedSignature = signature.replace('sha256=', '');
-                return crypto.timingSafeEqual(Buffer.from(expectedSignature, 'hex'), Buffer.from(receivedSignature, 'hex'));
-            }
-            else {
-                return signature === secret;
-            }
-        }
-        catch (error) {
-            this.logger.error('Failed to verify webhook signature:', error);
-            return false;
-        }
-    }
-    generateWebhookSecret() {
-        return crypto.randomBytes(32).toString('hex');
-    }
-    getWebhookUrl(codebaseId) {
-        const baseUrl = this.configService.get('APP_BASE_URL', 'http://localhost:3000');
-        return `${baseUrl}/api/v1/gitlab/webhook/${codebaseId}`;
-    }
-    getWebhookConfig(codebaseId, secret) {
-        return {
-            url: this.getWebhookUrl(codebaseId),
-            push_events: true,
-            issues_events: false,
-            merge_requests_events: true,
-            tag_push_events: true,
-            note_events: false,
-            job_events: false,
-            pipeline_events: false,
-            wiki_page_events: false,
-            deployment_events: false,
-            releases_events: false,
-            subgroup_events: false,
-            enable_ssl_verification: true,
-            token: secret,
-            push_events_branch_filter: '',
-        };
-    }
-    async testWebhook(codebaseId) {
-        try {
-            const codebase = await this.codebaseRepository.findOne({
-                where: { id: codebaseId },
-            });
-            if (!codebase) {
-                throw new Error(`Codebase ${codebaseId} not found`);
-            }
-            const testPayload = {
-                object_kind: 'push',
-                event_name: 'push',
-                before: '0000000000000000000000000000000000000000',
-                after: 'test123456789',
-                ref: `refs/heads/${codebase.branch}`,
-                project_id: codebase.gitlabProjectId || 0,
-                total_commits_count: 0,
-                project: {
-                    id: codebase.gitlabProjectId || 0,
-                    name: codebase.name,
-                    web_url: codebase.gitlabUrl,
-                    git_http_url: codebase.gitlabUrl,
-                },
-                commits: [],
-            };
-            const result = await this.processWebhook(testPayload);
-            this.logger.log(`Webhook test for codebase ${codebaseId}: ${result.processed ? 'SUCCESS' : 'FAILED'}`);
-            return result.processed;
-        }
-        catch (error) {
-            this.logger.error(`Webhook test failed for codebase ${codebaseId}:`, error);
-            return false;
-        }
-    }
-};
-exports.GitLabWebhookService = GitLabWebhookService;
-exports.GitLabWebhookService = GitLabWebhookService = GitLabWebhookService_1 = __decorate([
-    (0, common_1.Injectable)(),
-    __param(0, (0, typeorm_1.InjectRepository)(entities_1.Codebase)),
-    __metadata("design:paramtypes", [typeof (_a = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _a : Object, typeof (_b = typeof pipeline_orchestrator_service_1.PipelineOrchestratorService !== "undefined" && pipeline_orchestrator_service_1.PipelineOrchestratorService) === "function" ? _b : Object, typeof (_c = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _c : Object])
-], GitLabWebhookService);
-
-
-/***/ }),
-/* 64 */
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.IndexingModule = void 0;
-const common_1 = __webpack_require__(2);
-const typeorm_1 = __webpack_require__(10);
-const entities_1 = __webpack_require__(11);
-const index_pipeline_entity_1 = __webpack_require__(18);
-const pipeline_orchestrator_service_1 = __webpack_require__(47);
-const pipeline_worker_service_1 = __webpack_require__(58);
-const pipeline_config_service_1 = __webpack_require__(57);
-const git_sync_task_1 = __webpack_require__(48);
-const code_parsing_task_1 = __webpack_require__(53);
-const graph_update_task_1 = __webpack_require__(55);
-const cleanup_task_1 = __webpack_require__(56);
-const indexing_controller_1 = __webpack_require__(65);
-const worker_pool_service_1 = __webpack_require__(26);
-const gitlab_module_1 = __webpack_require__(62);
-let IndexingModule = class IndexingModule {
-};
-exports.IndexingModule = IndexingModule;
-exports.IndexingModule = IndexingModule = __decorate([
-    (0, common_1.Module)({
-        imports: [
-            typeorm_1.TypeOrmModule.forFeature([
-                entities_1.TekProject,
-                entities_1.Codebase,
-                entities_1.CodeSymbol,
-                index_pipeline_entity_1.IndexPipeline,
-            ]),
-            gitlab_module_1.GitlabModule,
-        ],
-        controllers: [indexing_controller_1.IndexingController],
-        providers: [
-            pipeline_orchestrator_service_1.PipelineOrchestratorService,
-            pipeline_worker_service_1.PipelineWorkerService,
-            pipeline_config_service_1.PipelineConfigService,
-            worker_pool_service_1.WorkerPoolService,
-            git_sync_task_1.GitSyncTask,
-            code_parsing_task_1.CodeParsingTask,
-            graph_update_task_1.GraphUpdateTask,
-            cleanup_task_1.CleanupTask,
-        ],
-        exports: [
-            pipeline_orchestrator_service_1.PipelineOrchestratorService,
-            pipeline_worker_service_1.PipelineWorkerService,
-            pipeline_config_service_1.PipelineConfigService,
-        ],
-    })
-], IndexingModule);
-
-
-/***/ }),
-/* 65 */
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
-var __param = (this && this.__param) || function (paramIndex, decorator) {
-    return function (target, key) { decorator(target, key, paramIndex); }
-};
-var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.IndexingController = exports.CreatePipelineDto = void 0;
 const common_1 = __webpack_require__(2);
+const nest_winston_1 = __webpack_require__(5);
 const swagger_1 = __webpack_require__(3);
-const pipeline_orchestrator_service_1 = __webpack_require__(47);
+const pipeline_orchestrator_service_1 = __webpack_require__(59);
 const index_pipeline_entity_1 = __webpack_require__(18);
+const typeorm_1 = __webpack_require__(10);
+const typeorm_2 = __webpack_require__(13);
+const entities_1 = __webpack_require__(11);
 class CreatePipelineDto {
 }
 exports.CreatePipelineDto = CreatePipelineDto;
 let IndexingController = class IndexingController {
-    constructor(pipelineOrchestrator) {
+    constructor(pipelineOrchestrator, codebaseRepository, logger) {
         this.pipelineOrchestrator = pipelineOrchestrator;
+        this.codebaseRepository = codebaseRepository;
+        this.logger = logger;
     }
     async createPipeline(dto) {
+        this.logger.log(`[CREATE-PIPELINE] Creating new indexing pipeline`, {
+            projectId: dto.projectId,
+            codebaseId: dto.codebaseId,
+            type: dto.type,
+            description: dto.description
+        });
+        this.logger.debug(`[CREATE-PIPELINE] Full request details`, {
+            dto: {
+                projectId: dto.projectId,
+                codebaseId: dto.codebaseId,
+                type: dto.type,
+                description: dto.description,
+                baseCommit: dto.baseCommit,
+                targetCommit: dto.targetCommit,
+                priority: dto.priority,
+                hasCustomConfiguration: !!dto.customConfiguration
+            }
+        });
         try {
             const request = {
                 projectId: dto.projectId,
@@ -5970,7 +6980,14 @@ let IndexingController = class IndexingController {
                 priority: dto.priority,
                 customConfiguration: dto.customConfiguration,
             };
+            this.logger.debug(`[CREATE-PIPELINE] Calling pipeline orchestrator with request`);
             const job = await this.pipelineOrchestrator.createPipeline(request);
+            this.logger.log(`[CREATE-PIPELINE] Pipeline created successfully`, {
+                pipelineId: job.id,
+                type: job.type,
+                status: job.status,
+                createdAt: job.createdAt
+            });
             return {
                 success: true,
                 data: {
@@ -5983,15 +7000,37 @@ let IndexingController = class IndexingController {
             };
         }
         catch (error) {
-            if (error.message.includes('not found')) {
-                throw new common_1.NotFoundException(error.message);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[CREATE-PIPELINE] Failed to create pipeline`, {
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined,
+                projectId: dto.projectId,
+                codebaseId: dto.codebaseId,
+                type: dto.type
+            });
+            if (errorMessage.includes('not found')) {
+                throw new common_1.NotFoundException(errorMessage);
             }
-            throw new common_1.BadRequestException(error.message);
+            throw new common_1.BadRequestException(errorMessage);
         }
     }
     async getPipelineStatus(pipelineId) {
+        this.logger.debug(`[GET-PIPELINE-STATUS] Retrieving pipeline status`, {
+            pipelineId
+        });
         try {
             const job = await this.pipelineOrchestrator.getPipelineStatus(pipelineId);
+            this.logger.debug(`[GET-PIPELINE-STATUS] Pipeline status retrieved successfully`, {
+                pipelineId: job.id,
+                type: job.type,
+                status: job.status,
+                progress: job.progress || 0,
+                currentStep: job.currentStep,
+                hasError: !!job.error,
+                startedAt: job.startedAt,
+                completedAt: job.completedAt,
+                stepsCount: Object.keys(job.metadata?.steps || {}).length
+            });
             return {
                 success: true,
                 data: {
@@ -6008,78 +7047,185 @@ let IndexingController = class IndexingController {
             };
         }
         catch (error) {
-            if (error.message.includes('not found')) {
-                throw new common_1.NotFoundException(error.message);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[GET-PIPELINE-STATUS] Failed to retrieve pipeline status`, {
+                pipelineId,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            if (errorMessage.includes('not found')) {
+                throw new common_1.NotFoundException(errorMessage);
             }
-            throw new common_1.BadRequestException(error.message);
+            throw new common_1.BadRequestException(errorMessage);
         }
     }
     async cancelPipeline(pipelineId) {
+        this.logger.log(`[CANCEL-PIPELINE] Cancelling pipeline`, {
+            pipelineId
+        });
         try {
             await this.pipelineOrchestrator.cancelPipeline(pipelineId);
+            this.logger.log(`[CANCEL-PIPELINE] Pipeline cancelled successfully`, {
+                pipelineId
+            });
             return {
                 success: true,
                 message: 'Pipeline cancelled successfully',
             };
         }
         catch (error) {
-            if (error.message.includes('not found')) {
-                throw new common_1.NotFoundException(error.message);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[CANCEL-PIPELINE] Failed to cancel pipeline`, {
+                pipelineId,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            if (errorMessage.includes('not found')) {
+                throw new common_1.NotFoundException(errorMessage);
             }
-            throw new common_1.BadRequestException(error.message);
+            throw new common_1.BadRequestException(errorMessage);
         }
     }
     async startFullIndexing(codebaseId, description) {
-        const request = {
-            projectId: '',
-            codebaseId,
-            type: index_pipeline_entity_1.IndexPipelineType.FULL,
-            description: description || 'Full codebase indexing',
-        };
-        const job = await this.pipelineOrchestrator.createPipeline(request);
-        return {
-            success: true,
-            data: {
-                pipelineId: job.id,
-                status: job.status,
-            },
-            message: 'Full indexing started successfully',
-        };
+        this.logger.log(`[FULL-INDEX] Starting full indexing for codebase: ${codebaseId}`);
+        this.logger.debug(`[FULL-INDEX] Request params: { codebaseId: "${codebaseId}", description: "${description}" }`);
+        try {
+            this.logger.log(`[FULL-INDEX] Looking up codebase: ${codebaseId}`);
+            const codebase = await this.codebaseRepository.findOne({
+                where: { id: codebaseId },
+                relations: ['project'],
+            });
+            if (!codebase) {
+                this.logger.error(`[FULL-INDEX] Codebase not found: ${codebaseId}`);
+                throw new common_1.NotFoundException(`Codebase ${codebaseId} not found`);
+            }
+            this.logger.log(`[FULL-INDEX] Codebase found: ${codebase.name} (Project: ${codebase.project.id})`);
+            this.logger.debug(`[FULL-INDEX] Codebase details: { id: "${codebase.id}", name: "${codebase.name}", projectId: "${codebase.project.id}", gitlabUrl: "${codebase.gitlabUrl}" }`);
+            const request = {
+                projectId: codebase.project.id,
+                codebaseId,
+                type: index_pipeline_entity_1.IndexPipelineType.FULL,
+                description: description || 'Full codebase indexing',
+            };
+            this.logger.log(`[FULL-INDEX] Creating pipeline request:`);
+            this.logger.debug(`[FULL-INDEX] Pipeline request: ${JSON.stringify(request, null, 2)}`);
+            const job = await this.pipelineOrchestrator.createPipeline(request);
+            this.logger.log(`[FULL-INDEX] Pipeline created successfully: ${job.id}`);
+            this.logger.debug(`[FULL-INDEX] Pipeline details: { id: "${job.id}", type: "${job.type}", status: "${job.status}", createdAt: "${job.createdAt}" }`);
+            return {
+                success: true,
+                data: {
+                    pipelineId: job.id,
+                    status: job.status,
+                    codebaseId: codebase.id,
+                    codebaseName: codebase.name,
+                    projectId: codebase.project.id,
+                },
+                message: 'Full indexing started successfully',
+            };
+        }
+        catch (error) {
+            this.logger.error(`[FULL-INDEX] Error starting full indexing for codebase ${codebaseId}:`, error);
+            if (error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(`Failed to start full indexing: ${error.message}`);
+        }
     }
     async startIncrementalUpdate(codebaseId, baseCommit, targetCommit) {
-        const request = {
-            projectId: '',
+        this.logger.log(`[INCREMENTAL-UPDATE] Starting incremental update for codebase`, {
             codebaseId,
-            type: index_pipeline_entity_1.IndexPipelineType.INCREMENTAL,
             baseCommit,
-            targetCommit,
-            description: 'Incremental codebase update',
-        };
-        const job = await this.pipelineOrchestrator.createPipeline(request);
-        return {
-            success: true,
-            data: {
+            targetCommit
+        });
+        try {
+            const request = {
+                projectId: '',
+                codebaseId,
+                type: index_pipeline_entity_1.IndexPipelineType.INCREMENTAL,
+                baseCommit,
+                targetCommit,
+                description: 'Incremental codebase update',
+            };
+            this.logger.debug(`[INCREMENTAL-UPDATE] Creating incremental pipeline request`, {
+                request: {
+                    codebaseId: request.codebaseId,
+                    type: request.type,
+                    baseCommit: request.baseCommit,
+                    targetCommit: request.targetCommit,
+                    description: request.description
+                }
+            });
+            const job = await this.pipelineOrchestrator.createPipeline(request);
+            this.logger.log(`[INCREMENTAL-UPDATE] Incremental update pipeline created successfully`, {
                 pipelineId: job.id,
                 status: job.status,
-            },
-            message: 'Incremental update started successfully',
-        };
+                codebaseId
+            });
+            return {
+                success: true,
+                data: {
+                    pipelineId: job.id,
+                    status: job.status,
+                },
+                message: 'Incremental update started successfully',
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[INCREMENTAL-UPDATE] Failed to start incremental update`, {
+                codebaseId,
+                baseCommit,
+                targetCommit,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            throw new common_1.BadRequestException(`Failed to start incremental update: ${errorMessage}`);
+        }
     }
     async startDependencyAnalysis(projectId, description) {
-        const request = {
+        this.logger.log(`[DEPENDENCY-ANALYSIS] Starting dependency analysis for project`, {
             projectId,
-            type: index_pipeline_entity_1.IndexPipelineType.ANALYSIS,
-            description: description || 'Project dependency analysis',
-        };
-        const job = await this.pipelineOrchestrator.createPipeline(request);
-        return {
-            success: true,
-            data: {
+            description
+        });
+        try {
+            const request = {
+                projectId,
+                type: index_pipeline_entity_1.IndexPipelineType.ANALYSIS,
+                description: description || 'Project dependency analysis',
+            };
+            this.logger.debug(`[DEPENDENCY-ANALYSIS] Creating dependency analysis pipeline request`, {
+                request: {
+                    projectId: request.projectId,
+                    type: request.type,
+                    description: request.description
+                }
+            });
+            const job = await this.pipelineOrchestrator.createPipeline(request);
+            this.logger.log(`[DEPENDENCY-ANALYSIS] Dependency analysis pipeline created successfully`, {
                 pipelineId: job.id,
                 status: job.status,
-            },
-            message: 'Dependency analysis started successfully',
-        };
+                projectId
+            });
+            return {
+                success: true,
+                data: {
+                    pipelineId: job.id,
+                    status: job.status,
+                },
+                message: 'Dependency analysis started successfully',
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[DEPENDENCY-ANALYSIS] Failed to start dependency analysis`, {
+                projectId,
+                description,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            throw new common_1.BadRequestException(`Failed to start dependency analysis: ${errorMessage}`);
+        }
     }
 };
 exports.IndexingController = IndexingController;
@@ -6154,119 +7300,10 @@ __decorate([
 exports.IndexingController = IndexingController = __decorate([
     (0, swagger_1.ApiTags)('Indexing'),
     (0, common_1.Controller)('indexing'),
-    __metadata("design:paramtypes", [typeof (_a = typeof pipeline_orchestrator_service_1.PipelineOrchestratorService !== "undefined" && pipeline_orchestrator_service_1.PipelineOrchestratorService) === "function" ? _a : Object])
+    __param(1, (0, typeorm_1.InjectRepository)(entities_1.Codebase)),
+    __param(2, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof pipeline_orchestrator_service_1.PipelineOrchestratorService !== "undefined" && pipeline_orchestrator_service_1.PipelineOrchestratorService) === "function" ? _a : Object, typeof (_b = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _b : Object, typeof (_c = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _c : Object])
 ], IndexingController);
-
-
-/***/ }),
-/* 66 */
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.SyncModule = void 0;
-const common_1 = __webpack_require__(2);
-const config_1 = __webpack_require__(4);
-const indexing_module_1 = __webpack_require__(64);
-let SyncModule = class SyncModule {
-};
-exports.SyncModule = SyncModule;
-exports.SyncModule = SyncModule = __decorate([
-    (0, common_1.Module)({
-        imports: [
-            config_1.ConfigModule,
-            indexing_module_1.IndexingModule,
-        ],
-        exports: [
-            indexing_module_1.IndexingModule,
-        ],
-    })
-], SyncModule);
-
-
-/***/ }),
-/* 67 */
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.HealthModule = void 0;
-const common_1 = __webpack_require__(2);
-const terminus_1 = __webpack_require__(68);
-const health_controller_1 = __webpack_require__(69);
-let HealthModule = class HealthModule {
-};
-exports.HealthModule = HealthModule;
-exports.HealthModule = HealthModule = __decorate([
-    (0, common_1.Module)({
-        imports: [terminus_1.TerminusModule],
-        controllers: [health_controller_1.HealthController],
-    })
-], HealthModule);
-
-
-/***/ }),
-/* 68 */
-/***/ ((module) => {
-
-module.exports = require("@nestjs/terminus");
-
-/***/ }),
-/* 69 */
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
-var _a, _b, _c;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.HealthController = void 0;
-const common_1 = __webpack_require__(2);
-const terminus_1 = __webpack_require__(68);
-let HealthController = class HealthController {
-    constructor(health, db, memory) {
-        this.health = health;
-        this.db = db;
-        this.memory = memory;
-    }
-    check() {
-        return this.health.check([
-            () => this.db.pingCheck('database'),
-            () => this.memory.checkHeap('memory_heap', 150 * 1024 * 1024),
-        ]);
-    }
-};
-exports.HealthController = HealthController;
-__decorate([
-    (0, common_1.Get)(),
-    (0, terminus_1.HealthCheck)(),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", void 0)
-], HealthController.prototype, "check", null);
-exports.HealthController = HealthController = __decorate([
-    (0, common_1.Controller)('health'),
-    __metadata("design:paramtypes", [typeof (_a = typeof terminus_1.HealthCheckService !== "undefined" && terminus_1.HealthCheckService) === "function" ? _a : Object, typeof (_b = typeof terminus_1.TypeOrmHealthIndicator !== "undefined" && terminus_1.TypeOrmHealthIndicator) === "function" ? _b : Object, typeof (_c = typeof terminus_1.MemoryHealthIndicator !== "undefined" && terminus_1.MemoryHealthIndicator) === "function" ? _c : Object])
-], HealthController);
 
 
 /***/ }),
@@ -6281,23 +7318,29 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.WebSocketModule = void 0;
+exports.HealthModule = void 0;
 const common_1 = __webpack_require__(2);
-const sync_gateway_1 = __webpack_require__(71);
-const websocket_service_1 = __webpack_require__(74);
-let WebSocketModule = class WebSocketModule {
+const terminus_1 = __webpack_require__(71);
+const health_controller_1 = __webpack_require__(72);
+let HealthModule = class HealthModule {
 };
-exports.WebSocketModule = WebSocketModule;
-exports.WebSocketModule = WebSocketModule = __decorate([
+exports.HealthModule = HealthModule;
+exports.HealthModule = HealthModule = __decorate([
     (0, common_1.Module)({
-        providers: [sync_gateway_1.SyncGateway, websocket_service_1.WebSocketService],
-        exports: [websocket_service_1.WebSocketService],
+        imports: [terminus_1.TerminusModule],
+        controllers: [health_controller_1.HealthController],
     })
-], WebSocketModule);
+], HealthModule);
 
 
 /***/ }),
 /* 71 */
+/***/ ((module) => {
+
+module.exports = require("@nestjs/terminus");
+
+/***/ }),
+/* 72 */
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -6313,257 +7356,218 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var SyncGateway_1;
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+var _a, _b, _c, _d;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.SyncGateway = void 0;
-const websockets_1 = __webpack_require__(72);
+exports.HealthController = void 0;
 const common_1 = __webpack_require__(2);
-const socket_io_1 = __webpack_require__(73);
-const websocket_service_1 = __webpack_require__(74);
-let SyncGateway = SyncGateway_1 = class SyncGateway {
-    constructor(webSocketService) {
-        this.webSocketService = webSocketService;
-        this.logger = new common_1.Logger(SyncGateway_1.name);
+const nest_winston_1 = __webpack_require__(5);
+const terminus_1 = __webpack_require__(71);
+let HealthController = class HealthController {
+    constructor(health, db, memory, logger) {
+        this.health = health;
+        this.db = db;
+        this.memory = memory;
+        this.logger = logger;
     }
-    afterInit(server) {
-        this.webSocketService.setServer(server);
-        this.logger.log('WebSocket Gateway initialized');
-    }
-    handleConnection(client) {
-        this.logger.log(`Client connected: ${client.id}`);
-        client.emit('connected', {
-            message: 'Connected to TekAI Context Engine sync service',
-            clientId: client.id,
-            timestamp: new Date(),
-        });
-        client.join('sync:global');
-    }
-    handleDisconnect(client) {
-        this.logger.log(`Client disconnected: ${client.id}`);
-    }
-    handleJoinProject(data, client) {
-        const roomName = `project:${data.projectId}`;
-        client.join(roomName);
-        this.logger.debug(`Client ${client.id} joined project room: ${roomName}`);
-        client.emit('joined:project', {
-            projectId: data.projectId,
-            roomName,
-            timestamp: new Date(),
-        });
-    }
-    handleLeaveProject(data, client) {
-        const roomName = `project:${data.projectId}`;
-        client.leave(roomName);
-        this.logger.debug(`Client ${client.id} left project room: ${roomName}`);
-        client.emit('left:project', {
-            projectId: data.projectId,
-            roomName,
-            timestamp: new Date(),
-        });
-    }
-    handleJoinCodebase(data, client) {
-        const roomName = `codebase:${data.codebaseId}`;
-        client.join(roomName);
-        this.logger.debug(`Client ${client.id} joined codebase room: ${roomName}`);
-        client.emit('joined:codebase', {
-            codebaseId: data.codebaseId,
-            roomName,
-            timestamp: new Date(),
-        });
-    }
-    handleLeaveCodebase(data, client) {
-        const roomName = `codebase:${data.codebaseId}`;
-        client.leave(roomName);
-        this.logger.debug(`Client ${client.id} left codebase room: ${roomName}`);
-        client.emit('left:codebase', {
-            codebaseId: data.codebaseId,
-            roomName,
-            timestamp: new Date(),
-        });
-    }
-    handleJoinUser(data, client) {
-        const roomName = `user:${data.userId}`;
-        client.join(roomName);
-        this.logger.debug(`Client ${client.id} joined user room: ${roomName}`);
-        client.emit('joined:user', {
-            userId: data.userId,
-            roomName,
-            timestamp: new Date(),
-        });
-    }
-    handleJoinSystem(client) {
-        client.join('system:status');
-        this.logger.debug(`Client ${client.id} joined system status room`);
-        client.emit('joined:system', {
-            roomName: 'system:status',
-            timestamp: new Date(),
-        });
-    }
-    handleGetStats(client) {
-        const stats = this.webSocketService.getServerStats();
-        client.emit('stats', {
-            ...stats,
-            timestamp: new Date(),
-        });
-    }
-    handlePing(client) {
-        client.emit('pong', {
-            timestamp: new Date(),
-        });
-    }
-    handleSubscribeNotifications(data, client) {
-        const rooms = [];
-        if (data.userId) {
-            const userRoom = `user:${data.userId}`;
-            client.join(userRoom);
-            rooms.push(userRoom);
+    async check() {
+        const requestId = Math.random().toString(36).substring(2, 8);
+        this.logger.debug(`[${requestId}] [HEALTH-CHECK] Starting comprehensive health check`);
+        try {
+            const healthCheckStartTime = Date.now();
+            const result = await this.health.check([
+                () => this.db.pingCheck('database'),
+                () => this.memory.checkHeap('memory_heap', 150 * 1024 * 1024),
+            ]);
+            const healthCheckDuration = Date.now() - healthCheckStartTime;
+            this.logger.debug(`[${requestId}] [HEALTH-CHECK] Health check completed successfully`, {
+                status: result.status,
+                duration: healthCheckDuration,
+                checks: Object.keys(result.details || {}),
+                allHealthy: result.status === 'ok'
+            });
+            return result;
         }
-        if (data.projectId) {
-            const projectRoom = `project:${data.projectId}`;
-            client.join(projectRoom);
-            rooms.push(projectRoom);
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[${requestId}] [HEALTH-CHECK] Health check failed`, {
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            throw error;
         }
-        if (data.codebaseId) {
-            const codebaseRoom = `codebase:${data.codebaseId}`;
-            client.join(codebaseRoom);
-            rooms.push(codebaseRoom);
-        }
-        this.logger.debug(`Client ${client.id} subscribed to notifications: ${rooms.join(', ')}`);
-        client.emit('subscribed:notifications', {
-            rooms,
-            timestamp: new Date(),
-        });
     }
-    handleUnsubscribeNotifications(data, client) {
-        const rooms = [];
-        if (data.userId) {
-            const userRoom = `user:${data.userId}`;
-            client.leave(userRoom);
-            rooms.push(userRoom);
-        }
-        if (data.projectId) {
-            const projectRoom = `project:${data.projectId}`;
-            client.leave(projectRoom);
-            rooms.push(projectRoom);
-        }
-        if (data.codebaseId) {
-            const codebaseRoom = `codebase:${data.codebaseId}`;
-            client.leave(codebaseRoom);
-            rooms.push(codebaseRoom);
-        }
-        this.logger.debug(`Client ${client.id} unsubscribed from notifications: ${rooms.join(', ')}`);
-        client.emit('unsubscribed:notifications', {
-            rooms,
-            timestamp: new Date(),
+    simpleCheck() {
+        const requestId = Math.random().toString(36).substring(2, 8);
+        this.logger.debug(`[${requestId}] [SIMPLE-HEALTH-CHECK] Performing simple health check`);
+        const response = {
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            service: 'TekAI Context Engine',
+            version: '2.0.0'
+        };
+        this.logger.debug(`[${requestId}] [SIMPLE-HEALTH-CHECK] Simple health check completed`, {
+            status: response.status,
+            service: response.service,
+            version: response.version
         });
+        return response;
     }
 };
-exports.SyncGateway = SyncGateway;
+exports.HealthController = HealthController;
 __decorate([
-    (0, websockets_1.WebSocketServer)(),
-    __metadata("design:type", typeof (_b = typeof socket_io_1.Server !== "undefined" && socket_io_1.Server) === "function" ? _b : Object)
-], SyncGateway.prototype, "server", void 0);
-__decorate([
-    (0, websockets_1.SubscribeMessage)('join:project'),
-    __param(0, (0, websockets_1.MessageBody)()),
-    __param(1, (0, websockets_1.ConnectedSocket)()),
+    (0, common_1.Get)(),
+    (0, terminus_1.HealthCheck)(),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, typeof (_c = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _c : Object]),
-    __metadata("design:returntype", void 0)
-], SyncGateway.prototype, "handleJoinProject", null);
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], HealthController.prototype, "check", null);
 __decorate([
-    (0, websockets_1.SubscribeMessage)('leave:project'),
-    __param(0, (0, websockets_1.MessageBody)()),
-    __param(1, (0, websockets_1.ConnectedSocket)()),
+    (0, common_1.Get)('simple'),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, typeof (_d = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _d : Object]),
+    __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
-], SyncGateway.prototype, "handleLeaveProject", null);
-__decorate([
-    (0, websockets_1.SubscribeMessage)('join:codebase'),
-    __param(0, (0, websockets_1.MessageBody)()),
-    __param(1, (0, websockets_1.ConnectedSocket)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, typeof (_e = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _e : Object]),
-    __metadata("design:returntype", void 0)
-], SyncGateway.prototype, "handleJoinCodebase", null);
-__decorate([
-    (0, websockets_1.SubscribeMessage)('leave:codebase'),
-    __param(0, (0, websockets_1.MessageBody)()),
-    __param(1, (0, websockets_1.ConnectedSocket)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, typeof (_f = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _f : Object]),
-    __metadata("design:returntype", void 0)
-], SyncGateway.prototype, "handleLeaveCodebase", null);
-__decorate([
-    (0, websockets_1.SubscribeMessage)('join:user'),
-    __param(0, (0, websockets_1.MessageBody)()),
-    __param(1, (0, websockets_1.ConnectedSocket)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, typeof (_g = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _g : Object]),
-    __metadata("design:returntype", void 0)
-], SyncGateway.prototype, "handleJoinUser", null);
-__decorate([
-    (0, websockets_1.SubscribeMessage)('join:system'),
-    __param(0, (0, websockets_1.ConnectedSocket)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [typeof (_h = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _h : Object]),
-    __metadata("design:returntype", void 0)
-], SyncGateway.prototype, "handleJoinSystem", null);
-__decorate([
-    (0, websockets_1.SubscribeMessage)('get:stats'),
-    __param(0, (0, websockets_1.ConnectedSocket)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [typeof (_j = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _j : Object]),
-    __metadata("design:returntype", void 0)
-], SyncGateway.prototype, "handleGetStats", null);
-__decorate([
-    (0, websockets_1.SubscribeMessage)('ping'),
-    __param(0, (0, websockets_1.ConnectedSocket)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [typeof (_k = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _k : Object]),
-    __metadata("design:returntype", void 0)
-], SyncGateway.prototype, "handlePing", null);
-__decorate([
-    (0, websockets_1.SubscribeMessage)('subscribe:notifications'),
-    __param(0, (0, websockets_1.MessageBody)()),
-    __param(1, (0, websockets_1.ConnectedSocket)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, typeof (_l = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _l : Object]),
-    __metadata("design:returntype", void 0)
-], SyncGateway.prototype, "handleSubscribeNotifications", null);
-__decorate([
-    (0, websockets_1.SubscribeMessage)('unsubscribe:notifications'),
-    __param(0, (0, websockets_1.MessageBody)()),
-    __param(1, (0, websockets_1.ConnectedSocket)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, typeof (_m = typeof socket_io_1.Socket !== "undefined" && socket_io_1.Socket) === "function" ? _m : Object]),
-    __metadata("design:returntype", void 0)
-], SyncGateway.prototype, "handleUnsubscribeNotifications", null);
-exports.SyncGateway = SyncGateway = SyncGateway_1 = __decorate([
-    (0, websockets_1.WebSocketGateway)({
-        cors: {
-            origin: process.env.NODE_ENV === 'development' ? true : process.env.ALLOWED_ORIGINS?.split(','),
-            credentials: true,
-        },
-        namespace: '/sync',
-    }),
-    __metadata("design:paramtypes", [typeof (_a = typeof websocket_service_1.WebSocketService !== "undefined" && websocket_service_1.WebSocketService) === "function" ? _a : Object])
-], SyncGateway);
+], HealthController.prototype, "simpleCheck", null);
+exports.HealthController = HealthController = __decorate([
+    (0, common_1.Controller)('health'),
+    __param(3, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof terminus_1.HealthCheckService !== "undefined" && terminus_1.HealthCheckService) === "function" ? _a : Object, typeof (_b = typeof terminus_1.TypeOrmHealthIndicator !== "undefined" && terminus_1.TypeOrmHealthIndicator) === "function" ? _b : Object, typeof (_c = typeof terminus_1.MemoryHealthIndicator !== "undefined" && terminus_1.MemoryHealthIndicator) === "function" ? _c : Object, typeof (_d = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _d : Object])
+], HealthController);
 
-
-/***/ }),
-/* 72 */
-/***/ ((module) => {
-
-module.exports = require("@nestjs/websockets");
 
 /***/ }),
 /* 73 */
-/***/ ((module) => {
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
-module.exports = require("socket.io");
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var _a;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AllExceptionsFilter = void 0;
+const common_1 = __webpack_require__(2);
+const nest_winston_1 = __webpack_require__(5);
+let AllExceptionsFilter = class AllExceptionsFilter {
+    constructor(logger) {
+        this.logger = logger;
+    }
+    catch(exception, host) {
+        const ctx = host.switchToHttp();
+        const response = ctx.getResponse();
+        const request = ctx.getRequest();
+        const requestId = Math.random().toString(36).substring(2, 8);
+        const httpStatus = exception instanceof common_1.HttpException
+            ? exception.getStatus()
+            : common_1.HttpStatus.INTERNAL_SERVER_ERROR;
+        const errorMessage = exception instanceof Error ? exception.message : String(exception);
+        const errorStack = exception instanceof Error ? exception.stack : undefined;
+        let errorResponse = errorMessage;
+        if (exception instanceof common_1.HttpException) {
+            errorResponse = exception.getResponse();
+        }
+        this.logger.error(`[${requestId}] [EXCEPTION-FILTER] Unhandled exception caught`, {
+            requestId,
+            method: request.method,
+            url: request.url,
+            statusCode: httpStatus,
+            error: errorMessage,
+            stack: errorStack,
+            userAgent: request.headers['user-agent'],
+            clientIp: request.ip || request.connection.remoteAddress,
+            timestamp: new Date().toISOString(),
+            requestHeaders: this.sanitizeHeaders(request.headers),
+            requestBody: this.sanitizeBody(request.body),
+            query: request.query,
+            params: request.params,
+            exceptionType: exception?.constructor?.name || 'Unknown',
+            isHttpException: exception instanceof common_1.HttpException
+        });
+        const errorResponseBody = {
+            success: false,
+            statusCode: httpStatus,
+            timestamp: new Date().toISOString(),
+            path: request.url,
+            method: request.method,
+            message: this.getErrorMessage(errorResponse),
+            error: httpStatus >= 500 ? 'Internal Server Error' : this.getErrorType(errorResponse),
+            requestId,
+        };
+        if (process.env.NODE_ENV === 'development') {
+            errorResponseBody['details'] = errorResponse;
+            if (errorStack) {
+                errorResponseBody['stack'] = errorStack;
+            }
+        }
+        this.logger.debug(`[${requestId}] [EXCEPTION-FILTER] Sending error response`, {
+            requestId,
+            statusCode: httpStatus,
+            responseBody: errorResponseBody,
+            isDevelopment: process.env.NODE_ENV === 'development'
+        });
+        response.status(httpStatus).json(errorResponseBody);
+    }
+    getErrorMessage(errorResponse) {
+        if (typeof errorResponse === 'string') {
+            return errorResponse;
+        }
+        if (typeof errorResponse === 'object') {
+            if (errorResponse.message) {
+                return Array.isArray(errorResponse.message)
+                    ? errorResponse.message.join(', ')
+                    : errorResponse.message;
+            }
+            if (errorResponse.error) {
+                return errorResponse.error;
+            }
+        }
+        return 'An error occurred';
+    }
+    getErrorType(errorResponse) {
+        if (typeof errorResponse === 'object' && errorResponse.error) {
+            return errorResponse.error;
+        }
+        return 'Bad Request';
+    }
+    sanitizeHeaders(headers) {
+        const sensitiveHeaders = ['authorization', 'cookie', 'x-api-key', 'x-auth-token'];
+        const sanitized = { ...headers };
+        for (const header of sensitiveHeaders) {
+            if (sanitized[header]) {
+                sanitized[header] = '***REDACTED***';
+            }
+        }
+        return sanitized;
+    }
+    sanitizeBody(body) {
+        if (!body || typeof body !== 'object') {
+            return body;
+        }
+        const sensitiveFields = ['password', 'token', 'secret', 'key', 'auth'];
+        const sanitized = { ...body };
+        for (const field of sensitiveFields) {
+            if (sanitized[field]) {
+                sanitized[field] = '***REDACTED***';
+            }
+        }
+        return sanitized;
+    }
+};
+exports.AllExceptionsFilter = AllExceptionsFilter;
+exports.AllExceptionsFilter = AllExceptionsFilter = __decorate([
+    (0, common_1.Catch)(),
+    __param(0, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _a : Object])
+], AllExceptionsFilter);
+
 
 /***/ }),
 /* 74 */
@@ -6576,136 +7580,114 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var WebSocketService_1;
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var _a;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.WebSocketService = void 0;
+exports.LoggingInterceptor = void 0;
 const common_1 = __webpack_require__(2);
-let WebSocketService = WebSocketService_1 = class WebSocketService {
-    constructor() {
-        this.logger = new common_1.Logger(WebSocketService_1.name);
+const nest_winston_1 = __webpack_require__(5);
+const operators_1 = __webpack_require__(75);
+let LoggingInterceptor = class LoggingInterceptor {
+    constructor(logger) {
+        this.logger = logger;
     }
-    setServer(server) {
-        this.server = server;
-        this.logger.log('WebSocket server initialized');
-    }
-    emitSyncStatusUpdate(update) {
-        if (!this.server) {
-            this.logger.warn('WebSocket server not initialized');
-            return;
-        }
-        try {
-            this.server.to(`codebase:${update.codebaseId}`).emit('sync:status', update);
-            if (update.projectId) {
-                this.server.to(`project:${update.projectId}`).emit('sync:status', update);
-            }
-            this.server.to('sync:global').emit('sync:status', update);
-            this.logger.debug(`Sync status update emitted for job: ${update.syncJobId}`);
-        }
-        catch (error) {
-            this.logger.error('Failed to emit sync status update:', error);
-        }
-    }
-    emitNotification(notification) {
-        if (!this.server) {
-            this.logger.warn('WebSocket server not initialized');
-            return;
-        }
-        try {
-            if (notification.userId) {
-                this.server.to(`user:${notification.userId}`).emit('notification', notification);
-            }
-            else if (notification.projectId) {
-                this.server.to(`project:${notification.projectId}`).emit('notification', notification);
-            }
-            else if (notification.codebaseId) {
-                this.server.to(`codebase:${notification.codebaseId}`).emit('notification', notification);
-            }
-            else {
-                this.server.emit('notification', notification);
-            }
-            this.logger.debug(`Notification emitted: ${notification.type} - ${notification.title}`);
-        }
-        catch (error) {
-            this.logger.error('Failed to emit notification:', error);
-        }
-    }
-    emitSystemStatus(status) {
-        if (!this.server) {
-            return;
-        }
-        try {
-            this.server.to('system:status').emit('system:status', status);
-            this.logger.debug('System status update emitted');
-        }
-        catch (error) {
-            this.logger.error('Failed to emit system status:', error);
-        }
-    }
-    getConnectedClientsCount() {
-        if (!this.server) {
-            return 0;
-        }
-        return this.server.sockets.sockets.size;
-    }
-    getRoomInfo(roomName) {
-        if (!this.server) {
-            return { clientCount: 0, clients: [] };
-        }
-        const room = this.server.sockets.adapter.rooms.get(roomName);
-        if (!room) {
-            return { clientCount: 0, clients: [] };
-        }
-        return {
-            clientCount: room.size,
-            clients: Array.from(room),
-        };
-    }
-    disconnectClient(clientId, reason) {
-        if (!this.server) {
-            return;
-        }
-        const socket = this.server.sockets.sockets.get(clientId);
-        if (socket) {
-            socket.disconnect(true);
-            this.logger.log(`Client ${clientId} disconnected: ${reason || 'No reason provided'}`);
-        }
-    }
-    sendToClient(clientId, event, data) {
-        if (!this.server) {
-            return;
-        }
-        const socket = this.server.sockets.sockets.get(clientId);
-        if (socket) {
-            socket.emit(event, data);
-            this.logger.debug(`Message sent to client ${clientId}: ${event}`);
-        }
-    }
-    getServerStats() {
-        if (!this.server) {
-            return {
-                connectedClients: 0,
-                rooms: [],
-                uptime: 0,
-            };
-        }
-        const rooms = Array.from(this.server.sockets.adapter.rooms.entries())
-            .filter(([name]) => !name.startsWith('user:'))
-            .map(([name, room]) => ({
-            name,
-            clientCount: room.size,
+    intercept(context, next) {
+        const ctx = context.switchToHttp();
+        const request = ctx.getRequest();
+        const response = ctx.getResponse();
+        const requestId = Math.random().toString(36).substring(2, 8);
+        const startTime = Date.now();
+        const { method, url, headers, body, query, params } = request;
+        const userAgent = headers['user-agent'] || 'unknown';
+        const clientIp = request.ip || request.connection.remoteAddress || 'unknown';
+        this.logger.log(`[${requestId}] [REQUEST] Incoming ${method} ${url}`, {
+            requestId,
+            method,
+            url,
+            userAgent,
+            clientIp,
+            contentType: headers['content-type'],
+            contentLength: headers['content-length'],
+            hasBody: !!body && Object.keys(body).length > 0,
+            queryParams: Object.keys(query || {}).length,
+            pathParams: Object.keys(params || {}).length,
+            timestamp: new Date().toISOString()
+        });
+        this.logger.debug(`[${requestId}] [REQUEST-DETAILS] Request details`, {
+            requestId,
+            headers: this.sanitizeHeaders(headers),
+            query,
+            params,
+            bodyKeys: body ? Object.keys(body) : [],
+            bodySize: body ? JSON.stringify(body).length : 0
+        });
+        return next.handle().pipe((0, operators_1.tap)((data) => {
+            const duration = Date.now() - startTime;
+            const statusCode = response.statusCode;
+            this.logger.log(`[${requestId}] [RESPONSE] ${method} ${url} - ${statusCode}`, {
+                requestId,
+                method,
+                url,
+                statusCode,
+                duration,
+                responseSize: data ? JSON.stringify(data).length : 0,
+                success: statusCode >= 200 && statusCode < 300,
+                timestamp: new Date().toISOString()
+            });
+            this.logger.debug(`[${requestId}] [RESPONSE-DETAILS] Response details`, {
+                requestId,
+                statusCode,
+                duration,
+                responseHeaders: this.sanitizeHeaders(response.getHeaders()),
+                responseDataKeys: data && typeof data === 'object' ? Object.keys(data) : [],
+                responseType: typeof data
+            });
+        }), (0, operators_1.catchError)((error) => {
+            const duration = Date.now() - startTime;
+            const statusCode = response.statusCode || 500;
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`[${requestId}] [ERROR] ${method} ${url} - ${statusCode}`, {
+                requestId,
+                method,
+                url,
+                statusCode,
+                duration,
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined,
+                timestamp: new Date().toISOString()
+            });
+            throw error;
         }));
-        return {
-            connectedClients: this.server.sockets.sockets.size,
-            rooms,
-            uptime: process.uptime(),
-        };
+    }
+    sanitizeHeaders(headers) {
+        const sensitiveHeaders = ['authorization', 'cookie', 'x-api-key', 'x-auth-token'];
+        const sanitized = { ...headers };
+        for (const header of sensitiveHeaders) {
+            if (sanitized[header]) {
+                sanitized[header] = '***REDACTED***';
+            }
+        }
+        return sanitized;
     }
 };
-exports.WebSocketService = WebSocketService;
-exports.WebSocketService = WebSocketService = WebSocketService_1 = __decorate([
-    (0, common_1.Injectable)()
-], WebSocketService);
+exports.LoggingInterceptor = LoggingInterceptor;
+exports.LoggingInterceptor = LoggingInterceptor = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _a : Object])
+], LoggingInterceptor);
 
+
+/***/ }),
+/* 75 */
+/***/ ((module) => {
+
+module.exports = require("rxjs/operators");
 
 /***/ })
 /******/ 	]);
@@ -6747,12 +7729,26 @@ const swagger_1 = __webpack_require__(3);
 const config_1 = __webpack_require__(4);
 const nest_winston_1 = __webpack_require__(5);
 const app_module_1 = __webpack_require__(6);
+const logging_interceptor_1 = __webpack_require__(74);
+const all_exceptions_filter_1 = __webpack_require__(73);
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    const winstonLogger = app.get(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER);
+    app.useLogger(winstonLogger);
+    winstonLogger.log('Starting TekAI Context Engine application bootstrap', 'Bootstrap');
     const configService = app.get(config_1.ConfigService);
     const port = configService.get('PORT', 3000);
     const nodeEnv = configService.get('NODE_ENV', 'development');
-    app.useLogger(app.get(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER));
+    winstonLogger.log('Configuration loaded', 'Bootstrap');
+    winstonLogger.log({
+        port: port.toString(),
+        nodeEnv,
+        hasWinstonLogger: true
+    }, 'Bootstrap');
+    app.useGlobalFilters(app.get(all_exceptions_filter_1.AllExceptionsFilter));
+    winstonLogger.log('Global exception filter registered', 'Bootstrap');
+    app.useGlobalInterceptors(app.get(logging_interceptor_1.LoggingInterceptor));
+    winstonLogger.log('Global logging interceptor registered', 'Bootstrap');
     app.useGlobalPipes(new common_1.ValidationPipe({
         whitelist: true,
         forbidNonWhitelisted: true,
@@ -6761,12 +7757,21 @@ async function bootstrap() {
             enableImplicitConversion: true,
         },
     }));
+    winstonLogger.log('Global validation pipe registered', 'Bootstrap');
+    const corsOrigins = nodeEnv === 'development' ? true : process.env.ALLOWED_ORIGINS?.split(',');
     app.enableCors({
-        origin: nodeEnv === 'development' ? true : process.env.ALLOWED_ORIGINS?.split(','),
+        origin: corsOrigins,
         credentials: true,
     });
+    winstonLogger.log('CORS configuration applied', 'Bootstrap');
+    winstonLogger.log({
+        nodeEnv,
+        corsOrigins: nodeEnv === 'development' ? 'development (all origins)' : corsOrigins
+    }, 'Bootstrap');
     app.setGlobalPrefix('api/v1');
+    winstonLogger.log('Global API prefix set to: api/v1', 'Bootstrap');
     if (nodeEnv === 'development') {
+        winstonLogger.log('Setting up Swagger documentation for development environment', 'Bootstrap');
         const config = new swagger_1.DocumentBuilder()
             .setTitle('TekAI Context Engine API')
             .setDescription('Production-ready Context Engine for LLM with project-based structure')
@@ -6779,10 +7784,22 @@ async function bootstrap() {
             .build();
         const document = swagger_1.SwaggerModule.createDocument(app, config);
         swagger_1.SwaggerModule.setup('api/docs', app, document);
+        winstonLogger.log('Swagger documentation setup completed at: /api/docs', 'Bootstrap');
     }
     await app.listen(port);
+    winstonLogger.log('TekAI Context Engine started successfully', 'Bootstrap');
+    winstonLogger.log({
+        port: port.toString(),
+        nodeEnv,
+        url: `http://localhost:${port}`,
+        apiPrefix: 'api/v1',
+        docsUrl: nodeEnv === 'development' ? `http://localhost:${port}/api/docs` : 'disabled',
+        timestamp: new Date().toISOString()
+    }, 'Bootstrap');
     console.log(`🚀 TekAI Context Engine is running on: http://localhost:${port}`);
-    console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
+    if (nodeEnv === 'development') {
+        console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
+    }
 }
 bootstrap().catch((error) => {
     console.error('❌ Error starting the application:', error);

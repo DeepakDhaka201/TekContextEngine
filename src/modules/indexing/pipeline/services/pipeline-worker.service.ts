@@ -1,4 +1,5 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Inject, LoggerService, OnModuleInit } from '@nestjs/common';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { WorkerPoolService, WorkerTask } from '@/shared/workers/worker-pool.service';
 import { ConfigService } from '@nestjs/config';
 import { PipelineExecutionResult } from './pipeline-orchestrator.service';
@@ -10,17 +11,24 @@ export interface PipelineWorkerTask extends WorkerTask<PipelineExecutionResult> 
 
 @Injectable()
 export class PipelineWorkerService implements OnModuleInit {
-  private readonly logger = new Logger(PipelineWorkerService.name);
   private readonly PIPELINE_POOL_NAME = 'pipeline-execution';
 
   constructor(
     private workerPoolService: WorkerPoolService,
     private configService: ConfigService,
-  ) {}
+    @Inject(WINSTON_MODULE_NEST_PROVIDER)
+    private readonly logger: LoggerService
+  ) {
+    this.logger.debug('[PIPELINE-WORKER] Initializing pipeline worker service', 'PipelineWorkerService');
+  }
 
   async onModuleInit() {
+    this.logger.log('[PIPELINE-WORKER] Module initializing - setting up pipeline worker pool', 'PipelineWorkerService');
+
     // Initialize the pipeline worker pool
     this.initializePipelinePool();
+
+    this.logger.log('[PIPELINE-WORKER] Module initialization completed', 'PipelineWorkerService');
   }
 
   /**
@@ -31,45 +39,67 @@ export class PipelineWorkerService implements OnModuleInit {
     pipelineType: string,
     executeFn: () => Promise<PipelineExecutionResult>
   ): Promise<PipelineExecutionResult> {
+    const timeout = this.getPipelineTimeout(pipelineType);
+
+    this.logger.debug('[PIPELINE-WORKER] Preparing pipeline task for worker pool', {
+      pipelineId,
+      pipelineType,
+      timeout,
+      poolName: this.PIPELINE_POOL_NAME
+    });
+
     const task: PipelineWorkerTask = {
       id: `pipeline-${pipelineId}`,
       pipelineId,
       type: pipelineType,
-      priority: this.getPipelinePriority(pipelineType),
-      timeout: this.getPipelineTimeout(pipelineType),
+      timeout,
       execute: executeFn,
     };
 
+    this.logger.log('[PIPELINE-WORKER] Submitting pipeline to worker pool', {
+      pipelineId,
+      pipelineType,
+      taskId: task.id,
+      timeout: task.timeout
+    });
+
     this.logger.log(`Submitting pipeline ${pipelineId} to worker pool`);
-    
+
     try {
+      const submissionStartTime = Date.now();
       const result = await this.workerPoolService.submitTask(this.PIPELINE_POOL_NAME, task);
+      const submissionDuration = Date.now() - submissionStartTime;
+
+      this.logger.log('[PIPELINE-WORKER] Pipeline completed successfully in worker pool', {
+        pipelineId,
+        pipelineType,
+        status: result.status,
+        duration: result.duration,
+        submissionDuration,
+        tasksExecuted: result.tasksExecuted,
+        tasksSucceeded: result.tasksSucceeded,
+        tasksFailed: result.tasksFailed
+      });
+
       this.logger.log(`Pipeline ${pipelineId} completed in worker pool`);
       return result;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error('[PIPELINE-WORKER] Pipeline failed in worker pool', {
+        pipelineId,
+        pipelineType,
+        taskId: task.id,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+
       this.logger.error(`Pipeline ${pipelineId} failed in worker pool:`, error);
       throw error;
     }
   }
 
-  /**
-   * Get worker pool statistics
-   */
-  getPoolStats() {
-    const pool = this.workerPoolService.getPool(this.PIPELINE_POOL_NAME);
-    return pool ? pool.getStats() : null;
-  }
 
-  /**
-   * Resize the pipeline worker pool
-   */
-  resizePool(newSize: number) {
-    const pool = this.workerPoolService.getPool(this.PIPELINE_POOL_NAME);
-    if (pool) {
-      pool.resize(newSize);
-      this.logger.log(`Resized pipeline worker pool to ${newSize} workers`);
-    }
-  }
 
   /**
    * Initialize the pipeline worker pool with configuration
@@ -77,40 +107,31 @@ export class PipelineWorkerService implements OnModuleInit {
   private initializePipelinePool() {
     const maxWorkers = this.configService.get('PIPELINE_MAX_WORKERS', 4);
     const taskTimeout = this.configService.get('PIPELINE_TASK_TIMEOUT', 1800000); // 30 minutes
-    const retryAttempts = this.configService.get('PIPELINE_RETRY_ATTEMPTS', 1);
-    const queueSize = this.configService.get('PIPELINE_QUEUE_SIZE', 100);
-    const idleTimeout = this.configService.get('PIPELINE_IDLE_TIMEOUT', 300000); // 5 minutes
+
+    this.logger.debug('[PIPELINE-WORKER] Initializing pipeline worker pool with configuration', {
+      poolName: this.PIPELINE_POOL_NAME,
+      maxWorkers,
+      taskTimeout,
+      taskTimeoutMin: Math.round(taskTimeout / 60000)
+    });
 
     this.workerPoolService.createPool(this.PIPELINE_POOL_NAME, {
       maxWorkers,
       taskTimeout,
-      retryAttempts,
-      queueSize,
-      idleTimeout,
+    });
+
+    this.logger.log('[PIPELINE-WORKER] Pipeline worker pool initialized successfully', {
+      poolName: this.PIPELINE_POOL_NAME,
+      maxWorkers,
+      configuration: {
+        taskTimeoutMin: Math.round(taskTimeout / 60000)
+      }
     });
 
     this.logger.log(`Initialized pipeline worker pool with ${maxWorkers} workers`);
   }
 
-  /**
-   * Get priority based on pipeline type
-   */
-  private getPipelinePriority(pipelineType: string): number {
-    switch (pipelineType.toUpperCase()) {
-      case 'WEBHOOK':
-        return 10; // Highest priority for webhook-triggered pipelines
-      case 'INCREMENTAL':
-        return 8;  // High priority for incremental updates
-      case 'FULL':
-        return 5;  // Medium priority for full indexing
-      case 'DOCUMENT':
-        return 6;  // Medium-high priority for document processing
-      case 'ANALYSIS':
-        return 3;  // Lower priority for analysis tasks
-      default:
-        return 5;  // Default medium priority
-    }
-  }
+
 
   /**
    * Get timeout based on pipeline type
@@ -130,29 +151,6 @@ export class PipelineWorkerService implements OnModuleInit {
       default:
         return baseTimeout;
     }
-  }
-
-  /**
-   * Get all pipelines currently being processed
-   */
-  getActivePipelines(): string[] {
-    const pool = this.workerPoolService.getPool(this.PIPELINE_POOL_NAME);
-    if (!pool) return [];
-
-    const stats = pool.getStats();
-    // Note: We'd need to extend the worker pool to track active task IDs
-    // For now, return based on active worker count
-    return Array.from({ length: stats.activeWorkers }, (_, i) => `active-pipeline-${i}`);
-  }
-
-  /**
-   * Check if a specific pipeline is currently being processed
-   */
-  isPipelineActive(_pipelineId: string): boolean {
-    // This would require extending the worker pool to track specific task IDs
-    // For now, we'll implement a simple check
-    const pool = this.workerPoolService.getPool(this.PIPELINE_POOL_NAME);
-    return pool ? pool.getStats().activeWorkers > 0 : false;
   }
 
   /**

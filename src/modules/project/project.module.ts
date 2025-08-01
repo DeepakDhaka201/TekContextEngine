@@ -14,7 +14,6 @@ import { TekProjectController } from './tekproject.controller';
 import { CodebaseController } from './codebase.controller';
 import { DocsBucketController, DocumentController } from './document.controller';
 import { GitlabModule } from '../gitlab/gitlab.module';
-import { IndexingModule } from '../indexing/indexing.module';
 
 @Module({
   imports: [
@@ -26,7 +25,6 @@ import { IndexingModule } from '../indexing/indexing.module';
       Document,
     ]),
     GitlabModule,
-    IndexingModule,
   ],
   controllers: [TekProjectController, CodebaseController, DocsBucketController, DocumentController],
   providers: [TekProjectService, CodebaseService, DocumentService],

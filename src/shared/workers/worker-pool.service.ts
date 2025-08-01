@@ -1,29 +1,15 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Inject, LoggerService, OnModuleDestroy } from '@nestjs/common';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 export interface WorkerTask<T = any> {
   id: string;
   execute: () => Promise<T>;
-  priority?: number;
   timeout?: number;
-  retries?: number;
 }
 
 export interface WorkerPoolOptions {
   maxWorkers: number;
   taskTimeout: number;
-  retryAttempts: number;
-  queueSize?: number;
-  idleTimeout?: number;
-}
-
-export interface PoolStats {
-  activeWorkers: number;
-  queuedTasks: number;
-  completedTasks: number;
-  failedTasks: number;
-  totalWorkers: number;
-  utilization: number;
 }
 
 interface Worker {
@@ -65,52 +51,54 @@ export class Semaphore {
       }
     }
   }
-
-  get available(): number {
-    return this.permits;
-  }
-
-  get waiting(): number {
-    return this.waitQueue.length;
-  }
 }
 
 /**
- * Worker Pool implementation (Node.js equivalent of Go's ants)
+ * Worker Pool implementation
  */
 export class WorkerPool implements OnModuleDestroy {
-  private readonly logger: Logger;
   private workers: Worker[] = [];
   private taskQueue: WorkerTask[] = [];
   private semaphore: Semaphore;
-  private stats = {
-    completedTasks: 0,
-    failedTasks: 0,
-  };
-  private cleanupInterval?: NodeJS.Timeout;
   private isShuttingDown = false;
 
   constructor(
     private readonly name: string,
     private readonly options: WorkerPoolOptions,
+    private readonly logger: LoggerService,
   ) {
-    this.logger = new Logger(`WorkerPool-${this.name}`);
+    this.logger.debug(`[WORKER-POOL] [${this.name}] Initializing worker pool`, 'WorkerPool');
+    this.logger.debug({
+      maxWorkers: options.maxWorkers,
+      taskTimeout: options.taskTimeout
+    }, 'WorkerPool');
+
     this.semaphore = new Semaphore(options.maxWorkers);
     this.initializeWorkers();
-    this.startCleanupTimer();
+
+    this.logger.log(`[WORKER-POOL] [${this.name}] Worker pool initialized successfully`, 'WorkerPool');
+    this.logger.log({
+      totalWorkers: this.workers.length,
+      maxWorkers: options.maxWorkers
+    }, 'WorkerPool');
   }
 
   /**
    * Submit a task to the worker pool
    */
   async submit<T>(task: WorkerTask<T>): Promise<T> {
-    if (this.isShuttingDown) {
-      throw new Error('Worker pool is shutting down');
-    }
+    this.logger.debug(`[WORKER-POOL] [${this.name}] Submitting task to pool`, {
+      taskId: task.id,
+      timeout: task.timeout,
+      currentQueueSize: this.taskQueue.length,
+      activeWorkers: this.getActiveWorkerCount()
+    });
 
-    // Check queue size limit
-    if (this.options.queueSize && this.taskQueue.length >= this.options.queueSize) {
-      throw new Error('Worker pool queue is full');
+    if (this.isShuttingDown) {
+      this.logger.error(`[WORKER-POOL] [${this.name}] Cannot submit task - pool is shutting down`, {
+        taskId: task.id
+      });
+      throw new Error('Worker pool is shutting down');
     }
 
     return new Promise<T>((resolve, reject) => {
@@ -118,12 +106,29 @@ export class WorkerPool implements OnModuleDestroy {
         ...task,
         execute: async () => {
           try {
+            this.logger.debug(`[WORKER-POOL] [${this.name}] Starting task execution`, 'WorkerPool');
+            this.logger.debug({
+              taskId: task.id
+            }, 'WorkerPool');
+
             const result = await this.executeWithTimeout(task);
-            this.stats.completedTasks++;
+
+            this.logger.debug(`[WORKER-POOL] [${this.name}] Task completed successfully`, 'WorkerPool');
+            this.logger.debug({
+              taskId: task.id
+            }, 'WorkerPool');
+
             resolve(result);
             return result;
           } catch (error) {
-            this.stats.failedTasks++;
+            const errorMessage = error instanceof Error ? error.message : String(error);
+
+            this.logger.error(`[WORKER-POOL] [${this.name}] Task failed`, {
+              taskId: task.id,
+              error: errorMessage,
+              stack: error instanceof Error ? error.stack : undefined
+            });
+
             reject(error);
             throw error;
           }
@@ -131,88 +136,17 @@ export class WorkerPool implements OnModuleDestroy {
       };
 
       this.taskQueue.push(wrappedTask);
+
+      this.logger.debug(`[WORKER-POOL] [${this.name}] Task added to queue`, {
+        taskId: task.id,
+        newQueueSize: this.taskQueue.length
+      });
+
       this.processQueue();
     });
   }
 
-  /**
-   * Submit multiple tasks and wait for all to complete
-   */
-  async submitBatch<T>(tasks: WorkerTask<T>[]): Promise<T[]> {
-    const promises = tasks.map(task => this.submit(task));
-    return Promise.all(promises);
-  }
 
-  /**
-   * Submit tasks with controlled concurrency
-   */
-  async submitWithConcurrency<T>(
-    tasks: WorkerTask<T>[],
-    maxConcurrency: number,
-  ): Promise<T[]> {
-    const results: T[] = [];
-    const semaphore = new Semaphore(maxConcurrency);
-
-    const promises = tasks.map(async (task, index) => {
-      await semaphore.acquire();
-      try {
-        const result = await this.submit(task);
-        results[index] = result;
-        return result;
-      } finally {
-        semaphore.release();
-      }
-    });
-
-    await Promise.all(promises);
-    return results;
-  }
-
-  /**
-   * Get pool statistics
-   */
-  getStats(): PoolStats {
-    const activeWorkers = this.workers.filter(w => w.busy).length;
-    const utilization = this.workers.length > 0 ? activeWorkers / this.workers.length : 0;
-
-    return {
-      activeWorkers,
-      queuedTasks: this.taskQueue.length,
-      completedTasks: this.stats.completedTasks,
-      failedTasks: this.stats.failedTasks,
-      totalWorkers: this.workers.length,
-      utilization,
-    };
-  }
-
-  /**
-   * Resize the worker pool
-   */
-  resize(newSize: number): void {
-    if (newSize < 1) {
-      throw new Error('Worker pool size must be at least 1');
-    }
-
-    const currentSize = this.options.maxWorkers;
-    this.options.maxWorkers = newSize;
-    this.semaphore = new Semaphore(newSize);
-
-    if (newSize > currentSize) {
-      // Add more workers
-      for (let i = currentSize; i < newSize; i++) {
-        this.workers.push(this.createWorker(i));
-      }
-    } else if (newSize < currentSize) {
-      // Remove excess workers (only idle ones)
-      const workersToRemove = this.workers
-        .filter(w => !w.busy)
-        .slice(0, currentSize - newSize);
-      
-      this.workers = this.workers.filter(w => !workersToRemove.includes(w));
-    }
-
-    this.logger.log(`Worker pool resized from ${currentSize} to ${newSize} workers`);
-  }
 
   /**
    * Shutdown the worker pool gracefully
@@ -220,10 +154,6 @@ export class WorkerPool implements OnModuleDestroy {
   async shutdown(timeout: number = 30000): Promise<void> {
     this.logger.log('Shutting down worker pool...');
     this.isShuttingDown = true;
-
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-    }
 
     // Wait for active tasks to complete or timeout
     const startTime = Date.now();
@@ -266,16 +196,28 @@ export class WorkerPool implements OnModuleDestroy {
    * Process the task queue
    */
   private async processQueue(): Promise<void> {
+    this.logger.debug(`[WORKER-POOL] [${this.name}] Processing queue`, {
+      queueLength: this.taskQueue.length,
+      isShuttingDown: this.isShuttingDown,
+      activeWorkers: this.getActiveWorkerCount(),
+      availableWorkers: this.getAvailableWorkerCount()
+    });
+
     if (this.taskQueue.length === 0 || this.isShuttingDown) {
+      this.logger.debug(`[WORKER-POOL] [${this.name}] Queue processing skipped`, {
+        reason: this.taskQueue.length === 0 ? 'empty queue' : 'shutting down'
+      });
       return;
     }
 
     // Try to acquire a worker
+    this.logger.debug(`[WORKER-POOL] [${this.name}] Acquiring worker from semaphore`);
     await this.semaphore.acquire();
 
     try {
       const task = this.taskQueue.shift();
       if (!task) {
+        this.logger.debug(`[WORKER-POOL] [${this.name}] No task available after acquiring worker`);
         this.semaphore.release();
         return;
       }
@@ -283,14 +225,34 @@ export class WorkerPool implements OnModuleDestroy {
       const worker = this.getAvailableWorker();
       if (!worker) {
         // This shouldn't happen due to semaphore, but handle gracefully
+        this.logger.warn(`[WORKER-POOL] [${this.name}] No available worker despite semaphore acquisition`, {
+          taskId: task.id,
+          totalWorkers: this.workers.length,
+          activeWorkers: this.getActiveWorkerCount()
+        });
+
         this.taskQueue.unshift(task);
         this.semaphore.release();
         return;
       }
 
+      this.logger.debug(`[WORKER-POOL] [${this.name}] Assigning task to worker`, {
+        taskId: task.id,
+        workerId: worker.id,
+        queueLengthAfterShift: this.taskQueue.length
+      });
+
       // Execute task
       this.executeTask(worker, task);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error(`[WORKER-POOL] [${this.name}] Error processing queue`, {
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+        queueLength: this.taskQueue.length
+      });
+
       this.semaphore.release();
       this.logger.error('Error processing queue:', error);
     }
@@ -300,15 +262,46 @@ export class WorkerPool implements OnModuleDestroy {
    * Execute a task with a worker
    */
   private async executeTask(worker: Worker, task: WorkerTask): Promise<void> {
+    this.logger.debug(`[WORKER-POOL] [${this.name}] Starting task execution`, {
+      taskId: task.id,
+      workerId: worker.id,
+      workerLastUsed: worker.lastUsed
+    });
+
     worker.busy = true;
     worker.currentTask = task;
     worker.lastUsed = new Date();
 
+    const taskStartTime = Date.now();
+
     try {
       await task.execute();
+      const taskDuration = Date.now() - taskStartTime;
+
+      this.logger.debug(`[WORKER-POOL] [${this.name}] Task executed successfully`, {
+        taskId: task.id,
+        workerId: worker.id,
+        duration: taskDuration
+      });
     } catch (error) {
+      const taskDuration = Date.now() - taskStartTime;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error(`[WORKER-POOL] [${this.name}] Task execution failed`, {
+        taskId: task.id,
+        workerId: worker.id,
+        duration: taskDuration,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+
       this.logger.error(`Task ${task.id} failed:`, error);
     } finally {
+      this.logger.debug(`[WORKER-POOL] [${this.name}] Cleaning up after task execution`, {
+        taskId: task.id,
+        workerId: worker.id
+      });
+
       worker.busy = false;
       worker.currentTask = undefined;
       this.semaphore.release();
@@ -349,43 +342,24 @@ export class WorkerPool implements OnModuleDestroy {
   }
 
   /**
+   * Get count of active workers
+   */
+  private getActiveWorkerCount(): number {
+    return this.workers.filter(w => w.busy).length;
+  }
+
+  /**
+   * Get count of available workers
+   */
+  private getAvailableWorkerCount(): number {
+    return this.workers.filter(w => !w.busy).length;
+  }
+
+  /**
    * Check if there are active tasks
    */
   private hasActiveTasks(): boolean {
     return this.workers.some(w => w.busy) || this.taskQueue.length > 0;
-  }
-
-  /**
-   * Start cleanup timer for idle workers
-   */
-  private startCleanupTimer(): void {
-    if (!this.options.idleTimeout) return;
-
-    this.cleanupInterval = setInterval(() => {
-      this.cleanupIdleWorkers();
-    }, this.options.idleTimeout);
-  }
-
-  /**
-   * Cleanup idle workers
-   */
-  private cleanupIdleWorkers(): void {
-    if (!this.options.idleTimeout) return;
-
-    const now = new Date();
-    const idleThreshold = now.getTime() - this.options.idleTimeout;
-
-    // Don't remove all workers, keep at least 1
-    const idleWorkers = this.workers.filter(
-      w => !w.busy && w.lastUsed.getTime() < idleThreshold
-    );
-
-    if (idleWorkers.length > 0 && this.workers.length > 1) {
-      const toRemove = Math.min(idleWorkers.length, this.workers.length - 1);
-      this.workers = this.workers.filter(w => !idleWorkers.slice(0, toRemove).includes(w));
-      
-      this.logger.debug(`Cleaned up ${toRemove} idle workers`);
-    }
   }
 
   /**
@@ -401,67 +375,98 @@ export class WorkerPool implements OnModuleDestroy {
  */
 @Injectable()
 export class WorkerPoolService implements OnModuleDestroy {
-  private readonly logger = new Logger(WorkerPoolService.name);
   private pools = new Map<string, WorkerPool>();
 
-  constructor(private configService: ConfigService) {}
+  constructor(
+    @Inject(WINSTON_MODULE_NEST_PROVIDER)
+    private readonly logger: LoggerService
+  ) {
+    this.logger.debug('[WORKER-POOL-SERVICE] Initializing worker pool service', 'WorkerPoolService');
+  }
 
   /**
    * Create a new worker pool
    */
   createPool(name: string, options: WorkerPoolOptions): WorkerPool {
+    this.logger.debug('[WORKER-POOL-SERVICE] Creating new worker pool', 'WorkerPoolService');
+    this.logger.debug({
+      poolName: name,
+      maxWorkers: options.maxWorkers,
+      taskTimeout: options.taskTimeout
+    }, 'WorkerPoolService');
+
     if (this.pools.has(name)) {
+      this.logger.error('[WORKER-POOL-SERVICE] Cannot create pool - name already exists', 'WorkerPoolService');
+      this.logger.error({
+        poolName: name,
+        existingPools: Array.from(this.pools.keys())
+      }, 'WorkerPoolService');
       throw new Error(`Worker pool '${name}' already exists`);
     }
 
-    const pool = new WorkerPool(name, options);
+    const pool = new WorkerPool(name, options, this.logger);
     this.pools.set(name, pool);
 
-    this.logger.log(`Created worker pool '${name}' with ${options.maxWorkers} workers`);
+    this.logger.log('[WORKER-POOL-SERVICE] Worker pool created successfully', 'WorkerPoolService');
+    this.logger.log({
+      poolName: name,
+      maxWorkers: options.maxWorkers,
+      totalPools: this.pools.size
+    }, 'WorkerPoolService');
+
+    this.logger.log(`Created worker pool '${name}' with ${options.maxWorkers} workers`, 'WorkerPoolService');
     return pool;
   }
 
-  /**
-   * Get an existing worker pool
-   */
-  getPool(name: string): WorkerPool | null {
-    return this.pools.get(name) || null;
-  }
+
 
   /**
    * Submit a task to a specific pool
    */
   async submitTask<T>(poolName: string, task: WorkerTask<T>): Promise<T> {
+    this.logger.debug('[WORKER-POOL-SERVICE] Submitting task to pool', 'WorkerPoolService');
+    this.logger.debug({
+      poolName,
+      taskId: task.id,
+      taskTimeout: task.timeout
+    }, 'WorkerPoolService');
+
     const pool = this.pools.get(poolName);
     if (!pool) {
+      this.logger.error('[WORKER-POOL-SERVICE] Cannot submit task - pool not found', 'WorkerPoolService');
+      this.logger.error({
+        poolName,
+        taskId: task.id,
+        availablePools: Array.from(this.pools.keys())
+      }, 'WorkerPoolService');
       throw new Error(`Worker pool '${poolName}' not found`);
     }
 
-    return pool.submit(task);
-  }
+    try {
+      const result = await pool.submit(task);
 
-  /**
-   * Get stats for all pools
-   */
-  getAllStats(): Record<string, PoolStats> {
-    const stats: Record<string, PoolStats> = {};
-    for (const [name, pool] of this.pools) {
-      stats[name] = pool.getStats();
-    }
-    return stats;
-  }
+      this.logger.debug('[WORKER-POOL-SERVICE] Task submitted successfully', 'WorkerPoolService');
+      this.logger.debug({
+        poolName,
+        taskId: task.id
+      }, 'WorkerPoolService');
 
-  /**
-   * Destroy a worker pool
-   */
-  async destroyPool(name: string): Promise<void> {
-    const pool = this.pools.get(name);
-    if (pool) {
-      await pool.shutdown();
-      this.pools.delete(name);
-      this.logger.log(`Destroyed worker pool '${name}'`);
+      return result;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error('[WORKER-POOL-SERVICE] Task submission failed', {
+        poolName,
+        taskId: task.id,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+
+      throw error;
     }
   }
+
+
 
   /**
    * Shutdown all pools

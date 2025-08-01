@@ -37,10 +37,12 @@ public class DocumentVisitor {
     public void visitDocuments() {
         try {
             Path startPath = Paths.get(projectPath);
+            logger.info("Starting document scan from path: {}", startPath.toAbsolutePath());
             Files.walkFileTree(startPath, new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                     if (isDocumentFile(file)) {
+                        logger.info("Found document file: {}", file);
                         processDocumentFile(file, attrs);
                     }
                     return FileVisitResult.CONTINUE;
@@ -85,7 +87,7 @@ public class DocumentVisitor {
             );
             result.addRelationship(relationship);
             
-            logger.debug("Processed document: {}", file.getFileName());
+            logger.info("Processed document: {}", file.getFileName());
             
         } catch (Exception e) {
             logger.error("Error processing document file: " + file, e);

@@ -89,9 +89,3 @@ export interface ApiResponse<T = any> {
   error?: string;
   message?: string;
 }
-
-export interface SyncJobOptions {
-  priority?: number;
-  force?: boolean;
-  incremental?: boolean;
-}

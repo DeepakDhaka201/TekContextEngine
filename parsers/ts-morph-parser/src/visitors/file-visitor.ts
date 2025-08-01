@@ -7,7 +7,8 @@ import * as path from 'path';
 export class FileVisitor {
   constructor(
     private result: ParseResult,
-    private options: ParserOptions
+    private options: ParserOptions,
+    private codebaseName: string
   ) {}
 
   visitSourceFile(sourceFile: SourceFile, projectPath: string): void {
@@ -28,14 +29,19 @@ export class FileVisitor {
       const isTest = this.isTestFile(filePath);
       const framework = this.detectFrameworkFromFile(filePath, content);
       
+      // Extract package name from file path
+      const packageName = this.extractPackageName(filePath);
+
       const fileNode: FileNode = {
-        path: absolutePath,
+        path: filePath, // Use relative path
         fileName,
+        packageName,
+        fileExtension: extension,
+        fileSize: content.length,
         checksum,
-        lineCount,
-        extension,
-        isTest,
-        framework
+        lastModified: Date.now(), // Current timestamp as we don't have file stats
+        isTestFile: isTest,
+        sourceCode: content
       };
       
       this.result.files.push(fileNode);
@@ -98,5 +104,24 @@ export class FileVisitor {
     }
     
     return undefined;
+  }
+
+  private extractPackageName(filePath: string): string {
+    // Convert file path to package-like structure
+    const packagePath = filePath
+      .replace(/^\.\//, '') // Remove leading ./
+      .replace(/\.(ts|tsx|js|jsx)$/, '') // Remove file extension
+      .replace(/\//g, '.') // Replace slashes with dots
+      .replace(/index$/, '') // Remove index from end
+      .replace(/\.$/, ''); // Remove trailing dot
+
+    // Get directory path only (remove filename)
+    const parts = packagePath.split('.');
+    if (parts.length > 1) {
+      parts.pop(); // Remove the last part (filename)
+      return parts.join('.');
+    }
+
+    return packagePath || 'default';
   }
 }

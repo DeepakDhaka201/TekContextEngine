@@ -1,12 +1,11 @@
 import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { 
+import {
   TekProject,
   DocsBucket,
   Codebase,
-  Document,
-  CodeSymbol
+  Document
 } from '@/entities';
 import { IndexPipeline } from '@/modules/indexing/entities/index-pipeline.entity';
 
@@ -27,7 +26,6 @@ import { IndexPipeline } from '@/modules/indexing/entities/index-pipeline.entity
           DocsBucket,
           Codebase,
           Document,
-          CodeSymbol,
           IndexPipeline,
         ],
         synchronize: configService.get('DB_SYNCHRONIZE', false),
@@ -48,7 +46,6 @@ import { IndexPipeline } from '@/modules/indexing/entities/index-pipeline.entity
       DocsBucket,
       Codebase,
       Document,
-      CodeSymbol,
       IndexPipeline,
     ]),
   ],

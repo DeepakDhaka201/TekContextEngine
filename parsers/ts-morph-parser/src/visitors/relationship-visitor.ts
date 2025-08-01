@@ -1,6 +1,6 @@
-import { SourceFile, ClassDeclaration, InterfaceDeclaration, MethodDeclaration, FunctionDeclaration } from 'ts-morph';
 import { ParseResult, Relationship } from '../models/parse-result';
 import { ParserOptions } from '../parser';
+import { generateRelationshipId } from '../utils/id-generator';
 
 export class RelationshipVisitor {
   constructor(
@@ -15,12 +15,7 @@ export class RelationshipVisitor {
 
     this.buildFileToClassRelationships();
     this.buildFileToInterfaceRelationships();
-    this.buildFileToMethodRelationships();
     this.buildClassToMethodRelationships();
-    this.buildInheritanceRelationships();
-    this.buildImplementationRelationships();
-    this.buildDependencyRelationships();
-    this.buildFrameworkRelationships();
 
     if (this.options.verbose) {
       console.log(`   ✅ Built ${this.result.relationships.length} relationships`);
@@ -30,11 +25,13 @@ export class RelationshipVisitor {
   private buildFileToClassRelationships(): void {
     for (const classNode of this.result.classes) {
       this.addRelationship({
+        id: generateRelationshipId('CONTAINS', classNode.filePath, classNode.id),
         type: 'CONTAINS',
-        startNodeType: 'File',
-        startNodeId: classNode.filePath,
-        endNodeType: 'Class',
-        endNodeId: classNode.fullyQualifiedName
+        sourceType: 'File',
+        sourceId: classNode.filePath,
+        targetType: 'Class',
+        targetId: classNode.id,
+        properties: {}
       });
     }
   }
@@ -42,176 +39,51 @@ export class RelationshipVisitor {
   private buildFileToInterfaceRelationships(): void {
     for (const interfaceNode of this.result.interfaces) {
       this.addRelationship({
+        id: generateRelationshipId('CONTAINS', interfaceNode.filePath, interfaceNode.id),
         type: 'CONTAINS',
-        startNodeType: 'File',
-        startNodeId: interfaceNode.filePath,
-        endNodeType: 'Interface',
-        endNodeId: interfaceNode.fullyQualifiedName
+        sourceType: 'File',
+        sourceId: interfaceNode.filePath,
+        targetType: 'Interface',
+        targetId: interfaceNode.id,
+        properties: {}
       });
     }
   }
 
-  private buildFileToMethodRelationships(): void {
-    for (const methodNode of this.result.methods) {
-      // Standalone functions have file relationship
-      if (!methodNode.className) {
-        this.addRelationship({
-          type: 'CONTAINS',
-          startNodeType: 'File',
-          startNodeId: methodNode.filePath,
-          endNodeType: 'Method',
-          endNodeId: `${methodNode.filePath}:${methodNode.name}`
-        });
-      }
-    }
-  }
+
 
   private buildClassToMethodRelationships(): void {
     for (const methodNode of this.result.methods) {
-      if (methodNode.className) {
-        const classNode = this.result.classes.find(c => 
-          c.name === methodNode.className && c.filePath === methodNode.filePath
-        );
-        
-        if (classNode) {
-          const relationshipType = methodNode.isConstructor ? 'HAS_CONSTRUCTOR' : 'HAS_METHOD';
-          
-          this.addRelationship({
-            type: relationshipType,
-            startNodeType: 'Class',
-            startNodeId: classNode.fullyQualifiedName,
-            endNodeType: 'Method',
-            endNodeId: `${classNode.fullyQualifiedName}:${methodNode.name}`,
-            properties: {
-              methodType: methodNode.isConstructor ? 'constructor' : 
-                         methodNode.isGetter ? 'getter' :
-                         methodNode.isSetter ? 'setter' : 'method',
-              visibility: methodNode.visibility,
-              isStatic: methodNode.isStatic,
-              isAbstract: methodNode.isAbstract
-            }
-          });
-        }
-      }
-    }
-  }
+      // Find the class that contains this method by matching file path and looking for class context
+      const classNode = this.result.classes.find(c => c.filePath === methodNode.filePath);
 
-  private buildInheritanceRelationships(): void {
-    // This would require analyzing extends clauses in the AST
-    // For now, we'll implement basic inheritance detection
-    // This can be enhanced by analyzing the ts-morph AST more deeply
-  }
+      if (classNode) {
+        const relationshipType = methodNode.isConstructor ? 'HAS_CONSTRUCTOR' : 'HAS_METHOD';
 
-  private buildImplementationRelationships(): void {
-    // This would require analyzing implements clauses in the AST
-    // For now, we'll implement basic implementation detection
-    // This can be enhanced by analyzing the ts-morph AST more deeply
-  }
-
-  private buildDependencyRelationships(): void {
-    for (const dependency of this.result.dependencies) {
-      // Find files that import this dependency
-      const dependentFiles = this.result.files.filter(file => {
-        // This is a simplified check - in reality we'd need to analyze import statements
-        return true; // Placeholder
-      });
-
-      for (const file of dependentFiles) {
         this.addRelationship({
-          type: 'DEPENDS_ON',
-          startNodeType: 'File',
-          startNodeId: file.path,
-          endNodeType: 'Dependency',
-          endNodeId: dependency.name,
+          id: generateRelationshipId(relationshipType, classNode.id, methodNode.id),
+          type: relationshipType,
+          sourceType: 'Class',
+          sourceId: classNode.id,
+          targetType: 'Method',
+          targetId: methodNode.id,
           properties: {
-            dependencyType: dependency.type,
-            version: dependency.version
+            methodType: methodNode.isConstructor ? 'constructor' : 'method',
+            visibility: methodNode.visibility,
+            isStatic: methodNode.isStatic,
+            isAbstract: methodNode.isAbstract
           }
         });
-      }
-    }
-  }
-
-  private buildFrameworkRelationships(): void {
-    // API Endpoint relationships
-    for (const method of this.result.methods) {
-      if (method.isApiEndpoint && method.className) {
-        const classNode = this.result.classes.find(c => 
-          c.name === method.className && c.filePath === method.filePath
-        );
-        
-        if (classNode?.isController) {
-          this.addRelationship({
-            type: 'EXPOSES_ENDPOINT',
-            startNodeType: 'Class',
-            startNodeId: classNode.fullyQualifiedName,
-            endNodeType: 'APIEndpoint',
-            endNodeId: `${method.httpMethod}:${method.route || method.name}`,
-            properties: {
-              httpMethod: method.httpMethod,
-              route: method.route,
-              methodName: method.name
-            }
-          });
-        }
-      }
-    }
-
-    // Component relationships
-    for (const classNode of this.result.classes) {
-      if (classNode.isComponent) {
-        // Find props interfaces
-        const propsInterface = this.result.interfaces.find(i => 
-          i.isProps && i.filePath === classNode.filePath
-        );
-        
-        if (propsInterface) {
-          this.addRelationship({
-            type: 'USES_PROPS',
-            startNodeType: 'Class',
-            startNodeId: classNode.fullyQualifiedName,
-            endNodeType: 'Interface',
-            endNodeId: propsInterface.fullyQualifiedName
-          });
-        }
-      }
-    }
-
-    // Service relationships
-    for (const classNode of this.result.classes) {
-      if (classNode.isService) {
-        // Find methods that are lifecycle or event handlers
-        const serviceMethods = this.result.methods.filter(m => 
-          m.className === classNode.name && m.filePath === classNode.filePath
-        );
-        
-        for (const method of serviceMethods) {
-          if (method.isApiEndpoint) {
-            this.addRelationship({
-              type: 'PROVIDES_SERVICE',
-              startNodeType: 'Class',
-              startNodeId: classNode.fullyQualifiedName,
-              endNodeType: 'Method',
-              endNodeId: `${classNode.fullyQualifiedName}:${method.name}`,
-              properties: {
-                serviceType: 'api',
-                httpMethod: method.httpMethod
-              }
-            });
-          }
-        }
       }
     }
   }
 
   private addRelationship(relationship: Relationship): void {
-    // Check for duplicates
-    const exists = this.result.relationships.some(r => 
+    // Check if relationship already exists
+    const exists = this.result.relationships.some(r =>
       r.type === relationship.type &&
-      r.startNodeType === relationship.startNodeType &&
-      r.startNodeId === relationship.startNodeId &&
-      r.endNodeType === relationship.endNodeType &&
-      r.endNodeId === relationship.endNodeId
+      r.sourceId === relationship.sourceId &&
+      r.targetId === relationship.targetId
     );
 
     if (!exists) {

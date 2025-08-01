@@ -35,13 +35,22 @@ public class ParseResult {
     
     @JsonProperty("interfaces")
     private List<InterfaceNode> interfaces = new CopyOnWriteArrayList<>();
-    
+
+    @JsonProperty("enums")
+    private List<EnumNode> enums = new CopyOnWriteArrayList<>();
+
     @JsonProperty("methods")
     private List<MethodNode> methods = new CopyOnWriteArrayList<>();
-    
+
     @JsonProperty("fields")
     private List<FieldNode> fields = new CopyOnWriteArrayList<>();
-    
+
+    @JsonProperty("lambdaExpressions")
+    private List<LambdaExpressionNode> lambdaExpressions = new CopyOnWriteArrayList<>();
+
+    @JsonProperty("methodReferences")
+    private List<MethodReferenceNode> methodReferences = new CopyOnWriteArrayList<>();
+
     // Dependencies and relationships
     @JsonProperty("dependencies")
     private List<DependencyNode> dependencies = new CopyOnWriteArrayList<>();
@@ -58,6 +67,9 @@ public class ParseResult {
     
     @JsonProperty("documents")
     private List<DocumentNode> documents = new CopyOnWriteArrayList<>();
+
+    @JsonProperty("documentChunks")
+    private List<DocumentChunk> documentChunks = new CopyOnWriteArrayList<>();
     
     @JsonProperty("annotations")
     private List<AnnotationNode> annotations = new CopyOnWriteArrayList<>();
@@ -113,7 +125,15 @@ public class ParseResult {
     public void setInterfaces(List<InterfaceNode> interfaces) {
         this.interfaces = interfaces != null ? new CopyOnWriteArrayList<>(interfaces) : new CopyOnWriteArrayList<>();
     }
-    
+
+    public List<EnumNode> getEnums() {
+        return enums;
+    }
+
+    public void setEnums(List<EnumNode> enums) {
+        this.enums = enums != null ? new CopyOnWriteArrayList<>(enums) : new CopyOnWriteArrayList<>();
+    }
+
     public List<MethodNode> getMethods() {
         return methods;
     }
@@ -129,7 +149,23 @@ public class ParseResult {
     public void setFields(List<FieldNode> fields) {
         this.fields = fields != null ? new CopyOnWriteArrayList<>(fields) : new CopyOnWriteArrayList<>();
     }
-    
+
+    public List<LambdaExpressionNode> getLambdaExpressions() {
+        return lambdaExpressions;
+    }
+
+    public void setLambdaExpressions(List<LambdaExpressionNode> lambdaExpressions) {
+        this.lambdaExpressions = lambdaExpressions != null ? new CopyOnWriteArrayList<>(lambdaExpressions) : new CopyOnWriteArrayList<>();
+    }
+
+    public List<MethodReferenceNode> getMethodReferences() {
+        return methodReferences;
+    }
+
+    public void setMethodReferences(List<MethodReferenceNode> methodReferences) {
+        this.methodReferences = methodReferences != null ? new CopyOnWriteArrayList<>(methodReferences) : new CopyOnWriteArrayList<>();
+    }
+
     public List<DependencyNode> getDependencies() {
         return dependencies;
     }
@@ -169,7 +205,15 @@ public class ParseResult {
     public void setDocuments(List<DocumentNode> documents) {
         this.documents = documents != null ? new CopyOnWriteArrayList<>(documents) : new CopyOnWriteArrayList<>();
     }
-    
+
+    public List<DocumentChunk> getDocumentChunks() {
+        return documentChunks;
+    }
+
+    public void setDocumentChunks(List<DocumentChunk> documentChunks) {
+        this.documentChunks = documentChunks != null ? new CopyOnWriteArrayList<>(documentChunks) : new CopyOnWriteArrayList<>();
+    }
+
     public List<AnnotationNode> getAnnotations() {
         return annotations;
     }
@@ -197,7 +241,13 @@ public class ParseResult {
             this.interfaces.add(iface);
         }
     }
-    
+
+    public void addEnum(EnumNode enumNode) {
+        if (enumNode != null) {
+            this.enums.add(enumNode);
+        }
+    }
+
     public void addMethod(MethodNode method) {
         if (method != null) {
             this.methods.add(method);
@@ -209,7 +259,19 @@ public class ParseResult {
             this.fields.add(field);
         }
     }
-    
+
+    public void addLambdaExpression(LambdaExpressionNode lambda) {
+        if (lambda != null) {
+            this.lambdaExpressions.add(lambda);
+        }
+    }
+
+    public void addMethodReference(MethodReferenceNode methodRef) {
+        if (methodRef != null) {
+            this.methodReferences.add(methodRef);
+        }
+    }
+
     public void addDependency(DependencyNode dependency) {
         if (dependency != null) {
             this.dependencies.add(dependency);
@@ -239,7 +301,13 @@ public class ParseResult {
             this.documents.add(document);
         }
     }
-    
+
+    public void addDocumentChunk(DocumentChunk documentChunk) {
+        if (documentChunk != null) {
+            this.documentChunks.add(documentChunk);
+        }
+    }
+
     public void addAnnotation(AnnotationNode annotation) {
         if (annotation != null) {
             this.annotations.add(annotation);
@@ -252,9 +320,10 @@ public class ParseResult {
      * Gets the total number of entities in this result
      */
     public int getTotalEntityCount() {
-        return files.size() + classes.size() + interfaces.size() + methods.size() + 
-               fields.size() + dependencies.size() + apiEndpoints.size() + 
-               testCases.size() + documents.size() + annotations.size();
+        return files.size() + classes.size() + interfaces.size() + enums.size() +
+               methods.size() + fields.size() + lambdaExpressions.size() +
+               methodReferences.size() + dependencies.size() + apiEndpoints.size() +
+               testCases.size() + documents.size() + documentChunks.size() + annotations.size();
     }
     
     /**
@@ -269,10 +338,11 @@ public class ParseResult {
      */
     public String getSummary() {
         return String.format(
-            "ParseResult{codebase='%s', files=%d, classes=%d, interfaces=%d, methods=%d, " +
-            "fields=%d, dependencies=%d, relationships=%d, apiEndpoints=%d, testCases=%d}",
-            codebaseName, files.size(), classes.size(), interfaces.size(), methods.size(),
-            fields.size(), dependencies.size(), relationships.size(), apiEndpoints.size(), testCases.size()
+            "ParseResult{codebase='%s', files=%d, classes=%d, interfaces=%d, enums=%d, " +
+            "methods=%d, fields=%d, lambdas=%d, methodRefs=%d, dependencies=%d, relationships=%d}",
+            codebaseName, files.size(), classes.size(), interfaces.size(), enums.size(),
+            methods.size(), fields.size(), lambdaExpressions.size(), methodReferences.size(),
+            dependencies.size(), relationships.size()
         );
     }
     

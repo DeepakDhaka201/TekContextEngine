@@ -1,27 +1,27 @@
-import { 
-  Controller, 
-  Post, 
-  Get, 
-  Param, 
-  Body, 
+import {
+  Controller,
+  Post,
+  Get,
+  Param,
+  Body,
   Query,
-  HttpCode, 
+  HttpCode,
   HttpStatus,
-  Logger 
+  Inject,
+  LoggerService
 } from '@nestjs/common';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { CodebaseService } from './codebase.service';
-import { PipelineOrchestratorService } from '../indexing/pipeline/services/pipeline-orchestrator.service';
-import { IndexPipelineType } from '../indexing/entities/index-pipeline.entity';
 import { CreateCodebaseDto } from './dto';
-import { ApiResponse } from '@/common/types';
+import { ApiResponse, PaginationOptions } from '@/common/types';
+import { PaginationDto } from '@/common/dto/pagination.dto';
 
 @Controller('codebases')
 export class CodebaseController {
-  private readonly logger = new Logger(CodebaseController.name);
-
   constructor(
     private readonly codebaseService: CodebaseService,
-    private readonly pipelineOrchestrator: PipelineOrchestratorService,
+    @Inject(WINSTON_MODULE_NEST_PROVIDER)
+    private readonly logger: LoggerService
   ) {}
 
   /**
@@ -30,31 +30,108 @@ export class CodebaseController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createCodebase(@Body() createDto: CreateCodebaseDto): Promise<ApiResponse> {
+    const requestId = Math.random().toString(36).substring(2, 8);
+
+    this.logger.log(`[${requestId}] [CREATE-CODEBASE] Starting codebase creation request`, {
+      name: createDto.name,
+      projectId: createDto.projectId,
+      gitlabUrl: createDto.gitlabUrl,
+      branch: createDto.branch
+    });
+
     this.logger.log(`Creating codebase: ${createDto.name} for TekProject: ${createDto.projectId}`);
-    
-    const codebase = await this.codebaseService.create(createDto);
-    
-    return {
-      success: true,
-      data: codebase,
-      message: 'Codebase created successfully',
-    };
+
+    try {
+      this.logger.debug(`[${requestId}] [CREATE-CODEBASE] Calling codebase service`);
+      const codebase = await this.codebaseService.create(createDto);
+
+      this.logger.log(`[${requestId}] [CREATE-CODEBASE] Codebase creation completed successfully`, {
+        codebaseId: codebase.id,
+        codebaseName: codebase.name,
+        projectId: codebase.project.id,
+        gitlabUrl: codebase.gitlabUrl,
+        branch: codebase.branch,
+        status: codebase.status
+      });
+
+      return {
+        success: true,
+        data: codebase,
+        message: 'Codebase created successfully',
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error(`[${requestId}] [CREATE-CODEBASE] Codebase creation failed`, {
+        name: createDto.name,
+        projectId: createDto.projectId,
+        gitlabUrl: createDto.gitlabUrl,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+
+      throw error;
+    }
   }
 
   /**
    * List codebases with optional project filter
    */
   @Get()
-  async listCodebases(@Query('projectId') projectId?: string): Promise<ApiResponse> {
+  async listCodebases(
+    @Query('projectId') projectId: string,
+    @Query() paginationDto: PaginationDto,
+  ): Promise<ApiResponse> {
+    const requestId = Math.random().toString(36).substring(2, 8);
+
+    this.logger.log(`[${requestId}] [LIST-CODEBASES] Starting codebases list request`, {
+      projectId,
+      page: paginationDto.page,
+      limit: paginationDto.limit,
+      sortBy: paginationDto.sortBy,
+      sortOrder: paginationDto.sortOrder
+    });
+
     if (!projectId) {
+      this.logger.error(`[${requestId}] [LIST-CODEBASES] Missing required projectId parameter`);
       throw new Error('projectId query parameter is required');
     }
 
-    const codebases = await this.codebaseService.findByProjectId(projectId);
-    return {
-      success: true,
-      data: codebases,
+    const options: PaginationOptions = {
+      page: paginationDto.page || 1,
+      perPage: paginationDto.limit || 20,
+      sort: paginationDto.sortBy || 'createdAt',
+      orderBy: paginationDto.sortOrder || 'desc',
     };
+
+    try {
+      const result = await this.codebaseService.findByProjectId(projectId, options);
+
+      this.logger.log(`[${requestId}] [LIST-CODEBASES] Codebases list completed successfully`, {
+        projectId,
+        totalResults: result.total,
+        page: result.page,
+        perPage: result.perPage,
+        totalPages: result.totalPages
+      });
+
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error(`[${requestId}] [LIST-CODEBASES] Codebases list failed`, {
+        projectId,
+        page: paginationDto.page,
+        limit: paginationDto.limit,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+
+      throw error;
+    }
   }
 
   /**
@@ -70,109 +147,7 @@ export class CodebaseController {
     };
   }
 
-  /**
-   * Start indexing pipeline for a specific codebase
-   */
-  @Post(':id/index')
-  @HttpCode(HttpStatus.ACCEPTED)
-  async startIndexingJob(
-    @Param('id') codebaseId: string,
-    @Body() options: {
-      type?: 'full' | 'incremental';
-      baseCommit?: string;
-      targetCommit?: string;
-      customConfiguration?: any;
-    } = {},
-  ): Promise<ApiResponse> {
-    this.logger.log(`Starting indexing job for codebase: ${codebaseId}`);
-    
-    // Get codebase information
-    const { codebase } = await this.codebaseService.findForIndexing(codebaseId);
-    
-    // Create pipeline
-    const job = await this.pipelineOrchestrator.createPipeline({
-      projectId: codebase.project.id,
-      codebaseId: codebase.id,
-      type: this.mapPipelineType(options.type) || IndexPipelineType.INCREMENTAL,
-      baseCommit: options.baseCommit,
-      targetCommit: options.targetCommit,
-      priority: 1,
-      customConfiguration: options.customConfiguration,
-    });
-    
-    return {
-      success: true,
-      data: {
-        jobId: job.id,
-        type: job.type,
-        status: job.status,
-      },
-      message: 'Indexing job started successfully',
-    };
-  }
 
-  /**
-   * Get pipeline status and history for a specific codebase
-   */
-  @Get(':id/index/status')
-  async getCodebaseIndexStatus(@Param('id') codebaseId: string): Promise<ApiResponse> {
-    const codebase = await this.codebaseService.findById(codebaseId);
-    const { activePipelines, recentPipelines, summary } = await this.pipelineOrchestrator.getPipelinesForCodebase(codebaseId);
-    
-    const indexStatus = {
-      codebase: {
-        id: codebase.id,
-        name: codebase.name,
-        status: codebase.status,
-        lastIndexAt: codebase.lastSyncAt,
-        lastIndexCommit: codebase.lastSyncCommit,
-      },
-      activeJobs: activePipelines.map(pipeline => ({
-        id: pipeline.id,
-        type: pipeline.type,
-        status: pipeline.status,
-        progress: pipeline.progress,
-        currentStep: pipeline.currentStep,
-        startedAt: pipeline.startedAt,
-        description: pipeline.description,
-      })),
-      recentJobs: recentPipelines.map(pipeline => ({
-        id: pipeline.id,
-        type: pipeline.type,
-        status: pipeline.status,
-        progress: pipeline.progress,
-        startedAt: pipeline.startedAt,
-        completedAt: pipeline.completedAt,
-        duration: pipeline.completedAt && pipeline.startedAt 
-          ? pipeline.completedAt.getTime() - pipeline.startedAt.getTime()
-          : null,
-        description: pipeline.description,
-        error: pipeline.error,
-      })),
-      summary: {
-        activeJobCount: summary.activeCount,
-        recentJobCount: summary.recentCount,
-        hasRunningJob: summary.hasRunning,
-      },
-    };
-    
-    return {
-      success: true,
-      data: indexStatus,
-    };
-  }
 
-  /**
-   * Map string pipeline type to enum
-   */
-  private mapPipelineType(pipelineType?: string): IndexPipelineType | undefined {
-    switch (pipelineType) {
-      case 'full':
-        return IndexPipelineType.FULL;
-      case 'incremental':
-        return IndexPipelineType.INCREMENTAL;
-      default:
-        return undefined;
-    }
-  }
+
 }

@@ -1,11 +1,13 @@
 import { SourceFile, InterfaceDeclaration, SyntaxKind } from 'ts-morph';
-import { ParseResult, InterfaceNode } from '../models/parse-result';
+import { ParseResult, InterfaceNode, DecoratorInfo } from '../models/parse-result';
 import { ParserOptions } from '../parser';
+import { generateInterfaceId, createFullyQualifiedName } from '../utils/id-generator';
 
 export class InterfaceVisitor {
   constructor(
     private result: ParseResult,
-    private options: ParserOptions
+    private options: ParserOptions,
+    private codebaseName: string
   ) {}
 
   visitSourceFile(sourceFile: SourceFile): void {
@@ -19,24 +21,26 @@ export class InterfaceVisitor {
   private visitInterface(interfaceDeclaration: InterfaceDeclaration, sourceFile: SourceFile): void {
     try {
       const name = interfaceDeclaration.getName();
-      
+      const fullyQualifiedName = this.getFullyQualifiedName(interfaceDeclaration, sourceFile);
+      const interfaceId = generateInterfaceId(this.codebaseName, fullyQualifiedName);
+
       const interfaceNode: InterfaceNode = {
+        id: interfaceId,
         name,
-        fullyQualifiedName: this.getFullyQualifiedName(interfaceDeclaration, sourceFile),
-        comment: this.getComment(interfaceDeclaration),
+        fullyQualifiedName,
+        comment: this.getComment(interfaceDeclaration) || '',
+        visibility: this.getVisibility(interfaceDeclaration),
         filePath: sourceFile.getFilePath(),
         startLine: interfaceDeclaration.getStartLineNumber(),
         endLine: interfaceDeclaration.getEndLineNumber(),
-        isExported: interfaceDeclaration.isExported()
+        decorators: this.getDecorators(interfaceDeclaration),
+        properties: {}
       };
-
-      // Framework-specific analysis
-      this.analyzeFrameworkSpecificInterface(interfaceNode, interfaceDeclaration);
 
       this.result.interfaces.push(interfaceNode);
 
       if (this.options.verbose) {
-        console.log(`   🔗 Interface: ${name} (${interfaceNode.isExported ? 'exported' : 'internal'})`);
+        console.log(`   🔗 Interface: ${name} (ID: ${interfaceId})`);
       }
 
     } catch (error) {
@@ -47,80 +51,37 @@ export class InterfaceVisitor {
   private getFullyQualifiedName(interfaceDeclaration: InterfaceDeclaration, sourceFile: SourceFile): string {
     const interfaceName = interfaceDeclaration.getName();
     const filePath = sourceFile.getFilePath();
-    
-    // Try to get namespace or module name
-    const namespaces = interfaceDeclaration.getAncestors()
-      .filter(ancestor => ancestor.getKind() === SyntaxKind.ModuleDeclaration)
-      .map(ns => (ns as any).getName?.())
-      .filter(Boolean);
-    
-    if (namespaces.length > 0) {
-      return namespaces.join('.') + '.' + interfaceName;
-    }
-    
-    // Use file path as namespace
-    const relativePath = filePath.replace(/\.(ts|tsx|js|jsx)$/, '').replace(/[\/\\]/g, '.');
-    return relativePath + '.' + interfaceName;
+
+    return createFullyQualifiedName(filePath, interfaceName);
   }
 
   private getComment(interfaceDeclaration: InterfaceDeclaration): string | undefined {
     const jsDoc = interfaceDeclaration.getJsDocs();
     if (jsDoc.length > 0) {
-      return jsDoc[0].getComment();
+      const comment = jsDoc[0]?.getComment();
+      if (typeof comment === 'string') {
+        return comment;
+      }
     }
-    
+
     // Try to get leading comments
     const leadingComments = interfaceDeclaration.getLeadingCommentRanges();
     if (leadingComments.length > 0) {
-      return leadingComments[0].getText();
+      return leadingComments[0]?.getText();
     }
-    
+
     return undefined;
   }
 
-  private analyzeFrameworkSpecificInterface(interfaceNode: InterfaceNode, interfaceDeclaration: InterfaceDeclaration): void {
-    const name = interfaceNode.name;
-    
-    // React Props detection
-    if (name.endsWith('Props') || name.endsWith('Properties')) {
-      interfaceNode.isProps = true;
-    }
-    
-    // API Model detection
-    if (name.endsWith('Response') || name.endsWith('Request') || 
-        name.endsWith('DTO') || name.endsWith('Model') ||
-        name.endsWith('Entity') || name.endsWith('Data')) {
-      interfaceNode.isApiModel = true;
-    }
-    
-    // Check if interface extends common base types
-    const extendsClauses = interfaceDeclaration.getExtends();
-    for (const extendsClause of extendsClauses) {
-      const extendsText = extendsClause.getText();
-      
-      // React component props
-      if (extendsText.includes('ComponentProps') || extendsText.includes('HTMLProps')) {
-        interfaceNode.isProps = true;
-      }
-      
-      // API response types
-      if (extendsText.includes('Response') || extendsText.includes('ApiResponse')) {
-        interfaceNode.isApiModel = true;
-      }
-    }
-    
-    // Check properties for framework patterns
-    const properties = interfaceDeclaration.getProperties();
-    const propertyNames = properties.map(prop => prop.getName());
-    
-    // React props patterns
-    if (propertyNames.some(name => ['children', 'className', 'style', 'onClick', 'onChange'].includes(name))) {
-      interfaceNode.isProps = true;
-    }
-    
-    // API model patterns
-    if (propertyNames.some(name => ['id', 'createdAt', 'updatedAt', 'status', 'data'].includes(name))) {
-      interfaceNode.isApiModel = true;
-    }
+  private getVisibility(interfaceDeclaration: InterfaceDeclaration): string {
+    // TypeScript interfaces are always public when exported, package-private otherwise
+    return interfaceDeclaration.isExported() ? 'public' : 'package';
   }
+
+  private getDecorators(interfaceDeclaration: InterfaceDeclaration): DecoratorInfo[] {
+    // TypeScript interfaces don't have decorators, but we return empty array for consistency
+    return [];
+  }
+
+  // Framework-specific analysis is removed since the new structure doesn't have these properties
 }

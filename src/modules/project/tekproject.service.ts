@@ -1,5 +1,6 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, LoggerService, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { Repository } from 'typeorm';
 import { TekProject, ProjectStatus } from '@/entities';
 import { PaginatedResult, PaginationOptions } from '@/common/types';
@@ -8,18 +9,18 @@ import { TekProjectAdapter } from './adapters';
 
 @Injectable()
 export class TekProjectService {
-  private readonly logger = new Logger(TekProjectService.name);
-
   constructor(
     @InjectRepository(TekProject)
     private tekProjectRepository: Repository<TekProject>,
+    @Inject(WINSTON_MODULE_NEST_PROVIDER)
+    private readonly logger: LoggerService
   ) {}
 
   /**
    * Create a new TekProject (organization/product level)
    */
   async create(createDto: CreateTekProjectDto): Promise<TekProject> {
-    this.logger.log(`Creating TekProject: ${createDto.name}`);
+    this.logger.log(`Creating TekProject: ${createDto.name}`, 'TekProjectService');
 
     try {
       const tekProject = TekProjectAdapter.fromCreateDto(createDto);

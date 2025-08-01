@@ -12,18 +12,9 @@ import {
 } from 'typeorm';
 import { TekProject } from './project.entity';
 import { Document } from './document.entity';
-import { IndexMode } from './enums';
+import { IndexMode, CodebaseStatus } from './enums';
 import { GitConfig } from '../config/git.config';
 import { IndexPipeline } from '../modules/indexing/entities/index-pipeline.entity';
-import { CodeSymbol } from './code-symbol.entity';
-
-export enum CodebaseStatus {
-  PENDING = 'PENDING',
-  SYNCING = 'SYNCING',
-  ACTIVE = 'ACTIVE',
-  ERROR = 'ERROR',
-  ARCHIVED = 'ARCHIVED',
-}
 
 @Entity('codebases')
 @Unique(['project', 'gitlabUrl'])
@@ -109,7 +100,4 @@ export class Codebase {
 
   @OneToMany(() => IndexPipeline, (pipeline) => pipeline.codebase)
   indexPipelines: IndexPipeline[];
-
-  @OneToMany(() => CodeSymbol, (symbol) => symbol.codebase)
-  symbols: CodeSymbol[];
 }

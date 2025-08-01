@@ -4,10 +4,11 @@ import { FrameworkDetector, Framework } from './frameworks/framework-detector';
 import { FileVisitor } from './visitors/file-visitor';
 import { ClassVisitor } from './visitors/class-visitor';
 import { InterfaceVisitor } from './visitors/interface-visitor';
+import { EnumVisitor } from './visitors/enum-visitor';
 import { MethodVisitor } from './visitors/method-visitor';
 import { DependencyVisitor } from './visitors/dependency-visitor';
 import { RelationshipVisitor } from './visitors/relationship-visitor';
-import { FrameworkAnalyzer } from './analyzers/framework-analyzer';
+
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { glob } from 'glob';
@@ -38,8 +39,8 @@ export class TypeScriptParser {
     this.project = new Project({
       useInMemoryFileSystem: true,
       compilerOptions: {
-        target: SyntaxKind.ES2020,
-        module: SyntaxKind.CommonJS,
+        target: 7, // ES2020
+        module: 1, // CommonJS
         declaration: true,
         strict: true,
         esModuleInterop: true,
@@ -51,38 +52,63 @@ export class TypeScriptParser {
     this.frameworkDetector = new FrameworkDetector();
   }
 
-  async parseProject(projectPath: string): Promise<ParseResult> {
+  async parseProject(projectPath: string, codebaseName?: string): Promise<ParseResult> {
     const startTime = Date.now();
-    
+
     console.log('🔍 Analyzing TypeScript project...');
-    
+
+    // Use project name as codebase name if not provided
+    const actualCodebaseName = codebaseName || path.basename(projectPath);
+
     // Detect framework if not specified
     if (!this.options.framework || this.options.framework === 'unknown') {
       this.options.framework = await this.frameworkDetector.detectFramework(projectPath);
     }
 
-    // Initialize result
+    // Initialize result with new structure
     const result: ParseResult = {
-      files: [],
-      classes: [],
-      interfaces: [],
-      methods: [],
-      dependencies: [],
-      relationships: [],
-      apiEndpoints: [],
-      components: [],
-      services: [],
-      modules: [],
       metadata: {
-        framework: this.options.framework,
+        codebaseName: actualCodebaseName,
         version: '1.0.0',
+        parserVersion: '2.0.0',
         parseTime: new Date().toISOString(),
+        parsingDurationMs: 0, // Will be set at the end
+        framework: this.options.framework,
+        detectedFrameworks: [this.options.framework],
         statistics: {
           totalFiles: 0,
           totalLines: 0,
-          complexity: 0
-        }
-      }
+          totalClasses: 0,
+          totalInterfaces: 0,
+          totalMethods: 0,
+          totalFields: 0,
+          complexity: 0,
+          testCoverage: 0,
+          duplicateLines: 0,
+          averageMethodComplexity: 0,
+          maxMethodComplexity: 0,
+          linesOfCode: 0,
+          commentLines: 0,
+          blankLines: 0
+        },
+        configuration: {},
+        errors: null,
+        warnings: null
+      },
+      codebaseName: actualCodebaseName,
+      files: [],
+      classes: [],
+      interfaces: [],
+      enums: [],
+      methods: [],
+      fields: [],
+      dependencies: [],
+      relationships: [],
+      apiEndpoints: [],
+      lambdaExpressions: [],
+      methodReferences: [],
+      testCases: [],
+      documents: []
     };
 
     // Find TypeScript files
@@ -107,12 +133,13 @@ export class TypeScriptParser {
     console.log(`📝 Processing ${sourceFiles.length} source files...`);
 
     // Create visitors
-    const fileVisitor = new FileVisitor(result, this.options);
-    const classVisitor = new ClassVisitor(result, this.options);
-    const interfaceVisitor = new InterfaceVisitor(result, this.options);
-    const methodVisitor = new MethodVisitor(result, this.options);
+    const fileVisitor = new FileVisitor(result, this.options, actualCodebaseName);
+    const classVisitor = new ClassVisitor(result, this.options, actualCodebaseName);
+    const interfaceVisitor = new InterfaceVisitor(result, this.options, actualCodebaseName);
+    const enumVisitor = new EnumVisitor(result, this.options, actualCodebaseName);
+    const methodVisitor = new MethodVisitor(result, this.options, actualCodebaseName);
     const dependencyVisitor = new DependencyVisitor(result, projectPath);
-    const relationshipVisitor = new RelationshipVisitor(result);
+    const relationshipVisitor = new RelationshipVisitor(result, this.options);
 
     // Process files
     for (const sourceFile of sourceFiles) {
@@ -123,18 +150,21 @@ export class TypeScriptParser {
       try {
         // Visit file
         fileVisitor.visitSourceFile(sourceFile, projectPath);
-        
+
         // Visit classes
         classVisitor.visitSourceFile(sourceFile);
-        
+
         // Visit interfaces
         interfaceVisitor.visitSourceFile(sourceFile);
-        
+
+        // Visit enums
+        enumVisitor.visitSourceFile(sourceFile);
+
         // Visit methods
         methodVisitor.visitSourceFile(sourceFile);
-        
+
         // Build relationships
-        relationshipVisitor.visitSourceFile(sourceFile);
+        relationshipVisitor.buildRelationships();
         
       } catch (error) {
         console.error(`❌ Error processing ${sourceFile.getFilePath()}:`, error);
@@ -144,17 +174,37 @@ export class TypeScriptParser {
     // Extract dependencies
     await dependencyVisitor.extractDependencies();
 
-    // Framework-specific analysis
-    const frameworkAnalyzer = new FrameworkAnalyzer(this.options.framework!);
-    await frameworkAnalyzer.analyze(result, sourceFiles, projectPath);
+    // Framework-specific analysis is now handled within individual visitors
 
-    // Update metadata
-    result.metadata.statistics.totalFiles = result.files.length;
-    result.metadata.statistics.totalLines = result.files.reduce((sum, file) => sum + file.lineCount, 0);
-    result.metadata.statistics.complexity = result.methods.reduce((sum, method) => sum + method.cyclomaticComplexity, 0);
-
+    // Update metadata statistics
     const endTime = Date.now();
+    result.metadata.parsingDurationMs = endTime - startTime;
+    result.metadata.statistics.totalFiles = result.files.length;
+    result.metadata.statistics.totalClasses = result.classes.length;
+    result.metadata.statistics.totalInterfaces = result.interfaces.length;
+    result.metadata.statistics.totalMethods = result.methods.length;
+    result.metadata.statistics.totalFields = result.fields.length;
+
+    // Calculate complexity metrics
+    const methodComplexities = result.methods.map(m => m.cyclomaticComplexity);
+    result.metadata.statistics.complexity = methodComplexities.reduce((sum, c) => sum + c, 0);
+    result.metadata.statistics.averageMethodComplexity = methodComplexities.length > 0
+      ? result.metadata.statistics.complexity / methodComplexities.length : 0;
+    result.metadata.statistics.maxMethodComplexity = methodComplexities.length > 0
+      ? Math.max(...methodComplexities) : 0;
+
+    // Calculate line counts (simplified for now)
+    result.metadata.statistics.totalLines = result.files.reduce((sum, file) => {
+      // For now, use a simple heuristic since we don't have detailed line analysis
+      return sum + (file.sourceCode?.split('\n').length || 0);
+    }, 0);
+    result.metadata.statistics.linesOfCode = Math.floor(result.metadata.statistics.totalLines * 0.7); // Estimate
+    result.metadata.statistics.commentLines = Math.floor(result.metadata.statistics.totalLines * 0.2); // Estimate
+    result.metadata.statistics.blankLines = result.metadata.statistics.totalLines -
+      result.metadata.statistics.linesOfCode - result.metadata.statistics.commentLines;
+
     console.log(`⏱ Parsing completed in ${endTime - startTime}ms`);
+    console.log(`📊 Statistics: ${result.classes.length} classes, ${result.interfaces.length} interfaces, ${result.methods.length} methods`);
 
     return result;
   }

@@ -6,6 +6,15 @@ export interface GitConfig {
   sshKey?: string;
 }
 
+export interface GitLabConfig {
+  url: string;
+  token: string;
+  apiVersion: string;
+  timeout: number;
+  retries: number;
+  retryDelay: number;
+}
+
 export interface GitTimeouts {
   cloneTimeout: number;
   pullTimeout: number;
@@ -43,6 +52,20 @@ export class GitConfiguration {
       username: this.configService.get('GIT_DEFAULT_USERNAME'),
       accessToken: this.configService.get('GIT_DEFAULT_ACCESS_TOKEN'),
       sshKey: this.configService.get('GIT_DEFAULT_SSH_KEY'),
+    };
+  }
+
+  /**
+   * Get GitLab API configuration
+   */
+  getGitLabConfig(): GitLabConfig {
+    return {
+      url: this.configService.get('GITLAB_URL', 'https://gitlab.com'),
+      token: this.configService.get('GITLAB_TOKEN', ''),
+      apiVersion: this.configService.get('GITLAB_API_VERSION', 'v4'),
+      timeout: this.configService.get('GITLAB_TIMEOUT', 30000), // 30 seconds
+      retries: this.configService.get('GITLAB_RETRIES', 3),
+      retryDelay: this.configService.get('GITLAB_RETRY_DELAY', 1000), // 1 second
     };
   }
 

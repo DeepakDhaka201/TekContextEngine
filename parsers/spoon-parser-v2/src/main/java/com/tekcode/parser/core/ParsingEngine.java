@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import spoon.Launcher;
 import spoon.reflect.CtModel;
 import spoon.reflect.declaration.CtCompilationUnit;
+import spoon.reflect.declaration.CtType;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -44,9 +45,13 @@ public class ParsingEngine {
     private final ClassProcessor classProcessor;
     private final MethodProcessor methodProcessor;
     private final InterfaceProcessor interfaceProcessor;
+    private final EnumProcessor enumProcessor;
+    private final FunctionalProcessor functionalProcessor;
     private final RelationshipProcessor relationshipProcessor;
+    private final APIEndpointProcessor apiEndpointProcessor;
     private final DependencyProcessor dependencyProcessor;
     private final FrameworkProcessor frameworkProcessor;
+    private final DocumentProcessor documentProcessor;
     
     // Deduplication sets
     private final Set<String> processedFiles = ConcurrentHashMap.newKeySet();
@@ -66,9 +71,13 @@ public class ParsingEngine {
         this.classProcessor = new ClassProcessor(context);
         this.methodProcessor = new MethodProcessor(context);
         this.interfaceProcessor = new InterfaceProcessor(context);
+        this.enumProcessor = new EnumProcessor(context);
+        this.functionalProcessor = new FunctionalProcessor(context);
         this.relationshipProcessor = new RelationshipProcessor(context);
+        this.apiEndpointProcessor = new APIEndpointProcessor(context);
         this.dependencyProcessor = new DependencyProcessor(context);
         this.frameworkProcessor = new FrameworkProcessor(context);
+        this.documentProcessor = new DocumentProcessor(context);
         
         // Set codebase name in result
         result.setCodebaseName(codebaseName);
@@ -104,15 +113,24 @@ public class ParsingEngine {
             // Step 6: Process compilation units (single pass)
             processCompilationUnits(model);
             
-            // Step 7: Extract relationships
+            // Step 7: Extract functional programming constructs
+            extractFunctionalConstructs(model);
+
+            // Step 8: Extract API endpoints
+            extractAPIEndpoints(new ArrayList<>(model.getAllTypes()));
+
+            // Step 9: Extract relationships
             if (shouldExtractRelationships()) {
                 extractRelationships(model);
             }
-            
-            // Step 8: Finalize metadata and statistics
+
+            // Step 10: Process documentation files
+            extractDocuments();
+
+            // Step 11: Finalize metadata and statistics
             finalizeMetadata(startTime);
-            
-            // Step 9: Validate output if requested
+
+            // Step 12: Validate output if requested
             if (config.isValidateOutput()) {
                 validateOutput();
             }
@@ -187,6 +205,15 @@ public class ParsingEngine {
         logger.info("Extracting project dependencies");
         List<DependencyNode> dependencies = dependencyProcessor.extractDependencies();
         result.setDependencies(dependencies);
+
+        // Create DEPENDS_ON relationships (Project -> Dependency)
+        for (DependencyNode dependency : dependencies) {
+            Relationship dependsOnRel = relationshipProcessor.createDependsOnRelationship(dependency.getId());
+            if (dependsOnRel != null) {
+                result.addRelationship(dependsOnRel);
+            }
+        }
+
         logger.info("Found {} dependencies", dependencies.size());
     }
     
@@ -197,7 +224,7 @@ public class ParsingEngine {
         // Update metadata with framework information
         MetadataNode metadata = result.getMetadata();
         metadata.setFramework(frameworkInfo.getPrimaryFramework());
-        metadata.setDetectedFrameworks(frameworkInfo.getAllFrameworks());
+        metadata.setDetectedFrameworks(new ArrayList<>(frameworkInfo.getAllFrameworks()));
         
         logger.info("Detected frameworks: {}", frameworkInfo.getAllFrameworks());
         logger.info("Primary framework: {}", frameworkInfo.getPrimaryFramework());
@@ -236,6 +263,21 @@ public class ParsingEngine {
         
         logger.info("Completed processing {} compilation units", processed);
     }
+
+    /**
+     * Recursively collect all types including nested types (inner classes, static nested classes, etc.)
+     */
+    private List<CtType<?>> getAllTypesRecursively(List<CtType<?>> topLevelTypes) {
+        List<CtType<?>> allTypes = new ArrayList<>();
+
+        for (CtType<?> type : topLevelTypes) {
+            allTypes.add(type);
+            // Recursively add nested types (convert Set to List)
+            allTypes.addAll(getAllTypesRecursively(new ArrayList<>(type.getNestedTypes())));
+        }
+
+        return allTypes;
+    }
     
     private void processCompilationUnit(CtCompilationUnit compilationUnit) {
         // Process file information
@@ -245,13 +287,17 @@ public class ParsingEngine {
             processedFiles.add(fileNode.getPath());
         }
         
-        // Process all types in this compilation unit
-        compilationUnit.getDeclaredTypes().forEach(type -> {
+        // Process all types in this compilation unit (including nested types)
+        List<CtType<?>> allTypes = getAllTypesRecursively(compilationUnit.getDeclaredTypes());
+        allTypes.forEach(type -> {
             try {
-                if (type instanceof spoon.reflect.declaration.CtClass) {
-                    processClass((spoon.reflect.declaration.CtClass<?>) type);
+                // Check enum first since CtEnum extends CtClass
+                if (type instanceof spoon.reflect.declaration.CtEnum) {
+                    processEnum((spoon.reflect.declaration.CtEnum<?>) type);
                 } else if (type instanceof spoon.reflect.declaration.CtInterface) {
                     processInterface((spoon.reflect.declaration.CtInterface<?>) type);
+                } else if (type instanceof spoon.reflect.declaration.CtClass) {
+                    processClass((spoon.reflect.declaration.CtClass<?>) type);
                 }
             } catch (Exception e) {
                 logger.error("Error processing type: {}", type.getQualifiedName(), e);
@@ -267,9 +313,15 @@ public class ParsingEngine {
             if (classNode != null) {
                 result.addClass(classNode);
                 processedClasses.add(classId);
-                
+
+                // Note: DEFINES_CLASS and HAS_INNER_CLASS relationships are now handled by RelationshipProcessor
+
                 // Process methods in this class
                 ctClass.getMethods().forEach(method -> processMethod(method));
+
+                // Process fields in this class
+                List<FieldNode> fields = classProcessor.processFields(ctClass);
+                fields.forEach(result::addField);
                 ctClass.getConstructors().forEach(constructor -> processMethod(constructor));
             }
         }
@@ -283,6 +335,8 @@ public class ParsingEngine {
             if (interfaceNode != null) {
                 result.addInterface(interfaceNode);
                 processedInterfaces.add(interfaceId);
+
+                // Note: DEFINES_INTERFACE relationship is now handled by RelationshipProcessor
                 
                 // Process methods in this interface
                 ctInterface.getMethods().forEach(method -> processMethod(method));
@@ -298,7 +352,9 @@ public class ParsingEngine {
             if (methodNode != null) {
                 result.addMethod(methodNode);
                 processedMethods.add(methodId);
-                
+
+                // Note: HAS_METHOD and OVERRIDES relationships are now handled by RelationshipProcessor
+
                 // Check if this is a test method
                 if (methodProcessor.isTestMethod(executable)) {
                     TestCaseNode testCase = methodProcessor.createTestCase(executable);
@@ -309,7 +365,56 @@ public class ParsingEngine {
             }
         }
     }
-    
+
+    private void processEnum(spoon.reflect.declaration.CtEnum<?> ctEnum) {
+        String enumId = IdGenerator.generateEnumId(context.getCodebaseName(), ctEnum.getQualifiedName());
+
+        if (!processedClasses.contains(enumId)) {
+            EnumNode enumNode = enumProcessor.processEnum(ctEnum);
+            if (enumNode != null) {
+                result.addEnum(enumNode);
+                processedClasses.add(enumId);
+
+                // Process methods in this enum
+                ctEnum.getMethods().forEach(method -> processMethod(method));
+            }
+        }
+    }
+
+    private void extractFunctionalConstructs(CtModel model) {
+        logger.info("Extracting functional programming constructs");
+
+        // Extract lambda expressions
+        List<LambdaExpressionNode> lambdas = functionalProcessor.extractLambdaExpressions(model);
+        lambdas.forEach(result::addLambdaExpression);
+
+        // Extract method references
+        List<MethodReferenceNode> methodRefs = functionalProcessor.extractMethodReferences(model);
+        methodRefs.forEach(result::addMethodReference);
+
+        logger.info("Extracted {} lambdas and {} method references", lambdas.size(), methodRefs.size());
+    }
+
+    private void extractAPIEndpoints(List<CtType<?>> allTypes) {
+        logger.info("Extracting API endpoints");
+
+        List<APIEndpointNode> endpoints = apiEndpointProcessor.extractAPIEndpoints(allTypes);
+        endpoints.forEach(endpoint -> {
+            result.addApiEndpoint(endpoint);
+
+            // Create IMPLEMENTS_ENDPOINT relationship (Class -> APIEndpoint)
+            if (endpoint.getClassName() != null) {
+                String classId = IdGenerator.generateClassId(codebaseName, endpoint.getClassName());
+                Relationship implementsEndpointRel = relationshipProcessor.createImplementsEndpointRelationship(classId, endpoint.getId());
+                if (implementsEndpointRel != null) {
+                    result.addRelationship(implementsEndpointRel);
+                }
+            }
+        });
+
+        logger.info("Extracted {} API endpoints", endpoints.size());
+    }
+
     private boolean shouldExtractRelationships() {
         return config.isExtractCallGraph() || 
                config.isExtractTypeUsage() || 
@@ -333,15 +438,15 @@ public class ParsingEngine {
         // Calculate statistics
         StatisticsNode statistics = new StatisticsNode();
         statistics.setTotalFiles(result.getFiles().size());
-        statistics.setTotalLines(result.getFiles().stream()
-                .mapToInt(FileNode::getLineCount)
-                .sum());
+        // Total lines calculation removed since lineCount field was removed
+        statistics.setTotalLines(0);
         statistics.setComplexity(result.getMethods().stream()
                 .mapToInt(MethodNode::getCyclomaticComplexity)
                 .sum());
         statistics.setTotalClasses(result.getClasses().size());
         statistics.setTotalInterfaces(result.getInterfaces().size());
         statistics.setTotalMethods(result.getMethods().size());
+        statistics.setTotalFields(result.getFields().size());
         
         metadata.setStatistics(statistics);
         
@@ -379,4 +484,39 @@ public class ParsingEngine {
         
         logger.info("Output validation completed");
     }
+
+    /**
+     * Extracts documentation files from the project
+     */
+    private void extractDocuments() {
+        logger.info("Processing documentation files");
+
+        DocumentProcessor.DocumentProcessingResult processingResult = documentProcessor.processDocuments();
+
+        // Add documents
+        for (DocumentNode document : processingResult.documents) {
+            result.addDocument(document);
+
+            // Create CONTAINS_DOCUMENT relationship (Project -> Document)
+            Relationship containsDocRel = relationshipProcessor.createContainsDocumentRelationship(document.getId());
+            if (containsDocRel != null) {
+                result.addRelationship(containsDocRel);
+            }
+        }
+
+        // Add document chunks
+        for (DocumentChunk chunk : processingResult.chunks) {
+            result.addDocumentChunk(chunk);
+        }
+
+        // Add relationships (HAS_CHUNK relationships)
+        for (Relationship relationship : processingResult.relationships) {
+            result.addRelationship(relationship);
+        }
+
+        logger.info("Found {} documentation files with {} chunks",
+                   processingResult.documents.size(), processingResult.chunks.size());
+    }
+
+
 }

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -202,5 +203,140 @@ class SpoonParserV2Test {
 
         // Should have methods with annotations
         assertTrue(result.getMethods().size() >= 2);
+    }
+
+    @Test
+    void testParseWithEnumsAndFunctionalConstructs(@TempDir Path tempDir) throws IOException {
+        // Create a comprehensive Java file with enums, inner classes, lambdas, and method references
+        Path srcDir = tempDir.resolve("src/main/java/com/example");
+        Files.createDirectories(srcDir);
+
+        Path javaFile = srcDir.resolve("ComprehensiveClass.java");
+        String javaContent = "package com.example;\n\n" +
+            "import java.util.*;\n" +
+            "import java.util.stream.*;\n\n" +
+            "public class ComprehensiveClass {\n" +
+            "    \n" +
+            "    // Enum definition\n" +
+            "    public enum Status {\n" +
+            "        ACTIVE(\"Active\"),\n" +
+            "        INACTIVE(\"Inactive\"),\n" +
+            "        PENDING(\"Pending\");\n" +
+            "        \n" +
+            "        private final String displayName;\n" +
+            "        \n" +
+            "        Status(String displayName) {\n" +
+            "            this.displayName = displayName;\n" +
+            "        }\n" +
+            "        \n" +
+            "        public String getDisplayName() {\n" +
+            "            return displayName;\n" +
+            "        }\n" +
+            "    }\n" +
+            "    \n" +
+            "    // Static nested class\n" +
+            "    public static class StaticNested {\n" +
+            "        private String value;\n" +
+            "        \n" +
+            "        public StaticNested(String value) {\n" +
+            "            this.value = value;\n" +
+            "        }\n" +
+            "    }\n" +
+            "    \n" +
+            "    // Inner class\n" +
+            "    public class InnerClass {\n" +
+            "        public void doSomething() {\n" +
+            "            System.out.println(\"Inner class method\");\n" +
+            "        }\n" +
+            "    }\n" +
+            "    \n" +
+            "    private List<String> items = new ArrayList<>();\n" +
+            "    \n" +
+            "    public void demonstrateFunctionalProgramming() {\n" +
+            "        // Lambda expressions\n" +
+            "        items.stream()\n" +
+            "            .filter(item -> item.length() > 3)\n" +
+            "            .map(item -> item.toUpperCase())\n" +
+            "            .forEach(item -> System.out.println(item));\n" +
+            "        \n" +
+            "        // Method references\n" +
+            "        items.stream()\n" +
+            "            .map(String::toUpperCase)\n" +
+            "            .forEach(System.out::println);\n" +
+            "        \n" +
+            "        // Constructor reference\n" +
+            "        List<String> newList = items.stream()\n" +
+            "            .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);\n" +
+            "        \n" +
+            "        // Anonymous class\n" +
+            "        Runnable task = new Runnable() {\n" +
+            "            @Override\n" +
+            "            public void run() {\n" +
+            "                System.out.println(\"Anonymous class\");\n" +
+            "            }\n" +
+            "        };\n" +
+            "    }\n" +
+            "}\n";
+
+        Files.writeString(javaFile, javaContent);
+
+        // Parse with comprehensive config
+        ParseResult result = SpoonParserV2.parseJavaProject(
+            "comprehensive-project",
+            tempDir.toString(),
+            ParserConfig.comprehensiveConfig()
+        );
+
+        assertNotNull(result);
+        assertFalse(result.isEmpty());
+
+        // Should have found classes (including inner classes)
+        assertTrue(result.getClasses().size() >= 3); // ComprehensiveClass + StaticNested + InnerClass
+
+        // Should have found enum
+        assertTrue(result.getEnums().size() >= 1);
+
+        // Should have found lambda expressions
+        assertTrue(result.getLambdaExpressions().size() >= 3);
+
+        // Should have found method references
+        assertTrue(result.getMethodReferences().size() >= 3);
+
+        // Verify enum details
+        var statusEnum = result.getEnums().stream()
+            .filter(e -> e.getName().equals("Status"))
+            .findFirst();
+        assertTrue(statusEnum.isPresent());
+        assertEquals(3, statusEnum.get().getEnumConstants().size());
+
+        // Verify inner class details
+        var innerClasses = result.getClasses().stream()
+            .filter(c -> c.isInnerClass())
+            .collect(Collectors.toList());
+        assertTrue(innerClasses.size() >= 2); // StaticNested + InnerClass
+
+        // Verify static nested class
+        var staticNested = innerClasses.stream()
+            .filter(c -> c.getName().equals("StaticNested"))
+            .findFirst();
+        assertTrue(staticNested.isPresent());
+        assertTrue(staticNested.get().isStatic());
+
+        // Verify inner class
+        var innerClass = innerClasses.stream()
+            .filter(c -> c.getName().equals("InnerClass"))
+            .findFirst();
+        assertTrue(innerClass.isPresent());
+        assertFalse(innerClass.get().isStatic());
+
+        // Verify no duplicates
+        assertEquals(result.getClasses().size(),
+                    result.getClasses().stream().map(c -> c.getId()).distinct().count());
+        assertEquals(result.getEnums().size(),
+                    result.getEnums().stream().map(e -> e.getId()).distinct().count());
+        assertEquals(result.getLambdaExpressions().size(),
+                    result.getLambdaExpressions().stream().map(l -> l.getId()).distinct().count());
+        assertEquals(result.getMethodReferences().size(),
+                    result.getMethodReferences().stream().map(m -> m.getId()).distinct().count());
     }
 }

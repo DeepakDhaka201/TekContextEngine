@@ -14,13 +14,12 @@ program
   .version('1.0.0');
 
 program
-  .argument('<input-directory>', 'Directory containing TypeScript source files')
-  .argument('<output-file>', 'Output JSON file path')
+  .arguments('<input-directory> <output-file>')
   .option('-f, --framework <framework>', 'Force specific framework detection (auto, react, angular, vue, nestjs, express)')
   .option('-v, --verbose', 'Enable verbose logging')
   .option('--include-node-modules', 'Include node_modules in analysis')
   .option('--max-file-size <size>', 'Maximum file size to process in KB', '500')
-  .action(async (inputDir: string, outputFile: string, options) => {
+  .action(async (inputDir: string, outputFile: string, options: any) => {
     try {
       console.log('🚀 Starting TypeScript parser...');
       console.log(`📁 Input directory: ${inputDir}`);
@@ -42,7 +41,7 @@ program
         maxFileSizeKb: parseInt(options.maxFileSize),
       });
       
-      const result = await parser.parseProject(inputDir);
+      const result = await parser.parseProject(inputDir, path.basename(inputDir));
       
       // Ensure output directory exists
       await fs.mkdir(path.dirname(outputFile), { recursive: true });
@@ -55,10 +54,13 @@ program
       console.log(`   - Files: ${result.files.length}`);
       console.log(`   - Classes: ${result.classes.length}`);
       console.log(`   - Interfaces: ${result.interfaces.length}`);
+      console.log(`   - Enums: ${result.enums.length}`);
       console.log(`   - Methods: ${result.methods.length}`);
-      console.log(`   - API Endpoints: ${result.apiEndpoints?.length || 0}`);
-      console.log(`   - Components: ${result.components?.length || 0}`);
+      console.log(`   - Fields: ${result.fields.length}`);
+      console.log(`   - Dependencies: ${result.dependencies.length}`);
+      console.log(`   - API Endpoints: ${result.apiEndpoints.length}`);
       console.log(`   - Relationships: ${result.relationships.length}`);
+      console.log(`   - Framework: ${result.metadata.framework}`);
       
     } catch (error) {
       console.error('❌ Error parsing TypeScript project:', error);
@@ -66,4 +68,4 @@ program
     }
   });
 
-program.parse();
+program.parse(process.argv);

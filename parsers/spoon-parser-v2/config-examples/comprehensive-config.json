@@ -25,6 +25,10 @@
   "extractInheritance": true,
   "extractAnnotations": true,
   "extractFieldRelationships": true,
+  "extractLambdaExpressions": true,
+  "extractMethodReferences": true,
+  "extractInnerClasses": true,
+  "extractEnums": true,
   
   "extractDependencies": true,
   "includeMavenDependencies": true,
@@ -40,7 +44,14 @@
   "includeSourceCode": true,
   "includeLineNumbers": true,
   "includeFileChecksums": true,
-  
+
+  "enableDocumentChunking": true,
+  "documentChunkSize": 1000,
+  "documentChunkOverlap": 200,
+  "documentChunkStrategy": "character",
+  "maxDocumentSize": 10485760,
+  "preserveMarkdownStructure": true,
+
   "excludePatterns": [
     ".*\\.generated\\..*"
   ],

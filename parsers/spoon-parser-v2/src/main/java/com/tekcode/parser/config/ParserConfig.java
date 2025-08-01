@@ -101,7 +101,27 @@ public class ParserConfig {
     
     @JsonProperty("includeFileChecksums")
     private boolean includeFileChecksums = true;
-    
+
+    // === Document Chunking Options ===
+
+    @JsonProperty("enableDocumentChunking")
+    private boolean enableDocumentChunking = true;
+
+    @JsonProperty("documentChunkSize")
+    private int documentChunkSize = 1000; // characters
+
+    @JsonProperty("documentChunkOverlap")
+    private int documentChunkOverlap = 200; // characters
+
+    @JsonProperty("documentChunkStrategy")
+    private String documentChunkStrategy = "character"; // "character", "word", "sentence", "paragraph"
+
+    @JsonProperty("maxDocumentSize")
+    private long maxDocumentSize = 10 * 1024 * 1024; // 10MB
+
+    @JsonProperty("preserveMarkdownStructure")
+    private boolean preserveMarkdownStructure = true;
+
     // === Filtering Options ===
     
     @JsonProperty("excludePatterns")
@@ -249,7 +269,25 @@ public class ParserConfig {
     
     public boolean isIncludeFileChecksums() { return includeFileChecksums; }
     public void setIncludeFileChecksums(boolean includeFileChecksums) { this.includeFileChecksums = includeFileChecksums; }
-    
+
+    public boolean isEnableDocumentChunking() { return enableDocumentChunking; }
+    public void setEnableDocumentChunking(boolean enableDocumentChunking) { this.enableDocumentChunking = enableDocumentChunking; }
+
+    public int getDocumentChunkSize() { return documentChunkSize; }
+    public void setDocumentChunkSize(int documentChunkSize) { this.documentChunkSize = documentChunkSize; }
+
+    public int getDocumentChunkOverlap() { return documentChunkOverlap; }
+    public void setDocumentChunkOverlap(int documentChunkOverlap) { this.documentChunkOverlap = documentChunkOverlap; }
+
+    public String getDocumentChunkStrategy() { return documentChunkStrategy; }
+    public void setDocumentChunkStrategy(String documentChunkStrategy) { this.documentChunkStrategy = documentChunkStrategy; }
+
+    public long getMaxDocumentSize() { return maxDocumentSize; }
+    public void setMaxDocumentSize(long maxDocumentSize) { this.maxDocumentSize = maxDocumentSize; }
+
+    public boolean isPreserveMarkdownStructure() { return preserveMarkdownStructure; }
+    public void setPreserveMarkdownStructure(boolean preserveMarkdownStructure) { this.preserveMarkdownStructure = preserveMarkdownStructure; }
+
     public Set<String> getExcludePatterns() { return excludePatterns; }
     public void setExcludePatterns(Set<String> excludePatterns) { this.excludePatterns = excludePatterns; }
     

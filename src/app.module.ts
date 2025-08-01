@@ -8,11 +8,12 @@ import { DatabaseModule } from './shared/database/database.module';
 import { StorageModule } from './shared/storage/storage.module';
 import { WorkerPoolModule } from './shared/workers/worker-pool.module';
 import { ProjectModule } from './modules/project/project.module';
-import { SyncModule } from './modules/sync/sync.module';
 import { IndexingModule } from './modules/indexing/indexing.module';
 import { GitlabModule } from './modules/gitlab/gitlab.module';
 import { HealthModule } from './modules/health/health.module';
-import { WebSocketModule } from './modules/websocket/websocket.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { WebSocketModule } from './modules/websocket/websocket.module';
       useFactory: () => {
         return {
           transports: [
+            // Console transport (always enabled)
             new winston.transports.Console({
               format: winston.format.combine(
                 winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -39,6 +41,25 @@ import { WebSocketModule } from './modules/websocket/websocket.module';
                   const contextStr = context ? `[${context}] ` : '';
                   return `${timestamp} ${level}: ${contextStr}${message}`;
                 }),
+              ),
+            }),
+
+            // File transport for all logs
+            new winston.transports.File({
+              filename: 'logs/app.log',
+              format: winston.format.combine(
+                winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+                winston.format.json(),
+              ),
+            }),
+
+            // Separate file for errors only
+            new winston.transports.File({
+              filename: 'logs/error.log',
+              level: 'error',
+              format: winston.format.combine(
+                winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+                winston.format.json(),
               ),
             }),
           ],
@@ -61,11 +82,13 @@ import { WebSocketModule } from './modules/websocket/websocket.module';
 
     // Feature Modules
     ProjectModule,
-    SyncModule, // Legacy - marked for deprecation
-    IndexingModule, // New pipeline-based indexing system
+    IndexingModule, // Pipeline-based indexing system
     GitlabModule,
     HealthModule,
-    WebSocketModule,
+  ],
+  providers: [
+    AllExceptionsFilter,
+    LoggingInterceptor,
   ],
 })
 export class AppModule {}

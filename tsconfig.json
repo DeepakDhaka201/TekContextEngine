@@ -28,5 +28,13 @@
       "@/modules/*": ["src/modules/*"],
       "@/shared/*": ["src/shared/*"]
     }
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "parsers/*/test-*",
+    "parsers/*/test-project",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
 }

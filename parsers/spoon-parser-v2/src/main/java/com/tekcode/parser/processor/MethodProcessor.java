@@ -72,17 +72,18 @@ public class MethodProcessor {
             methodNode.setParameters(parameters);
 
             // Annotations/Decorators
+            List<DecoratorInfo> decorators = new ArrayList<>();
             if (context.shouldExtractAnnotations()) {
-                List<DecoratorInfo> decorators = extractDecorators(executable);
-                methodNode.setDecorators(decorators);
+                decorators = extractDecorators(executable);
             }
+            methodNode.setDecorators(decorators);
 
             // Cyclomatic complexity
             int complexity = calculateCyclomaticComplexity(executable);
             methodNode.setCyclomaticComplexity(complexity);
 
             // Test method detection
-            methodNode.setIsTestMethod(isTestMethod(executable));
+            methodNode.setTestMethod(isTestMethod(executable));
 
             logger.debug("Processed method: {}", executable.getSignature());
             return methodNode;
@@ -99,7 +100,7 @@ public class MethodProcessor {
      */
     private boolean shouldIncludeMethod(CtExecutable<?> executable) {
         // Check visibility
-        if (!context.shouldIncludePrivateMembers() && executable.isPrivate()) {
+        if (!context.shouldIncludePrivateMembers() && hasModifier(executable, ModifierKind.PRIVATE)) {
             return false;
         }
 
@@ -111,21 +112,13 @@ public class MethodProcessor {
      */
     private void extractModifiers(MethodNode methodNode, CtExecutable<?> executable) {
         // Visibility
-        if (executable.isPublic()) {
-            methodNode.setVisibility("public");
-        } else if (executable.isProtected()) {
-            methodNode.setVisibility("protected");
-        } else if (executable.isPrivate()) {
-            methodNode.setVisibility("private");
-        } else {
-            methodNode.setVisibility("package");
-        }
+        methodNode.setVisibility(getVisibility(executable));
 
         // Other modifiers
-        methodNode.setIsAbstract(executable.hasModifier(ModifierKind.ABSTRACT));
-        methodNode.setIsFinal(executable.hasModifier(ModifierKind.FINAL));
-        methodNode.setIsStatic(executable.hasModifier(ModifierKind.STATIC));
-        methodNode.setIsConstructor(executable instanceof CtConstructor);
+        methodNode.setAbstract(hasModifier(executable, ModifierKind.ABSTRACT));
+        methodNode.setFinal(hasModifier(executable, ModifierKind.FINAL));
+        methodNode.setStatic(hasModifier(executable, ModifierKind.STATIC));
+        methodNode.setConstructor(executable instanceof CtConstructor);
     }
 
     /**
@@ -161,6 +154,30 @@ public class MethodProcessor {
                 paramInfo.setType(param.getType().toString());
                 paramInfo.setIsVarArgs(param.isVarArgs());
                 paramInfo.setIsFinal(param.hasModifier(ModifierKind.FINAL));
+
+                // Extract parameter annotations
+                List<DecoratorInfo> decorators = new ArrayList<>();
+                for (CtAnnotation<?> annotation : param.getAnnotations()) {
+                    try {
+                        DecoratorInfo decorator = new DecoratorInfo();
+                        decorator.setName(annotation.getAnnotationType().getSimpleName());
+
+                        // Extract annotation values if any
+                        if (!annotation.getValues().isEmpty()) {
+                            Map<String, Object> properties = new HashMap<>();
+                            annotation.getValues().forEach((key, value) -> {
+                                properties.put(key, value != null ? value.toString() : null);
+                            });
+                            decorator.setProperties(properties);
+                        }
+
+                        decorators.add(decorator);
+
+                    } catch (Exception e) {
+                        logger.warn("Error extracting parameter annotation: " + annotation.toString(), e);
+                    }
+                }
+                paramInfo.setDecorators(decorators);
 
                 parameters.add(paramInfo);
 
@@ -210,8 +227,7 @@ public class MethodProcessor {
         }
 
         ComplexityCalculator calculator = new ComplexityCalculator();
-        executable.getBody().accept(calculator);
-        return calculator.getComplexity();
+        return calculator.calculateComplexity(executable);
     }
 
     /**
@@ -315,60 +331,74 @@ public class MethodProcessor {
     /**
      * Inner class for calculating cyclomatic complexity
      */
-    private static class ComplexityCalculator extends CtScanner {
+    private static class ComplexityCalculator {
         private int complexity = 1; // Base complexity
 
-        @Override
-        public <T> void visitCtIf(CtIf ifElement) {
-            complexity++;
-            super.visitCtIf(ifElement);
+        public int calculateComplexity(CtExecutable<?> executable) {
+            if (executable.getBody() != null) {
+                calculateFromElement(executable.getBody());
+            }
+            return complexity;
         }
 
-        @Override
-        public <T> void visitCtWhile(CtWhile whileLoop) {
-            complexity++;
-            super.visitCtWhile(whileLoop);
-        }
+        private void calculateFromElement(CtElement element) {
+            if (element == null) return;
 
-        @Override
-        public <T> void visitCtFor(CtFor forLoop) {
-            complexity++;
-            super.visitCtFor(forLoop);
-        }
+            // Count decision points
+            if (element instanceof CtIf) {
+                complexity++;
+            } else if (element instanceof CtWhile) {
+                complexity++;
+            } else if (element instanceof CtFor) {
+                complexity++;
+            } else if (element instanceof CtForEach) {
+                complexity++;
+            } else if (element instanceof CtDo) {
+                complexity++;
+            } else if (element instanceof CtSwitch) {
+                CtSwitch<?> switchStmt = (CtSwitch<?>) element;
+                complexity += switchStmt.getCases().size();
+            } else if (element instanceof CtCatch) {
+                complexity++;
+            } else if (element instanceof CtConditional) {
+                complexity++;
+            }
 
-        @Override
-        public <T> void visitCtForEach(CtForEach forEach) {
-            complexity++;
-            super.visitCtForEach(forEach);
-        }
-
-        @Override
-        public <T> void visitCtDo(CtDo doLoop) {
-            complexity++;
-            super.visitCtDo(doLoop);
-        }
-
-        @Override
-        public <T> void visitCtSwitch(CtSwitch<?> switchStatement) {
-            // Each case adds complexity
-            complexity += switchStatement.getCases().size();
-            super.visitCtSwitch(switchStatement);
-        }
-
-        @Override
-        public <T> void visitCtCatch(CtCatch catchBlock) {
-            complexity++;
-            super.visitCtCatch(catchBlock);
-        }
-
-        @Override
-        public <T> void visitCtConditional(CtConditional<T> conditional) {
-            complexity++;
-            super.visitCtConditional(conditional);
+            // Recursively process child elements
+            for (CtElement child : element.getDirectChildren()) {
+                calculateFromElement(child);
+            }
         }
 
         public int getComplexity() {
             return complexity;
+        }
+    }
+
+    /**
+     * Helper method to check if an executable has a specific modifier
+     */
+    private boolean hasModifier(CtExecutable<?> executable, ModifierKind modifier) {
+        if (executable instanceof CtModifiable) {
+            return ((CtModifiable) executable).hasModifier(modifier);
+        }
+        return false;
+    }
+
+
+
+    /**
+     * Helper method to get visibility of an executable
+     */
+    private String getVisibility(CtExecutable<?> executable) {
+        if (hasModifier(executable, ModifierKind.PUBLIC)) {
+            return "public";
+        } else if (hasModifier(executable, ModifierKind.PROTECTED)) {
+            return "protected";
+        } else if (hasModifier(executable, ModifierKind.PRIVATE)) {
+            return "private";
+        } else {
+            return "package";
         }
     }
 }

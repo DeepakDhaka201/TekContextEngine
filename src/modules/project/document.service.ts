@@ -1,13 +1,15 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, LoggerService, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { Repository } from 'typeorm';
 import { DocsBucket, Document, BucketStatus, TekProject } from '@/entities';
 import { PaginatedResult, PaginationOptions } from '@/common/types';
-import { 
-  DocumentAdapter, 
-  CreateDocsBucketData, 
-  UpdateDocsBucketData, 
-  UploadDocumentData 
+import {
+  DocumentAdapter,
+  CreateDocsBucketData,
+  UpdateDocsBucketData,
+  UploadDocumentData
 } from './adapters';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -15,7 +17,7 @@ import * as crypto from 'crypto';
 
 @Injectable()
 export class DocumentService {
-  private readonly logger = new Logger(DocumentService.name);
+  private readonly storagePath: string;
 
   constructor(
     @InjectRepository(DocsBucket)
@@ -24,7 +26,12 @@ export class DocumentService {
     private documentRepository: Repository<Document>,
     @InjectRepository(TekProject)
     private tekProjectRepository: Repository<TekProject>,
-  ) {}
+    private configService: ConfigService,
+    @Inject(WINSTON_MODULE_NEST_PROVIDER)
+    private readonly logger: LoggerService
+  ) {
+    this.storagePath = this.configService.get<string>('STORAGE_PATH', './storage');
+  }
 
   // ==================== DocsBucket Methods ====================
 
@@ -32,44 +39,114 @@ export class DocumentService {
    * Create default docs buckets for TekProject
    */
   async createDefaultBuckets(tekProject: TekProject): Promise<DocsBucket[]> {
-    const buckets = DocumentAdapter.createDefaultDocsBuckets(tekProject);
-    return await this.docsBucketRepository.save(buckets);
+    this.logger.debug('[DOCUMENT-SERVICE] Creating default docs buckets for project', {
+      projectId: tekProject.id,
+      projectName: tekProject.name,
+      storagePath: this.storagePath
+    });
+
+    const buckets = DocumentAdapter.createDefaultDocsBuckets(tekProject, this.storagePath);
+
+    this.logger.debug('[DOCUMENT-SERVICE] Default buckets created by adapter', {
+      projectId: tekProject.id,
+      bucketCount: buckets.length,
+      bucketNames: buckets.map(b => b.name)
+    });
+
+    const savedBuckets = await this.docsBucketRepository.save(buckets);
+
+    this.logger.log('[DOCUMENT-SERVICE] Default docs buckets created successfully', {
+      projectId: tekProject.id,
+      projectName: tekProject.name,
+      bucketCount: savedBuckets.length,
+      bucketIds: savedBuckets.map(b => b.id)
+    });
+
+    return savedBuckets;
   }
 
   /**
    * Create a custom docs bucket
    */
   async createBucket(createData: CreateDocsBucketData): Promise<DocsBucket> {
+    this.logger.log('[DOCUMENT-SERVICE] Creating custom docs bucket', {
+      bucketName: createData.name,
+      projectId: createData.projectId,
+      description: createData.description
+    });
+
     this.logger.log(`Creating docs bucket: ${createData.name} for project: ${createData.projectId}`);
 
+    this.logger.debug('[DOCUMENT-SERVICE] Finding project for bucket creation');
     const tekProject = await this.findTekProjectById(createData.projectId);
-    const bucket = DocumentAdapter.fromCreateBucketData(createData, tekProject);
+    this.logger.debug('[DOCUMENT-SERVICE] Creating bucket entity from adapter');
+    const bucket = DocumentAdapter.fromCreateBucketData(createData, tekProject, this.storagePath);
 
-    return await this.docsBucketRepository.save(bucket);
+    this.logger.debug('[DOCUMENT-SERVICE] Saving bucket to database', {
+      bucketName: bucket.name,
+      bucketStoragePath: bucket.storagePath,
+      projectId: bucket.project.id
+    });
+
+    const savedBucket = await this.docsBucketRepository.save(bucket);
+
+    this.logger.log('[DOCUMENT-SERVICE] Custom docs bucket created successfully', {
+      bucketId: savedBucket.id,
+      bucketName: savedBucket.name,
+      projectId: savedBucket.project.id
+    });
+
+    return savedBucket;
   }
 
   /**
    * List docs buckets for a project
    */
   async findBucketsByProjectId(projectId: string): Promise<DocsBucket[]> {
-    return await this.docsBucketRepository.find({
+    this.logger.debug('[DOCUMENT-SERVICE] Finding docs buckets for project', {
+      projectId
+    });
+
+    const buckets = await this.docsBucketRepository.find({
       where: { project: { id: projectId }, status: BucketStatus.ACTIVE },
       order: { createdAt: 'ASC' },
     });
+
+    this.logger.debug('[DOCUMENT-SERVICE] Found docs buckets for project', {
+      projectId,
+      bucketCount: buckets.length,
+      bucketIds: buckets.map(b => b.id)
+    });
+
+    return buckets;
   }
 
   /**
    * Get docs bucket by ID
    */
   async findBucketById(id: string): Promise<DocsBucket> {
+    this.logger.debug('[DOCUMENT-SERVICE] Finding docs bucket by ID', {
+      bucketId: id
+    });
+
     const bucket = await this.docsBucketRepository.findOne({
       where: { id },
       relations: ['project', 'documents'],
     });
 
     if (!bucket) {
+      this.logger.error('[DOCUMENT-SERVICE] Docs bucket not found', {
+        bucketId: id
+      });
       throw new NotFoundException(`Docs bucket ${id} not found`);
     }
+
+    this.logger.debug('[DOCUMENT-SERVICE] Docs bucket found successfully', {
+      bucketId: bucket.id,
+      bucketName: bucket.name,
+      projectId: bucket.project.id,
+      documentCount: bucket.documents?.length || 0
+    });
 
     return bucket;
   }
@@ -78,20 +155,52 @@ export class DocumentService {
    * Update docs bucket
    */
   async updateBucket(id: string, updateData: UpdateDocsBucketData): Promise<DocsBucket> {
+    this.logger.log('[DOCUMENT-SERVICE] Updating docs bucket', {
+      bucketId: id,
+      updateFields: Object.keys(updateData)
+    });
+
     const existingBucket = await this.findBucketById(id);
+
+    this.logger.debug('[DOCUMENT-SERVICE] Creating updated bucket entity from adapter');
     const updatedBucket = DocumentAdapter.fromUpdateBucketData(existingBucket, updateData);
 
-    return await this.docsBucketRepository.save(updatedBucket);
+    const savedBucket = await this.docsBucketRepository.save(updatedBucket);
+
+    this.logger.log('[DOCUMENT-SERVICE] Docs bucket updated successfully', {
+      bucketId: savedBucket.id,
+      bucketName: savedBucket.name
+    });
+
+    return savedBucket;
   }
 
   /**
    * Delete docs bucket (soft delete)
    */
   async deleteBucket(id: string): Promise<void> {
+    this.logger.log('[DOCUMENT-SERVICE] Deleting (archiving) docs bucket', {
+      bucketId: id
+    });
+
     const bucket = await this.findBucketById(id);
+
+    this.logger.debug('[DOCUMENT-SERVICE] Updating bucket status to archived', {
+      bucketId: bucket.id,
+      bucketName: bucket.name,
+      previousStatus: bucket.status
+    });
+
     bucket.status = BucketStatus.ARCHIVED;
     bucket.updatedAt = new Date();
+
     await this.docsBucketRepository.save(bucket);
+
+    this.logger.log('[DOCUMENT-SERVICE] Docs bucket archived successfully', {
+      bucketId: id,
+      bucketName: bucket.name
+    });
+
     this.logger.log(`Docs bucket archived: ${id}`);
   }
 
