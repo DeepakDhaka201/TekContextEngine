@@ -13,68 +13,62 @@ import {
 } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
-import { PipelineOrchestratorService, CreatePipelineRequest } from './pipeline/services/pipeline-orchestrator.service';
-import { IndexPipelineType } from './entities/index-pipeline.entity';
+import { JobOrchestratorService, CreateJobRequest } from './jobs/services/job-orchestrator.service';
+import { IndexJobType } from './entities/index-job.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Codebase } from '@/entities';
 
-export class CreatePipelineDto {
+export class CreateJobDto {
   projectId: string;
   codebaseId?: string;
-  type: IndexPipelineType;
+  type: IndexJobType;
   description?: string;
   baseCommit?: string;
-  targetCommit?: string;
   priority?: number;
-  customConfiguration?: any;
 }
 
 @ApiTags('Indexing')
 @Controller('indexing')
 export class IndexingController {
   constructor(
-    private readonly pipelineOrchestrator: PipelineOrchestratorService,
+    private readonly jobOrchestrator: JobOrchestratorService,
     @InjectRepository(Codebase)
     private readonly codebaseRepository: Repository<Codebase>,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService
   ) {}
 
-  @Post('pipelines')
-  @ApiOperation({ summary: 'Create and start a new indexing pipeline' })
-  @ApiResponse({ status: 201, description: 'Pipeline created successfully' })
+  @Post('jobs')
+  @ApiOperation({ summary: 'Create and start a new indexing job' })
+  @ApiResponse({ status: 201, description: 'Job created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request' })
   @ApiResponse({ status: 404, description: 'Project or codebase not found' })
-  async createPipeline(@Body() dto: CreatePipelineDto) {
-    this.logger.debug(`[CREATE-PIPELINE] Full request details`, {
+  async createJob(@Body() dto: CreateJobDto) {
+    this.logger.debug(`[CREATE-JOB] Full request details`, {
       projectId: dto.projectId,
       codebaseId: dto.codebaseId,
       type: dto.type,
       description: dto.description,
       baseCommit: dto.baseCommit,
-      targetCommit: dto.targetCommit,
-      priority: dto.priority,
-      hasCustomConfiguration: !!dto.customConfiguration
+      priority: dto.priority
     });
 
     try {
-      const request: CreatePipelineRequest = {
+      const request: CreateJobRequest = {
         projectId: dto.projectId,
         codebaseId: dto.codebaseId,
         type: dto.type,
         description: dto.description,
         baseCommit: dto.baseCommit,
-        targetCommit: dto.targetCommit,
         priority: dto.priority,
-        customConfiguration: dto.customConfiguration,
       };
 
-      this.logger.debug(`[CREATE-PIPELINE] Calling pipeline orchestrator with request`);
-      const job = await this.pipelineOrchestrator.createPipeline(request);
+      this.logger.debug(`[CREATE-JOB] Calling job orchestrator with request`);
+      const job = await this.jobOrchestrator.createJob(request);
 
-      this.logger.log(`[CREATE-PIPELINE] Pipeline created successfully`, {
-        pipelineId: job.id,
+      this.logger.log(`[CREATE-JOB] Job created successfully`, {
+        jobId: job.id,
         type: job.type,
         status: job.status,
         createdAt: job.createdAt
@@ -88,12 +82,12 @@ export class IndexingController {
           status: job.status,
           createdAt: job.createdAt,
         },
-        message: 'Index pipeline created and started successfully',
+        message: 'Index job created and started successfully',
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      this.logger.error(`[CREATE-PIPELINE] Failed to create pipeline`, {
+      this.logger.error(`[CREATE-JOB] Failed to create job`, {
         error: errorMessage,
         stack: error instanceof Error ? error.stack : undefined,
         projectId: dto.projectId,
@@ -108,29 +102,29 @@ export class IndexingController {
     }
   }
 
-  @Get('pipelines/:id')
-  @ApiOperation({ summary: 'Get pipeline status and progress' })
-  @ApiParam({ name: 'id', description: 'Pipeline ID' })
-  @ApiResponse({ status: 200, description: 'Pipeline status retrieved successfully' })
-  @ApiResponse({ status: 404, description: 'Pipeline not found' })
-  async getPipelineStatus(@Param('id') pipelineId: string) {
-    this.logger.debug(`[GET-PIPELINE-STATUS] Retrieving pipeline status`, {
-      pipelineId
+  @Get('jobs/:id')
+  @ApiOperation({ summary: 'Get job status and progress' })
+  @ApiParam({ name: 'id', description: 'Job ID' })
+  @ApiResponse({ status: 200, description: 'Job status retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Job not found' })
+  async getJobStatus(@Param('id') jobId: string) {
+    this.logger.debug(`[GET-JOB-STATUS] Retrieving job status`, {
+      jobId
     });
 
     try {
-      const job = await this.pipelineOrchestrator.getPipelineStatus(pipelineId);
+      const job = await this.jobOrchestrator.getJobStatus(jobId);
 
-      this.logger.debug(`[GET-PIPELINE-STATUS] Pipeline status retrieved successfully`, {
-        pipelineId: job.id,
+      this.logger.debug(`[GET-JOB-STATUS] Job status retrieved successfully`, {
+        jobId: job.id,
         type: job.type,
         status: job.status,
         progress: job.progress || 0,
-        currentStep: job.currentStep,
+        currentTask: job.currentTask,
         hasError: !!job.error,
         startedAt: job.startedAt,
         completedAt: job.completedAt,
-        stepsCount: Object.keys(job.metadata?.steps || {}).length
+        tasksCount: Object.keys(job.metadata?.tasks || {}).length
       });
 
       return {
@@ -140,18 +134,18 @@ export class IndexingController {
           type: job.type,
           status: job.status,
           progress: job.progress || 0,
-          currentStep: job.currentStep,
+          currentTask: job.currentTask,
           error: job.error,
           startedAt: job.startedAt,
           completedAt: job.completedAt,
-          steps: job.metadata?.steps || {},
+          tasks: job.metadata?.tasks || {},
         },
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      this.logger.error(`[GET-PIPELINE-STATUS] Failed to retrieve pipeline status`, {
-        pipelineId,
+      this.logger.error(`[GET-JOB-STATUS] Failed to retrieve job status`, {
+        jobId,
         error: errorMessage,
         stack: error instanceof Error ? error.stack : undefined
       });
@@ -163,33 +157,33 @@ export class IndexingController {
     }
   }
 
-  @Delete('pipelines/:id')
-  @ApiOperation({ summary: 'Cancel a running pipeline' })
-  @ApiParam({ name: 'id', description: 'Pipeline ID' })
-  @ApiResponse({ status: 200, description: 'Pipeline cancelled successfully' })
-  @ApiResponse({ status: 404, description: 'Pipeline not found' })
-  @ApiResponse({ status: 400, description: 'Pipeline cannot be cancelled' })
-  async cancelPipeline(@Param('id') pipelineId: string) {
-    this.logger.log(`[CANCEL-PIPELINE] Cancelling pipeline`, {
-      pipelineId
+  @Delete('jobs/:id')
+  @ApiOperation({ summary: 'Cancel a running job' })
+  @ApiParam({ name: 'id', description: 'Job ID' })
+  @ApiResponse({ status: 200, description: 'Job cancelled successfully' })
+  @ApiResponse({ status: 404, description: 'Job not found' })
+  @ApiResponse({ status: 400, description: 'Job cannot be cancelled' })
+  async cancelJob(@Param('id') jobId: string) {
+    this.logger.log(`[CANCEL-JOB] Cancelling job`, {
+      jobId
     });
 
     try {
-      await this.pipelineOrchestrator.cancelPipeline(pipelineId);
+      await this.jobOrchestrator.cancelJob(jobId);
 
-      this.logger.log(`[CANCEL-PIPELINE] Pipeline cancelled successfully`, {
-        pipelineId
+      this.logger.log(`[CANCEL-JOB] Job cancelled successfully`, {
+        jobId
       });
 
       return {
         success: true,
-        message: 'Pipeline cancelled successfully',
+        message: 'Job cancelled successfully',
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      this.logger.error(`[CANCEL-PIPELINE] Failed to cancel pipeline`, {
-        pipelineId,
+      this.logger.error(`[CANCEL-JOB] Failed to cancel job`, {
+        jobId,
         error: errorMessage,
         stack: error instanceof Error ? error.stack : undefined
       });
@@ -210,44 +204,32 @@ export class IndexingController {
     @Query('description') description?: string
   ) {
     this.logger.log(`[FULL-INDEX] Starting full indexing for codebase: ${codebaseId}`);
-    this.logger.debug(`[FULL-INDEX] Request params: { codebaseId: "${codebaseId}", description: "${description}" }`);
 
     try {
       // First, resolve the codebase and get its project ID
-      this.logger.log(`[FULL-INDEX] Looking up codebase: ${codebaseId}`);
       const codebase = await this.codebaseRepository.findOne({
         where: { id: codebaseId },
         relations: ['project'],
       });
 
       if (!codebase) {
-        this.logger.error(`[FULL-INDEX] Codebase not found: ${codebaseId}`);
         throw new NotFoundException(`Codebase ${codebaseId} not found`);
       }
 
-      this.logger.log(`[FULL-INDEX] Codebase found: ${codebase.name} (Project: ${codebase.project.id})`);
-      this.logger.debug(`[FULL-INDEX] Codebase details: { id: "${codebase.id}", name: "${codebase.name}", projectId: "${codebase.project.id}", gitlabUrl: "${codebase.gitlabUrl}" }`);
-
-      // Create the pipeline request with proper project ID
-      const request: CreatePipelineRequest = {
+      // Create the job request with proper project ID
+      const request: CreateJobRequest = {
         projectId: codebase.project.id,
         codebaseId,
-        type: IndexPipelineType.FULL,
+        type: IndexJobType.CODEBASE_FULL,
         description: description || 'Full codebase indexing',
       };
 
-      this.logger.log(`[FULL-INDEX] Creating pipeline request:`);
-      this.logger.debug(`[FULL-INDEX] Pipeline request: ${JSON.stringify(request, null, 2)}`);
-
-      const job = await this.pipelineOrchestrator.createPipeline(request);
-
-      this.logger.log(`[FULL-INDEX] Pipeline created successfully: ${job.id}`);
-      this.logger.debug(`[FULL-INDEX] Pipeline details: { id: "${job.id}", type: "${job.type}", status: "${job.status}", createdAt: "${job.createdAt}" }`);
+      const job = await this.jobOrchestrator.createJob(request);
 
       return {
         success: true,
         data: {
-          pipelineId: job.id,
+          jobId: job.id,
           status: job.status,
           codebaseId: codebase.id,
           codebaseName: codebase.name,
@@ -269,42 +251,40 @@ export class IndexingController {
   @Post('codebases/:id/incremental-update')
   @ApiOperation({ summary: 'Start incremental codebase update' })
   @ApiParam({ name: 'id', description: 'Codebase ID' })
+  @ApiQuery({ name: 'fromCommit', required: true, description: 'Starting commit hash to compare from' })
   @ApiResponse({ status: 201, description: 'Incremental update started' })
   async startIncrementalUpdate(
     @Param('id') codebaseId: string,
-    @Query('baseCommit') baseCommit?: string,
-    @Query('targetCommit') targetCommit?: string
+    @Query('fromCommit') fromCommit: string
   ) {
     this.logger.log(`[INCREMENTAL-UPDATE] Starting incremental update for codebase`, {
       codebaseId,
-      baseCommit,
-      targetCommit
+      fromCommit
     });
 
     try {
-      const request: CreatePipelineRequest = {
-        projectId: '', // Will be resolved from codebase
+      // First, resolve the codebase and get its project ID
+      const codebase = await this.codebaseRepository.findOne({
+        where: { id: codebaseId },
+        relations: ['project'],
+      });
+
+      if (!codebase) {
+        throw new NotFoundException(`Codebase ${codebaseId} not found`);
+      }
+
+      const request: CreateJobRequest = {
+        projectId: codebase.project.id,
         codebaseId,
-        type: IndexPipelineType.INCREMENTAL,
-        baseCommit,
-        targetCommit,
+        type: IndexJobType.CODEBASE_INCR,
+        baseCommit: fromCommit,
         description: 'Incremental codebase update',
       };
 
-      this.logger.debug(`[INCREMENTAL-UPDATE] Creating incremental pipeline request`, {
-        request: {
-          codebaseId: request.codebaseId,
-          type: request.type,
-          baseCommit: request.baseCommit,
-          targetCommit: request.targetCommit,
-          description: request.description
-        }
-      });
+      const job = await this.jobOrchestrator.createJob(request);
 
-      const job = await this.pipelineOrchestrator.createPipeline(request);
-
-      this.logger.log(`[INCREMENTAL-UPDATE] Incremental update pipeline created successfully`, {
-        pipelineId: job.id,
+      this.logger.log(`[INCREMENTAL-UPDATE] Incremental update job created successfully`, {
+        jobId: job.id,
         status: job.status,
         codebaseId
       });
@@ -312,8 +292,11 @@ export class IndexingController {
       return {
         success: true,
         data: {
-          pipelineId: job.id,
+          jobId: job.id,
           status: job.status,
+          codebaseId: codebase.id,
+          codebaseName: codebase.name,
+          projectId: codebase.project.id,
         },
         message: 'Incremental update started successfully',
       };
@@ -322,8 +305,7 @@ export class IndexingController {
 
       this.logger.error(`[INCREMENTAL-UPDATE] Failed to start incremental update`, {
         codebaseId,
-        baseCommit,
-        targetCommit,
+        fromCommit,
         error: errorMessage,
         stack: error instanceof Error ? error.stack : undefined
       });
@@ -332,65 +314,159 @@ export class IndexingController {
     }
   }
 
-  @Post('projects/:id/dependency-analysis')
-  @ApiOperation({ summary: 'Start dependency analysis for project' })
+  @Post('projects/:id/api-analysis')
+  @ApiOperation({ summary: 'Start API analysis for project' })
   @ApiParam({ name: 'id', description: 'Project ID' })
-  @ApiResponse({ status: 201, description: 'Dependency analysis started' })
-  async startDependencyAnalysis(
+  @ApiResponse({ status: 201, description: 'API analysis started' })
+  async startApiAnalysis(
     @Param('id') projectId: string,
     @Query('description') description?: string
   ) {
-    this.logger.log(`[DEPENDENCY-ANALYSIS] Starting dependency analysis for project`, {
-      projectId,
-      description
-    });
+    this.logger.log(`[API-ANALYSIS] Starting API analysis for project: ${projectId}`);
 
     try {
-      const request: CreatePipelineRequest = {
+      const request: CreateJobRequest = {
         projectId,
-        type: IndexPipelineType.ANALYSIS,
-        description: description || 'Project dependency analysis',
+        type: IndexJobType.API_ANALYSIS,
+        description: description || 'Project API analysis',
       };
 
-      this.logger.debug(`[DEPENDENCY-ANALYSIS] Creating dependency analysis pipeline request`, {
-        request: {
-          projectId: request.projectId,
-          type: request.type,
-          description: request.description
-        }
-      });
-
-      const job = await this.pipelineOrchestrator.createPipeline(request);
-
-      this.logger.log(`[DEPENDENCY-ANALYSIS] Dependency analysis pipeline created successfully`, {
-        pipelineId: job.id,
-        status: job.status,
-        projectId
-      });
+      const job = await this.jobOrchestrator.createJob(request);
 
       return {
         success: true,
         data: {
-          pipelineId: job.id,
+          jobId: job.id,
           status: job.status,
+          projectId,
         },
-        message: 'Dependency analysis started successfully',
+        message: 'API analysis started successfully',
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-
-      this.logger.error(`[DEPENDENCY-ANALYSIS] Failed to start dependency analysis`, {
-        projectId,
-        description,
-        error: errorMessage,
-        stack: error instanceof Error ? error.stack : undefined
-      });
-
-      throw new BadRequestException(`Failed to start dependency analysis: ${errorMessage}`);
+      this.logger.error(`[API-ANALYSIS] Failed to start API analysis`, { projectId, error: errorMessage });
+      throw new BadRequestException(`Failed to start API analysis: ${errorMessage}`);
     }
   }
 
-  // TODO: Implement pipeline listing
-  // @Get('pipelines')
-  // async listPipelines() { ... }
+  @Post('projects/:id/userflow-analysis')
+  @ApiOperation({ summary: 'Start user flow analysis for project' })
+  @ApiParam({ name: 'id', description: 'Project ID' })
+  @ApiResponse({ status: 201, description: 'User flow analysis started' })
+  async startUserflowAnalysis(
+    @Param('id') projectId: string,
+    @Query('description') description?: string
+  ) {
+    this.logger.log(`[USERFLOW-ANALYSIS] Starting user flow analysis for project: ${projectId}`);
+
+    try {
+      const request: CreateJobRequest = {
+        projectId,
+        type: IndexJobType.USERFLOW_ANALYSIS,
+        description: description || 'Project user flow analysis',
+      };
+
+      const job = await this.jobOrchestrator.createJob(request);
+
+      return {
+        success: true,
+        data: {
+          jobId: job.id,
+          status: job.status,
+          projectId,
+        },
+        message: 'User flow analysis started successfully',
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`[USERFLOW-ANALYSIS] Failed to start user flow analysis`, { projectId, error: errorMessage });
+      throw new BadRequestException(`Failed to start user flow analysis: ${errorMessage}`);
+    }
+  }
+
+  @Post('projects/:id/docs-full-index')
+  @ApiOperation({ summary: 'Start full documentation indexing for project' })
+  @ApiParam({ name: 'id', description: 'Project ID' })
+  @ApiResponse({ status: 201, description: 'Full documentation indexing started' })
+  async startDocsFullIndex(
+    @Param('id') projectId: string,
+    @Query('description') description?: string
+  ) {
+    this.logger.log(`[DOCS-FULL-INDEX] Starting full documentation indexing for project: ${projectId}`);
+
+    try {
+      const request: CreateJobRequest = {
+        projectId,
+        type: IndexJobType.DOCS_BUCKET_FULL,
+        description: description || 'Full documentation indexing',
+      };
+
+      const job = await this.jobOrchestrator.createJob(request);
+
+      return {
+        success: true,
+        data: {
+          jobId: job.id,
+          status: job.status,
+          projectId,
+        },
+        message: 'Full documentation indexing started successfully',
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`[DOCS-FULL-INDEX] Failed to start full documentation indexing`, { projectId, error: errorMessage });
+      throw new BadRequestException(`Failed to start full documentation indexing: ${errorMessage}`);
+    }
+  }
+
+  @Post('projects/:id/docs-incremental-index')
+  @ApiOperation({ summary: 'Start incremental documentation indexing for project' })
+  @ApiParam({ name: 'id', description: 'Project ID' })
+  @ApiResponse({ status: 201, description: 'Incremental documentation indexing started' })
+  async startDocsIncrementalIndex(
+    @Param('id') projectId: string,
+    @Query('description') description?: string
+  ) {
+    this.logger.log(`[DOCS-INCR-INDEX] Starting incremental documentation indexing for project: ${projectId}`);
+
+    try {
+      const request: CreateJobRequest = {
+        projectId,
+        type: IndexJobType.DOCS_BUCKET_INCR,
+        description: description || 'Incremental documentation indexing',
+      };
+
+      const job = await this.jobOrchestrator.createJob(request);
+
+      return {
+        success: true,
+        data: {
+          jobId: job.id,
+          status: job.status,
+          projectId,
+        },
+        message: 'Incremental documentation indexing started successfully',
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`[DOCS-INCR-INDEX] Failed to start incremental documentation indexing`, { projectId, error: errorMessage });
+      throw new BadRequestException(`Failed to start incremental documentation indexing: ${errorMessage}`);
+    }
+  }
+
+  @Get('jobs')
+  @ApiOperation({ summary: 'List all jobs for monitoring' })
+  @ApiResponse({ status: 200, description: 'Jobs retrieved successfully' })
+  async listJobs(
+    @Query('status') status?: string,
+    @Query('type') type?: string,
+    @Query('limit') limit?: number
+  ) {
+    // TODO: Implement job listing with filters
+    return {
+      success: true,
+      data: [],
+      message: 'Job listing not yet implemented',
+    };
+  }
 }

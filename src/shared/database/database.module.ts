@@ -7,7 +7,7 @@ import {
   Codebase,
   Document
 } from '@/entities';
-import { IndexPipeline } from '@/modules/indexing/entities/index-pipeline.entity';
+import { IndexJob } from '@/modules/indexing/entities/index-job.entity';
 
 @Global()
 @Module({
@@ -26,7 +26,7 @@ import { IndexPipeline } from '@/modules/indexing/entities/index-pipeline.entity
           DocsBucket,
           Codebase,
           Document,
-          IndexPipeline,
+          IndexJob,
         ],
         synchronize: configService.get('DB_SYNCHRONIZE', false),
         logging: configService.get('DB_LOGGING', false),
@@ -46,7 +46,7 @@ import { IndexPipeline } from '@/modules/indexing/entities/index-pipeline.entity
       DocsBucket,
       Codebase,
       Document,
-      IndexPipeline,
+      IndexJob,
     ]),
   ],
   exports: [TypeOrmModule],

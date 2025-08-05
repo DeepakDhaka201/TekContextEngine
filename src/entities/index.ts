@@ -7,7 +7,7 @@ export * from './codebase.entity';
 export * from './document.entity';
 
 // Indexing entities
-export * from '../modules/indexing/entities/index-pipeline.entity';
+export * from '../modules/indexing/entities/index-job.entity';
 
 // Export enums from centralized location
 export * from './enums';

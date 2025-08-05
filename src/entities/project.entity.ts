@@ -10,7 +10,7 @@ import {
 import { Codebase } from './codebase.entity';
 import { DocsBucket } from './docs-bucket.entity';
 import { ProjectStatus } from './enums';
-import { IndexPipeline } from '../modules/indexing/entities/index-pipeline.entity';
+import { IndexJob } from '../modules/indexing/entities/index-job.entity';
 
 @Entity('tek_projects')
 @Index(['status'])
@@ -50,7 +50,7 @@ export class TekProject {
   @OneToMany(() => DocsBucket, (bucket) => bucket.project)
   docsBuckets: DocsBucket[];
 
-  @OneToMany(() => IndexPipeline, (pipeline) => pipeline.project)
-  indexPipelines: IndexPipeline[];
+  @OneToMany(() => IndexJob, (job) => job.project)
+  indexJobs: IndexJob[];
 
 }

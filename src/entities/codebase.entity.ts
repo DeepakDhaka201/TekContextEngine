@@ -14,7 +14,7 @@ import { TekProject } from './project.entity';
 import { Document } from './document.entity';
 import { IndexMode, CodebaseStatus } from './enums';
 import { GitConfig } from '../config/git.config';
-import { IndexPipeline } from '../modules/indexing/entities/index-pipeline.entity';
+import { IndexJob } from '../modules/indexing/entities/index-job.entity';
 
 @Entity('codebases')
 @Unique(['project', 'gitlabUrl'])
@@ -98,6 +98,6 @@ export class Codebase {
   @OneToMany(() => Document, (document) => document.codebase)
   documents: Document[];
 
-  @OneToMany(() => IndexPipeline, (pipeline) => pipeline.codebase)
-  indexPipelines: IndexPipeline[];
+  @OneToMany(() => IndexJob, (job) => job.codebase)
+  indexJobs: IndexJob[];
 }
