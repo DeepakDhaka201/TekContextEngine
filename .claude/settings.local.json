@@ -11,7 +11,10 @@
       "Bash(npm run lint)",
       "Bash(find:*)",
       "Bash(npm run start:dev:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "WebFetch(domain:google.github.io)",
+      "mcp__langfuse-docs__searchLangfuseDocs",
+      "Bash(git add:*)"
     ],
     "deny": []
   }
