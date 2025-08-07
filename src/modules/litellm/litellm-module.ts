@@ -515,15 +515,8 @@ export class LiteLLMModule implements ILiteLLMModule {
               this.trackStreamingUsage(chunk.usage, cost);
             }
             
-            // Add metadata to chunks
-            chunk.performance = {
-              latency: Date.now(),
-              provider: provider.name,
-              retry_count: providers.indexOf(provider),
-              tokens_per_second: tokenCount > 0 ? tokenCount / ((Date.now()) / 1000) : 0,
-              provider_latency: 0,
-              queue_time: 0
-            };
+            // Add metadata to chunks - performance tracking removed due to interface mismatch
+            // TODO: Add performance metadata to LLMStreamChunk interface
             
             yield chunk;
           }

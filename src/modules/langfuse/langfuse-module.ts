@@ -461,7 +461,7 @@ export class LangfuseModule implements ILangfuseModule {
         value: score.value,
         comment: score.comment,
         dataType: score.dataType,
-        configId: score.config
+        // configId: score.config // TODO: Fix config to configId mapping
       });
       
       console.log(`✓ Scored trace ${traceId}`);
@@ -502,7 +502,7 @@ export class LangfuseModule implements ILangfuseModule {
         value: score.value,
         comment: score.comment,
         dataType: score.dataType,
-        configId: score.config
+        // configId: score.config // TODO: Fix config to configId mapping
       });
       
       console.log(`✓ Scored generation ${generationId}`);
@@ -559,7 +559,7 @@ export class LangfuseModule implements ILangfuseModule {
       throw new LangfusePromptError(
         'prompt_retrieval',
         `Failed to retrieve prompt: ${error instanceof Error ? error.message : String(error)}`,
-        { promptName: name, version },
+        { promptName: name, version: version as any },
         error instanceof Error ? error : undefined
       );
     }

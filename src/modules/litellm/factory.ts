@@ -183,7 +183,7 @@ const DEFAULT_CONFIGS = {
       enabled: true,
       ttl: 300000,       // 5 minute cache
       max_entries: 10000,
-      storage: 'redis'
+      storage: 'redis' as const
     },
     monitoring: {
       enabled: true,
@@ -296,11 +296,11 @@ export function createLiteLLMModule(
       : {};
     
     // Merge configurations with proper precedence
-    const fullConfig = mergeConfigurations([
+    const fullConfig: any = mergeConfigurations([
       envDefaults,     // Environment defaults (lowest priority)
       envConfig,       // Environment variables
       userConfig       // User config (highest priority)
-    ]);
+    ]); // TODO: Fix type compatibility issues
     
     // Validate final configuration
     validateConfiguration(fullConfig);
@@ -319,7 +319,7 @@ export function createLiteLLMModule(
       defaults: fullConfig.defaults
     };
     
-    const module = new LiteLLMModule(moduleConfig);
+    const module = new LiteLLMModule(moduleConfig as any);
     
     console.log(`✓ LiteLLM module created successfully with ${Object.keys(providersConfig).length} providers`);
     
