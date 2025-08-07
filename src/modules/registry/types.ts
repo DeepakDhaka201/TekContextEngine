@@ -447,7 +447,7 @@ export interface ModuleRegistryConfig {
     /**
      * File paths to watch for hot reload triggers.
      * 
-     * @default ['src/modules/**/*.{ts,js}']
+     * @default Array of file patterns to watch
      */
     watchPaths?: string[];
   };

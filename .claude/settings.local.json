@@ -14,7 +14,14 @@
       "Bash(grep:*)",
       "WebFetch(domain:google.github.io)",
       "mcp__langfuse-docs__searchLangfuseDocs",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "mcp__langfuse-docs__getLangfuseOverview",
+      "Bash(sed:*)",
+      "Bash(node:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run test:unit:*)",
+      "Bash(npm run:*)"
     ],
     "deny": []
   }

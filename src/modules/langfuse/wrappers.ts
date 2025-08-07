@@ -787,39 +787,39 @@ export class WrappedGeneration implements IGeneration {
 export class WrappedPrompt implements IPrompt {
   /**
    * Creates a new wrapped prompt.
-   * 
-   * @param prompt - The underlying Langfuse prompt
+   *
+   * @param langfusePrompt - The underlying Langfuse prompt
    */
-  constructor(private readonly prompt: any) {
+  constructor(private readonly langfusePrompt: any) {
     console.log(`Created wrapped prompt: ${this.name} v${this.version}`);
   }
   
   get id(): string {
-    return this.prompt.id;
+    return this.langfusePrompt.id;
   }
-  
+
   get name(): string {
-    return this.prompt.name;
+    return this.langfusePrompt.name;
   }
-  
+
   get version(): number {
-    return this.prompt.version;
+    return this.langfusePrompt.version;
   }
-  
+
   get prompt(): string {
-    return this.prompt.prompt;
+    return this.langfusePrompt.prompt;
   }
-  
+
   get type(): 'text' | 'chat' {
-    return this.prompt.type || 'text';
+    return this.langfusePrompt.type || 'text';
   }
   
   get labels(): string[] {
-    return this.prompt.labels || [];
+    return this.langfusePrompt.labels || [];
   }
-  
+
   get config(): Record<string, any> | undefined {
-    return this.prompt.config;
+    return this.langfusePrompt.config;
   }
   
   /**
@@ -831,10 +831,10 @@ export class WrappedPrompt implements IPrompt {
    */
   compile(variables?: Record<string, any>): string {
     try {
-      if (this.prompt.compile) {
-        return this.prompt.compile(variables);
+      if (this.langfusePrompt.compile) {
+        return this.langfusePrompt.compile(variables);
       }
-      
+
       // Simple variable substitution if no compile method
       let compiled = this.prompt;
       if (variables) {
@@ -843,7 +843,7 @@ export class WrappedPrompt implements IPrompt {
           compiled = compiled.replace(new RegExp(placeholder, 'g'), String(value));
         }
       }
-      
+
       return compiled;
       
     } catch (error) {
@@ -877,8 +877,8 @@ export class WrappedPrompt implements IPrompt {
     }
     
     try {
-      if (this.prompt.getChatMessages) {
-        return this.prompt.getChatMessages(variables);
+      if (this.langfusePrompt.getChatMessages) {
+        return this.langfusePrompt.getChatMessages(variables);
       }
       
       // Simple implementation if no getChatMessages method

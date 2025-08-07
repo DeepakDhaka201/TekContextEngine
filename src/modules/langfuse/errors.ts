@@ -267,6 +267,7 @@ export class LangfuseTraceError extends LangfuseError {
     userId?: string;
     sessionId?: string;
     spanCount?: number;
+    spanId?: string;
   };
   
   constructor(
@@ -278,6 +279,7 @@ export class LangfuseTraceError extends LangfuseError {
       userId?: string;
       sessionId?: string;
       spanCount?: number;
+      spanId?: string;
     },
     cause?: Error,
     context: Record<string, any> = {}
