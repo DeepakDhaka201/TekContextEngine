@@ -1,16 +1,41 @@
-# CLAUDE.md - AgentHub Implementation Guide
+# CLAUDE.md - Tekion Orbit Development Guide
 
-## 🎯 Project Status: Implementation Phase
-We are now building the AgentHub system based on the comprehensive prompts in the `/prompts` directory.
+## 🎯 Project Status: Core Infrastructure Validation
+**Vision**: AI-Powered Workflow Orchestration Platform - "AI Operating System for Development Teams"
 
-## 📚 Essential Reading Before Any Work
-1. **[CORE-PRINCIPLES.md](./CORE-PRINCIPLES.md)** - Our implementation philosophy and standards
-2. **[00-master-implementation-orchestration.md](./prompts/00-master-implementation-orchestration.md)** - Implementation sequence and guidelines
-3. **[IMPLEMENTATION-TRACKER.md](./IMPLEMENTATION-TRACKER.md)** - Current progress and status
-4. **[QUICK-REFERENCE.md](./QUICK-REFERENCE.md)** - Quick lookup for common patterns
+**Current Phase**: Integration Testing & Config-Driven Agent Creation
+- ✅ Module Registry (29/29 tests passing)
+- ✅ Agent Architecture (LLM Agent, Graph Agent) 
+- ✅ Core Integrations (Langfuse, LiteLLM)
+- 🔄 **NOW**: Validate entire stack works together
 
-## 🏗️ Current Implementation Focus
-Check [IMPLEMENTATION-TRACKER.md](./IMPLEMENTATION-TRACKER.md) for the current module being implemented.
+## 📋 Essential Reading & Current Focus
+1. **[ARCHITECTURE_ANALYSIS.md](./ARCHITECTURE_ANALYSIS.md)** - Complete system overview
+2. **[IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)** - Next 48hr roadmap
+3. **agents-config.yaml** - Config-driven agent definitions
+4. **test-agent-stack.ts** - Integration validation script
+
+## 🏗️ Immediate Development Goals
+**Goal**: Prove the architecture works with minimal viable implementation
+
+## Quick Start & Validation
+```bash
+# 1. Setup environment
+cp .env.example .env
+# Edit .env with your Langfuse and LiteLLM keys
+
+# 2. Install dependencies
+npm install
+
+# 3. CRITICAL: Validate stack integration
+npx ts-node test-agent-stack.ts
+
+# 4. Edit agent configuration
+code agents-config.yaml
+
+# 5. Development mode
+npm run start:dev
+```
 
 ## Common Development Commands
 

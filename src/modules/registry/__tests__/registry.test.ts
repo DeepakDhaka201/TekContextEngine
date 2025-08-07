@@ -515,8 +515,8 @@ describe('ModuleRegistry', () => {
   
   describe('Dependency Management', () => {
     it('should detect circular dependencies', () => {
-      const moduleA = new MockModule('module-a', '1.0.0', ['module-b']);
-      const moduleB = new MockModule('module-b', '1.0.0', ['module-a']);
+      const moduleA = new MockModule('module-a', '1.0.0', ['b']);
+      const moduleB = new MockModule('module-b', '1.0.0', ['a']);
       
       registry.register('a', moduleA);
       
@@ -541,16 +541,16 @@ describe('ModuleRegistry', () => {
     
     it('should get module dependents', () => {
       const moduleA = new MockModule('module-a');
-      const moduleB = new MockModule('module-b', '1.0.0', ['module-a']);
-      const moduleC = new MockModule('module-c', '1.0.0', ['module-a']);
+      const moduleB = new MockModule('module-b', '1.0.0', ['a']);
+      const moduleC = new MockModule('module-c', '1.0.0', ['a']);
       
       registry.register('a', moduleA);
       registry.register('b', moduleB);
       registry.register('c', moduleC);
       
       const dependentsA = registry.getDependents('a');
-      expect(dependentsA).toContain('module-b');
-      expect(dependentsA).toContain('module-c');
+      expect(dependentsA).toContain('b');
+      expect(dependentsA).toContain('c');
     });
     
     it('should get initialization order', () => {
@@ -600,7 +600,7 @@ describe('ModuleRegistry', () => {
         fail('Should have thrown ModuleNotFoundError');
       } catch (error) {
         expect(error).toBeInstanceOf(ModuleNotFoundError);
-        expect(error.solution).toContain('register the module');
+        expect(error.solution).toContain('Register the module');
       }
     });
   });

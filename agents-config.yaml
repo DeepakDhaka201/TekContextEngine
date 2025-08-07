@@ -1,0 +1,85 @@
+# AgentHub Configuration
+# Update this file to define your agents - they'll be auto-created!
+
+agents:
+  # Basic LLM Assistant
+  - name: "basic-assistant"
+    type: "llm"
+    description: "General purpose AI assistant for testing"
+    config:
+      model: "gpt-4o-mini"  # Will be routed through LiteLLM proxy
+      temperature: 0.7
+      max_tokens: 1000
+      system_message: "You are a helpful AI assistant. Be concise and accurate."
+    tools:
+      - "echo"
+      - "math" 
+      - "timestamp"
+    enabled: true
+
+  # Testing Agent (minimal for validation)
+  - name: "test-agent"
+    type: "llm"
+    description: "Minimal agent for architecture validation"
+    config:
+      model: "gpt-4o-mini"
+      temperature: 0
+      max_tokens: 500
+      system_message: "You are a test agent. Always respond with 'Test successful' followed by the input you received."
+    tools: []
+    enabled: true
+
+# Tool definitions
+tools:
+  - name: "echo"
+    type: "utility"
+    description: "Returns the input message unchanged"
+    parameters:
+      - name: "message"
+        type: "string"
+        required: true
+        description: "Message to echo back"
+
+  - name: "math"
+    type: "calculation" 
+    description: "Performs basic mathematical operations"
+    parameters:
+      - name: "operation"
+        type: "string"
+        required: true
+        enum: ["add", "subtract", "multiply", "divide"]
+        description: "Mathematical operation to perform"
+      - name: "a"
+        type: "number"
+        required: true
+        description: "First number"
+      - name: "b" 
+        type: "number"
+        required: true
+        description: "Second number"
+
+  - name: "timestamp"
+    type: "utility"
+    description: "Returns the current timestamp"
+    parameters: []
+
+# Global settings
+settings:
+  # LLM Configuration
+  llm:
+    provider: "litellm"  # Use LiteLLM proxy
+    base_url: "${LITELLM_BASE_URL}"  # From environment
+    api_key: "${LITELLM_API_KEY}"    # From environment
+    
+  # Observability
+  observability:
+    langfuse:
+      enabled: true
+      public_key: "${LANGFUSE_PUBLIC_KEY}"   # From environment
+      secret_key: "${LANGFUSE_SECRET_KEY}"   # From environment  
+      base_url: "${LANGFUSE_BASEURL}"        # From environment
+      
+  # Module Registry
+  registry:
+    strict: false  # Allow missing dependencies during testing
+    health_check_interval: 0  # Disable for testing

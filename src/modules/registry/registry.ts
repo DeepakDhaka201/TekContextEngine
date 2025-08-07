@@ -274,6 +274,9 @@ export class ModuleRegistry implements IModuleRegistry {
     
     this.modules.set(moduleId, metadata);
     
+    // Add to dependency graph (dependencies will be updated when factory creates the module)
+    this.dependencyGraph.addNode(moduleId, []);
+    
     console.log(`✓ Module factory ${moduleId} registered successfully`);
   }
   
