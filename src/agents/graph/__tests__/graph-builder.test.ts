@@ -204,7 +204,7 @@ describe('Graph Builder - Node Management', () => {
         id: 'test-node',
         type: 'input',
         name: 'Test Node',
-        config: { param: 'value' }
+        config: { parameters: { param: 'value' } }
       };
 
       const result = builder.addNode(node);

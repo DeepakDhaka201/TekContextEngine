@@ -217,7 +217,7 @@ export class ModuleInErrorStateError extends ModuleRegistryError {
     
     // Chain the original error for better stack traces
     if (originalError) {
-      this.cause = originalError;
+      (this as any).cause = originalError;
     }
   }
 }
@@ -302,7 +302,7 @@ export class ModuleInitializationError extends ModuleRegistryError {
       `Ensure all dependencies are properly initialized.`
     );
     this.name = 'ModuleInitializationError';
-    this.cause = originalError;
+    (this as any).cause = originalError;
   }
 }
 
@@ -330,7 +330,7 @@ export class ModuleShutdownError extends ModuleRegistryError {
       `Check the module's shutdown() method for proper resource cleanup`
     );
     this.name = 'ModuleShutdownError';
-    this.cause = originalError;
+    (this as any).cause = originalError;
   }
 }
 
@@ -381,7 +381,7 @@ export class ModuleReloadError extends ModuleRegistryError {
     this.name = 'ModuleReloadError';
     
     if (originalError) {
-      this.cause = originalError;
+      (this as any).cause = originalError;
     }
   }
 }

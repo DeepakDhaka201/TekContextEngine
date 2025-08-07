@@ -54,8 +54,16 @@ import {
   AgentCapabilities,
   ExecutionContext,
   ToolCall,
-  Message
+  ToolResult,
+  ConversationTurn
 } from '../base/types';
+
+/**
+ * Type alias for conversation messages.
+ * 
+ * @public
+ */
+export type Message = ConversationTurn;
 
 /**
  * Agent type identifier for LLM agents.
@@ -76,6 +84,15 @@ export type LLMAgentType = 'llm';
 export interface LLMAgentConfig extends AgentConfig {
   /** Agent type identifier */
   type?: LLMAgentType;
+  
+  /** Agent description */
+  description?: string;
+  
+  /** Agent version */
+  version?: string;
+  
+  /** Module dependencies */
+  modules?: string[];
   
   /** Model configuration and selection */
   model?: {
@@ -211,6 +228,12 @@ export interface LLMAgentConfig extends AgentConfig {
  * @public
  */
 export interface LLMAgentInput extends AgentInput {
+  /** Primary prompt text for completion */
+  prompt?: string;
+  
+  /** Conversation messages for multi-turn interactions */
+  messages?: Message[];
+  
   /** Override system prompt for this execution */
   systemPromptOverride?: string;
   
@@ -244,6 +267,9 @@ export interface LLMAgentInput extends AgentInput {
   /** Whether to stream the response */
   stream?: boolean;
   
+  /** Streaming configuration */
+  streaming?: boolean;
+  
   /** Context preservation settings */
   context?: {
     /** Preserve context across executions */
@@ -267,11 +293,20 @@ export interface LLMAgentInput extends AgentInput {
  * @public
  */
 export interface LLMAgentOutput extends AgentOutput {
+  /** Generated text content */
+  content?: string;
+  
+  /** Generated message for conversations */
+  message?: string;
+  
   /** Model actually used for completion */
   model: string;
   
   /** Chain-of-thought reasoning if available */
   reasoning?: string;
+  
+  /** Tool calls that were made during execution */
+  toolCalls?: ToolCall[];
   
   /** Results from tool execution */
   toolResults?: ToolResult[];
@@ -301,14 +336,29 @@ export interface LLMAgentOutput extends AgentOutput {
  * @public
  */
 export interface LLMAgentStreamOutput extends AgentStreamOutput {
+  /** Accumulated content so far */
+  accumulated?: string;
+  
   /** Tool calls being streamed */
   toolCalls?: Partial<ToolCall>[];
+  
+  /** Tool execution results */
+  toolResults?: ToolResult[];
   
   /** Current reasoning step */
   reasoning?: string;
   
   /** Quality metrics for current response */
   quality?: Partial<QualityMetrics>;
+  
+  /** Whether this is the final chunk in the stream */
+  finished?: boolean;
+  
+  /** Model being used for completion */
+  model?: string;
+  
+  /** Whether conversation memory was updated */
+  memoryUpdated?: boolean;
 }
 
 /**
@@ -509,37 +559,7 @@ export interface SafetyCheckResult {
  * 
  * @public
  */
-export interface ToolResult {
-  /** Name of the tool executed */
-  tool: string;
-  
-  /** Input provided to the tool */
-  input: any;
-  
-  /** Output returned by the tool */
-  output: any;
-  
-  /** Error message if execution failed */
-  error?: string;
-  
-  /** Execution duration in milliseconds */
-  duration?: number;
-  
-  /** Tool execution metadata */
-  metadata?: {
-    /** Tool call ID */
-    callId?: string;
-    
-    /** Execution attempt number */
-    attempt?: number;
-    
-    /** Whether execution was cached */
-    cached?: boolean;
-    
-    /** Additional metadata */
-    [key: string]: any;
-  };
-}
+// ToolResult is now imported from base types for consistency
 
 /**
  * Token usage statistics.
@@ -714,8 +734,8 @@ export interface ILLMAgent extends IAgent {
   /** Agent type */
   readonly type: LLMAgentType;
   
-  /** LLM-specific capabilities */
-  readonly capabilities: LLMAgentCapabilities;
+  /** LLM-specific detailed capabilities */
+  readonly llmCapabilities: LLMAgentCapabilities;
   
   /**
    * Execute LLM completion with full configuration.
@@ -723,7 +743,7 @@ export interface ILLMAgent extends IAgent {
    * @param input - LLM agent input
    * @returns Promise resolving to LLM agent output
    */
-  execute(input: LLMAgentInput): Promise<LLMAgentOutput>;
+  executeCompletion(input: LLMAgentInput): Promise<LLMAgentOutput>;
   
   /**
    * Stream LLM completion with real-time updates.
@@ -815,6 +835,12 @@ export interface LLMRequest {
   /** Stop sequences */
   stop?: string[];
   
+  /** Frequency penalty */
+  frequency_penalty?: number;
+  
+  /** Presence penalty */
+  presence_penalty?: number;
+  
   /** User identifier */
   user?: string;
   
@@ -865,11 +891,20 @@ export interface ModelSelectionContext {
   /** Input messages */
   messages: Message[];
   
+  /** Number of messages */
+  messageCount?: number;
+  
   /** Required capabilities */
   capabilities?: string[];
   
   /** Routing strategy */
   routing?: ModelRouting;
+  
+  /** Preferred routing strategy */
+  preferredRouting?: ModelRouting;
+  
+  /** Estimated token count */
+  estimatedTokens?: number;
   
   /** User preferences */
   preferences?: Record<string, any>;

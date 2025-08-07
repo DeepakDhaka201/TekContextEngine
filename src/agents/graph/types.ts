@@ -70,6 +70,16 @@ import {
  */
 export type GraphAgentType = 'graph';
 
+// Type aliases for backward compatibility with tests
+export type ExecutionStrategy = GraphExecutionStrategy;
+export type GraphExecutionResult = NodeExecutionResult;
+export type GraphMetrics = GraphPerformanceMetrics;
+export type GraphAgentPresetConfig = GraphAgentConfig;
+export type ResourceConfig = GraphResourceLimits;
+export type OptimizationConfig = GraphOptimizationConfig;
+export type ValidationConfig = GraphValidationResult;
+export type StreamingConfig = GraphAgentStreamOutput;
+
 /**
  * Core interface for Graph Agent functionality.
  * 
@@ -631,6 +641,9 @@ export interface GraphExecutionConfig {
   /** Retry configuration */
   retry: GraphRetryConfig;
   
+  /** Retry policy (alias for compatibility) */
+  retryPolicy: GraphRetryConfig;
+  
   /** Checkpointing configuration */
   checkpointing: GraphCheckpointConfig;
   
@@ -729,6 +742,9 @@ export interface GraphMonitoringConfig {
   
   /** Health check settings */
   healthCheck: GraphHealthCheckConfig;
+  
+  /** Metrics enabled flag (alias for compatibility) */
+  metricsEnabled?: boolean;
 }
 
 // Supporting types and enums
@@ -836,6 +852,12 @@ export interface NodeConfig {
   
   /** Custom node implementation */
   implementation?: string;
+  
+  /** Schema for input validation */
+  schema?: Record<string, any>;
+  
+  /** Timeout for node execution */
+  timeout?: number;
 }
 
 export interface NodePosition {

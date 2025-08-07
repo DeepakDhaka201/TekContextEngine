@@ -46,7 +46,7 @@
 import { LLMAgent } from './llm-agent';
 import { LLMAgentConfig, LLMAgentType, ModelRouting, ResponseFormat } from './types';
 import { LLMAgentError } from './errors';
-import { AgentFactory } from '../base/factory';
+import { BaseAgentFactory } from '../base/factory';
 
 /**
  * Preset configurations for common LLM agent use cases.
@@ -64,6 +64,7 @@ export const LLMAgentPresets = {
    * and conversation memory enabled.
    */
   chatbot: {
+    id: 'preset-chatbot',
     name: 'Chatbot',
     description: 'Simple conversational AI assistant',
     type: 'llm' as LLMAgentType,
@@ -96,12 +97,13 @@ export const LLMAgentPresets = {
    * structured output, and development tools.
    */
   codeAssistant: {
+    id: 'preset-code-assistant',
     name: 'Code Assistant',
     description: 'AI assistant for programming and software development',
     type: 'llm' as LLMAgentType,
     model: {
       primary: 'gpt-4',
-      fallback: ['gpt-3.5-turbo'],
+      fallback: ['gpt-3.5-turbo'] as string[],
       routing: 'quality' as ModelRouting
     },
     prompting: {
@@ -131,12 +133,13 @@ export const LLMAgentPresets = {
    * structured markdown output, and research tools.
    */
   researcher: {
+    id: 'preset-researcher',
     name: 'Research Assistant',
     description: 'AI assistant for research and in-depth analysis',
     type: 'llm' as LLMAgentType,
     model: {
       primary: 'gpt-4',
-      fallback: ['claude-3-sonnet'],
+      fallback: ['claude-3-sonnet'] as string[],
       routing: 'quality' as ModelRouting
     },
     prompting: {
@@ -166,6 +169,7 @@ export const LLMAgentPresets = {
    * analytical tools, and precise reasoning.
    */
   dataAnalyst: {
+    id: 'preset-data-analyst',
     name: 'Data Analyst',
     description: 'AI assistant for data analysis and insights',
     type: 'llm' as LLMAgentType,
@@ -200,12 +204,13 @@ export const LLMAgentPresets = {
    * markdown formatting, and creative tools.
    */
   creativeWriter: {
+    id: 'preset-creative-writer',
     name: 'Creative Writer',
     description: 'AI assistant for creative writing and content creation',
     type: 'llm' as LLMAgentType,
     model: {
       primary: 'gpt-4',
-      fallback: ['claude-3-sonnet'],
+      fallback: ['claude-3-sonnet'] as string[],
       routing: 'balanced' as ModelRouting
     },
     prompting: {
@@ -233,6 +238,7 @@ export const LLMAgentPresets = {
    * and support-specific tools.
    */
   customerSupport: {
+    id: 'preset-customer-support',
     name: 'Customer Support',
     description: 'AI assistant for customer service and support',
     type: 'llm' as LLMAgentType,
@@ -268,7 +274,7 @@ export const LLMAgentPresets = {
  * 
  * @public
  */
-export class LLMAgentFactory extends AgentFactory<LLMAgent> {
+export class LLMAgentFactory extends BaseAgentFactory<LLMAgentConfig, LLMAgent> {
   /**
    * Creates a new LLM agent instance.
    * 
@@ -286,13 +292,10 @@ export class LLMAgentFactory extends AgentFactory<LLMAgent> {
    * });
    * ```
    */
-  createAgent(config: LLMAgentConfig): LLMAgent {
+  protected async createAgent(config: LLMAgentConfig): Promise<LLMAgent> {
     console.log(`Creating LLM Agent: ${config.name}`);
     
     try {
-      // Validate required fields
-      this.validateConfig(config);
-      
       // Create agent instance
       const agent = new LLMAgent(config);
       
@@ -340,10 +343,10 @@ export class LLMAgentFactory extends AgentFactory<LLMAgent> {
    * });
    * ```
    */
-  createWithPreset(
+  async createWithPreset(
     presetName: keyof typeof LLMAgentPresets,
     overrides: Partial<LLMAgentConfig> = {}
-  ): LLMAgent {
+  ): Promise<LLMAgent> {
     const preset = LLMAgentPresets[presetName];
     if (!preset) {
       throw new LLMAgentError(
@@ -356,7 +359,7 @@ export class LLMAgentFactory extends AgentFactory<LLMAgent> {
     // Merge preset with overrides
     const config = this.mergeConfigurations(preset, overrides);
     
-    return this.createAgent(config);
+    return await this.createAgent(config);
   }
   
   /**
@@ -374,8 +377,8 @@ export class LLMAgentFactory extends AgentFactory<LLMAgent> {
    * ]);
    * ```
    */
-  createMultiple(configs: LLMAgentConfig[]): LLMAgent[] {
-    return configs.map(config => this.createAgent(config));
+  async createMultiple(configs: LLMAgentConfig[]): Promise<LLMAgent[]> {
+    return await Promise.all(configs.map(config => this.createAgent(config)));
   }
   
   /**
@@ -410,7 +413,7 @@ export class LLMAgentFactory extends AgentFactory<LLMAgent> {
    * @throws {LLMAgentError} If configuration is invalid
    * @private
    */
-  private validateConfig(config: LLMAgentConfig): void {
+  protected validateSpecificConfig(config: LLMAgentConfig): void {
     if (!config.name || typeof config.name !== 'string') {
       throw new LLMAgentError(
         'INVALID_CONFIGURATION',
@@ -514,8 +517,7 @@ export class LLMAgentFactory extends AgentFactory<LLMAgent> {
  */
 export async function createLLMAgent(config: LLMAgentConfig): Promise<LLMAgent> {
   const factory = new LLMAgentFactory();
-  const agent = factory.createAgent(config);
-  await agent.initialize();
+  const agent = await factory.create(config);
   return agent;
 }
 
@@ -542,8 +544,7 @@ export async function createLLMAgentWithPreset(
   overrides: Partial<LLMAgentConfig> = {}
 ): Promise<LLMAgent> {
   const factory = new LLMAgentFactory();
-  const agent = factory.createWithPreset(presetName, overrides);
-  await agent.initialize();
+  const agent = await factory.createWithPreset(presetName, overrides);
   return agent;
 }
 
@@ -565,10 +566,7 @@ export async function createLLMAgentWithPreset(
  */
 export async function createMultipleLLMAgents(configs: LLMAgentConfig[]): Promise<LLMAgent[]> {
   const factory = new LLMAgentFactory();
-  const agents = factory.createMultiple(configs);
-  
-  // Initialize all agents in parallel
-  await Promise.all(agents.map(agent => agent.initialize()));
+  const agents = await factory.createMultiple(configs);
   
   return agents;
 }

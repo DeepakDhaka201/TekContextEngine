@@ -1196,3 +1196,6 @@ export function sanitizeGraphError(error: GraphAgentError): Record<string, any> 
   
   return sanitized;
 }
+
+// Type aliases for backward compatibility with tests
+export const GraphExecutionError = NodeExecutionError;

@@ -154,7 +154,7 @@ export abstract class BaseAgent implements IAgent {
     errorCount: 0,
     totalExecutionTime: 0,
     lastExecutionTime: 0,
-    lastHealthCheck?: Date
+    lastHealthCheck: undefined as Date | undefined
   };
   
   /** Module registry for accessing other system components */
@@ -180,7 +180,7 @@ export abstract class BaseAgent implements IAgent {
    */
   constructor(id?: string) {
     this.id = id || generateId('agent');
-    this.logger = new AgentLogger(this.id, this.name || 'BaseAgent');
+    this.logger = new AgentLogger(this.id, 'BaseAgent');
   }
   
   /**
@@ -563,7 +563,7 @@ export abstract class BaseAgent implements IAgent {
                 'Agent has serious issues requiring attention',
         lastCheck: this.metrics.lastHealthCheck,
         metrics: {
-          uptime: this.initializationTime ? Date.now() - this.initializationTime.getTime() : 0,
+          uptime: this.initializationTime ? (Date.now() - this.initializationTime.getTime()) : 0,
           executionCount: this.metrics.executionCount,
           successRate,
           averageExecutionTime,
@@ -655,6 +655,18 @@ export abstract class BaseAgent implements IAgent {
       source: event.source,
       timestamp: event.timestamp
     });
+  }
+  
+  /**
+   * Gets the basic agent capabilities.
+   * 
+   * Returns the capabilities as defined by the agent implementation.
+   * Subclasses can override to return more specific capability objects.
+   * 
+   * @returns Agent capabilities
+   */
+  getCapabilities(): string[] | any {
+    return [...this.capabilities];
   }
   
   // Protected helper methods for subclasses

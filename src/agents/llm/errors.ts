@@ -93,7 +93,7 @@ export class LLMAgentError extends AgentError {
       model,
       usage,
       request
-    }, cause);
+    }, undefined, cause);
     
     this.name = 'LLMAgentError';
     this.model = model;
@@ -621,7 +621,7 @@ export const LLM_ERROR_RECOVERY_SUGGESTIONS = {
     'Retry with exponential backoff',
     'Switch to fallback model if configured',
     'Reduce prompt length if context limit exceeded'
-  ],
+  ] as string[],
   
   MODEL_STREAMING_ERROR: [
     'Check network connectivity',
@@ -629,7 +629,7 @@ export const LLM_ERROR_RECOVERY_SUGGESTIONS = {
     'Verify streaming is supported by model',
     'Implement stream error recovery',
     'Use smaller chunk sizes for streaming'
-  ],
+  ] as string[],
   
   TOOL_EXECUTION_ERROR: [
     'Verify tool is properly configured and available',
@@ -637,7 +637,7 @@ export const LLM_ERROR_RECOVERY_SUGGESTIONS = {
     'Implement tool execution timeout',
     'Provide fallback behavior for tool failures',
     'Log tool execution details for debugging'
-  ],
+  ] as string[],
   
   MEMORY_ERROR: [
     'Check memory storage connectivity',
@@ -645,7 +645,7 @@ export const LLM_ERROR_RECOVERY_SUGGESTIONS = {
     'Verify memory configuration settings',
     'Use fallback to stateless operation',
     'Monitor memory usage and limits'
-  ],
+  ] as string[],
   
   RESPONSE_VALIDATION_ERROR: [
     'Review and adjust validation rules',
@@ -653,7 +653,7 @@ export const LLM_ERROR_RECOVERY_SUGGESTIONS = {
     'Provide clearer instructions in prompts',
     'Use response format constraints',
     'Implement validation retry with different prompts'
-  ],
+  ] as string[],
   
   CONTEXT_LENGTH_ERROR: [
     'Implement conversation summarization',
@@ -661,7 +661,7 @@ export const LLM_ERROR_RECOVERY_SUGGESTIONS = {
     'Use models with larger context windows',
     'Implement sliding window context management',
     'Optimize prompt length and structure'
-  ],
+  ] as string[],
   
   RATE_LIMIT_ERROR: [
     'Implement exponential backoff retry',
@@ -669,7 +669,7 @@ export const LLM_ERROR_RECOVERY_SUGGESTIONS = {
     'Switch to different model providers',
     'Monitor and track rate limit usage',
     'Implement request priority management'
-  ],
+  ] as string[],
   
   CONTENT_SAFETY_ERROR: [
     'Review and adjust safety policies',
@@ -678,7 +678,7 @@ export const LLM_ERROR_RECOVERY_SUGGESTIONS = {
     'Implement human review for flagged content',
     'Provide user feedback on safety violations'
   ]
-} as const;
+};
 
 /**
  * Gets recovery suggestions for a specific error.

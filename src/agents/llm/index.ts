@@ -70,6 +70,27 @@ export {
 // Memory management
 export { ConversationMemory } from './conversation-memory';
 
+// Import types for internal usage
+import type {
+  LLMAgentConfig,
+  LLMAgentType,
+  ModelRouting,
+  ResponseFormat,
+  TokenUsage
+} from './types';
+
+// Import all exports for re-export
+import { LLMAgent } from './llm-agent';
+import {
+  LLMAgentFactory,
+  LLMAgentPresets,
+  createLLMAgent,
+  createLLMAgentWithPreset,
+  createMultipleLLMAgents,
+  llmAgentFactory
+} from './factory';
+import { ConversationMemory } from './conversation-memory';
+
 // Comprehensive type definitions
 export type {
   // Core types
@@ -95,8 +116,7 @@ export type {
   MemoryPersistence,
   ConversationMemory as IConversationMemory,
   
-  // Tool types
-  ToolResult,
+  // Tool types (ToolResult is exported from base types)
   
   // Usage and metrics types
   TokenUsage,
@@ -260,6 +280,7 @@ export const LLMAgentPatterns = {
   createConversational: (
     options: Partial<LLMAgentConfig> = {}
   ): LLMAgentConfig => ({
+    id: options.id || `conversational-${Date.now()}`,
     ...LLMAgentPresets.chatbot,
     ...options,
     memory: {
@@ -286,8 +307,8 @@ export const LLMAgentPatterns = {
     task: string,
     options: Partial<LLMAgentConfig> = {}
   ): LLMAgentConfig => ({
+    id: options.id || `task-${task.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`,
     name: `${task} Agent`,
-    description: `AI agent specialized for ${task}`,
     type: 'llm',
     model: {
       primary: 'gpt-4',
@@ -320,6 +341,7 @@ export const LLMAgentPatterns = {
   createStreamingOptimized: (
     options: Partial<LLMAgentConfig> = {}
   ): LLMAgentConfig => ({
+    id: options.id || `streaming-${Date.now()}`,
     name: 'Streaming Agent',
     type: 'llm',
     model: {
@@ -381,7 +403,7 @@ export namespace Types {
   export type Format = import('./types').ResponseFormat;
   export type Usage = import('./types').TokenUsage;
   export type Memory = import('./types').ConversationMemory;
-  export type ToolResult = import('./types').ToolResult;
+  // ToolResult is available from base types: import('../base/types').ToolResult
 }
 
 /**

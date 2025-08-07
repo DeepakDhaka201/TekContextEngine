@@ -402,6 +402,13 @@ export class GraphExecutor {
         maxDelay: config.retry?.maxDelay || 30000,
         retryableErrors: config.retry?.retryableErrors || []
       },
+      retryPolicy: {
+        maxAttempts: config.retryPolicy?.maxAttempts || config.retry?.maxAttempts || 3,
+        backoffStrategy: config.retryPolicy?.backoffStrategy || config.retry?.backoffStrategy || 'exponential',
+        initialDelay: config.retryPolicy?.initialDelay || config.retry?.initialDelay || 1000,
+        maxDelay: config.retryPolicy?.maxDelay || config.retry?.maxDelay || 30000,
+        retryableErrors: config.retryPolicy?.retryableErrors || config.retry?.retryableErrors || []
+      },
       checkpointing: {
         enabled: config.checkpointing?.enabled !== false,
         frequency: config.checkpointing?.frequency || 'node',

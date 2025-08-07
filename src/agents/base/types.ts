@@ -156,6 +156,12 @@ export interface AgentConfig {
   /** Agent instance identifier */
   id: string;
   
+  /** Human-readable agent name */
+  name?: string;
+  
+  /** Agent type identifier */
+  type?: string;
+  
   /** Agent-specific configuration parameters */
   config?: Record<string, any>;
   
@@ -184,8 +190,21 @@ export interface AgentConfig {
   
   /** Integration settings */
   integrations?: {
-    langfuse?: boolean;
+    /** Enable Langfuse tracing and observability */
+    langfuse?: boolean | {
+      enabled: boolean;
+      traceExecutions?: boolean;
+      traceStreaming?: boolean;
+      traceTools?: boolean;
+      traceMemory?: boolean;
+      trackTokens?: boolean;
+      trackCosts?: boolean;
+      sessionTracking?: boolean;
+      metadata?: Record<string, any>;
+    };
+    /** Enable system monitoring */
     monitoring?: boolean;
+    /** Enable telemetry collection */
     telemetry?: boolean;
   };
 }
@@ -581,11 +600,23 @@ export interface ToolResult {
   /** Whether execution was successful */
   success: boolean;
   
+  /** Tool name that was executed */
+  tool?: string;
+  
   /** Tool output */
   output?: any;
   
+  /** Input provided to the tool */
+  input?: any;
+  
   /** Error information if failed */
   error?: string;
+  
+  /** Tool call ID */
+  toolCallId?: string;
+  
+  /** Execution duration in milliseconds */
+  duration?: number;
   
   /** Execution metadata */
   metadata?: Record<string, any>;
@@ -619,6 +650,8 @@ export interface ConversationTurn {
   content: string;
   timestamp: Date;
   metadata?: Record<string, any>;
+  /** Tool calls made in this message */
+  tool_calls?: ToolCall[];
 }
 
 export interface ValidationRule {
@@ -730,4 +763,209 @@ export interface SystemConfig {
   defaultTimeout: number;
   loggingLevel: LogLevel;
   features: Record<string, boolean>;
+}
+
+/**
+ * Base input interface for agent execution.
+ * 
+ * Provides a standardized input structure that all agents
+ * can understand and process. Specific agent types can
+ * extend this interface with their own input requirements.
+ * 
+ * @public
+ */
+export interface AgentInput {
+  /** The input content or data for processing */
+  input?: any;
+  
+  /** Session identifier for tracking */
+  sessionId?: string;
+  
+  /** User identifier */
+  userId?: string;
+  
+  /** Additional context information */
+  context?: Record<string, any>;
+  
+  /** Input metadata */
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Base output interface for agent execution results.
+ * 
+ * Provides a standardized output structure that all agents
+ * return. Contains the execution result and associated metadata.
+ * 
+ * @public
+ */
+export interface AgentOutput {
+  /** Whether the execution was successful */
+  success: boolean;
+  
+  /** The output content or result */
+  output?: any;
+  
+  /** Error information if execution failed */
+  error?: string;
+  
+  /** Execution metadata */
+  metadata?: Record<string, any>;
+  
+  /** Execution duration in milliseconds */
+  duration?: number;
+  
+  /** Token usage information if applicable */
+  usage?: TokenUsage;
+}
+
+/**
+ * Token usage information for LLM operations.
+ * 
+ * @public
+ */
+export interface TokenUsage {
+  /** Number of tokens in the prompt */
+  prompt: number;
+  
+  /** Number of tokens in the completion */
+  completion: number;
+  
+  /** Total number of tokens used */
+  total: number;
+  
+  /** Cost information if available */
+  cost?: {
+    input: number;
+    output: number;
+    total: number;
+    currency: string;
+  };
+}
+
+/**
+ * Base factory interface for creating agent instances.
+ * 
+ * Provides a consistent interface for factory classes that create
+ * agent instances with proper configuration and validation.
+ * 
+ * @template TConfig - The configuration type for the agent
+ * @template TAgent - The agent instance type
+ * @public
+ */
+export interface AgentFactory<TConfig extends AgentConfig, TAgent extends IAgent> {
+  /**
+   * Creates an agent instance with the provided configuration.
+   * 
+   * @param config - Agent configuration object
+   * @returns Promise resolving to the configured agent instance
+   */
+  create(config: TConfig): Promise<TAgent>;
+  
+  /**
+   * Validates the provided configuration.
+   * 
+   * @param config - Configuration object to validate
+   * @returns True if configuration is valid
+   * @throws Error with validation details if invalid
+   */
+  validateConfig(config: TConfig): boolean;
+  
+  /**
+   * Gets the default configuration for this agent type.
+   * 
+   * @returns Default configuration object
+   */
+  getDefaultConfig(): Partial<TConfig>;
+}
+
+/**
+ * Message interface for conversations and communication.
+ * 
+ * @public
+ */
+export interface Message {
+  /** Message identifier */
+  id: string;
+  
+  /** Message role (user, assistant, system) */
+  role: 'user' | 'assistant' | 'system';
+  
+  /** Message content */
+  content: string;
+  
+  /** Message timestamp */
+  timestamp: Date;
+  
+  /** Optional metadata */
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Tool call representation.
+ * 
+ * @public
+ */
+export interface ToolCall {
+  /** Tool call identifier */
+  id: string;
+  
+  /** Name of the tool to call */
+  name: string;
+  
+  /** Arguments for the tool */
+  arguments: Record<string, any>;
+  
+  /** Function call information (OpenAI format compatibility) */
+  function?: {
+    name: string;
+    arguments?: string;
+  };
+  
+  /** Tool execution result */
+  result?: any;
+}
+
+/**
+ * Agent capabilities definition.
+ * 
+ * @public
+ */
+export interface AgentCapabilities {
+  /** Maximum context length supported */
+  maxContextLength?: number;
+  
+  /** Supported model types */
+  supportedModels?: string[];
+  
+  /** Whether agent supports tools */
+  supportsTools?: boolean;
+  
+  /** Whether agent supports streaming */
+  supportsStreaming?: boolean;
+  
+  /** Whether agent supports memory */
+  supportsMemory?: boolean;
+  
+  /** Custom capability flags */
+  custom?: Record<string, boolean>;
+}
+
+/**
+ * Streaming output chunk from agent.
+ * 
+ * @public
+ */
+export interface AgentStreamOutput {
+  /** Chunk identifier */
+  id: string;
+  
+  /** Content delta */
+  delta: string;
+  
+  /** Whether this is the final chunk */
+  done: boolean;
+  
+  /** Optional metadata */
+  metadata?: Record<string, any>;
 }

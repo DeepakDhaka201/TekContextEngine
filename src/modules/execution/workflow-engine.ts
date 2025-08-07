@@ -18,17 +18,7 @@
  * - Comprehensive error handling with automatic retry mechanisms
  * - State persistence for pause/resume functionality
  * 
- * @example
- * ```typescript
- * import { WorkflowExecutionEngine } from './workflow-engine';
- * 
- * const engine = new WorkflowExecutionEngine(config, streamingManager, memoryModule);
- * 
- * const result = await engine.executeWorkflow(workflow, {
- *   sessionId: 'sess-123',
- *   input: { data: 'Process this' }
- * });
- * ```
+ * Usage: Create WorkflowExecutionEngine then call executeWorkflow with session data.
  * 
  * @see types.ts for interface definitions
  * @see errors.ts for error handling
@@ -92,22 +82,7 @@ import { IMemoryModule } from '../memory/types';
  * error recovery and monitoring capabilities. It supports complex workflows
  * with conditional branching, parallel processing, and human interactions.
  * 
- * @example
- * ```typescript
- * // Initialize engine with dependencies
- * const engine = new WorkflowExecutionEngine(
- *   executionConfig,
- *   streamingManager,
- *   memoryModule
- * );
- * 
- * // Execute workflow with streaming
- * const result = await engine.executeWorkflowStreaming(
- *   workflow,
- *   { sessionId: 'sess-123', input: data },
- *   streamer
- * );
- * ```
+ * Initialize with config and dependencies, then execute workflows.
  * 
  * @public
  */
@@ -123,18 +98,6 @@ export class WorkflowExecutionEngine {
    * @param config - Execution manager configuration
    * @param streamingManager - Optional streaming manager for real-time updates
    * @param memoryModule - Memory module for state persistence
-   * 
-   * @example
-   * ```typescript
-   * const engine = new WorkflowExecutionEngine(
-   *   {
-   *     maxConcurrentExecutions: 10,
-   *     parallelExecution: { enabled: true, maxParallelNodes: 5 }
-   *   },
-   *   streamingManager,
-   *   memoryModule
-   * );
-   * ```
    */
   constructor(
     config: ExecutionManagerConfig,
@@ -171,26 +134,6 @@ export class WorkflowExecutionEngine {
    * @returns Promise resolving to comprehensive execution results
    * @throws {WorkflowValidationError} If workflow structure is invalid
    * @throws {ExecutionError} If execution fails with unrecoverable error
-   * 
-   * @example
-   * ```typescript
-   * const result = await engine.executeWorkflow(
-   *   {
-   *     id: 'data-pipeline',
-   *     name: 'Data Processing',
-   *     version: '1.0.0',
-   *     nodes: [/* node definitions */],
-   *     edges: [/* edge definitions */],
-   *     createdAt: new Date(),
-   *     updatedAt: new Date()
-   *   },
-   *   {
-   *     sessionId: 'sess-123',
-   *     input: { data: 'Process this data' },
-   *     variables: { maxResults: 100 }
-   *   }
-   * );
-   * ```
    * 
    * Performance considerations:
    * - Parallel execution reduces overall execution time
@@ -244,18 +187,20 @@ export class WorkflowExecutionEngine {
       
     } catch (error) {
       // Handle execution failure with comprehensive error context
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
       const executionError = error instanceof ExecutionError 
         ? error 
         : new ExecutionError(
             'WORKFLOW_EXECUTION_ERROR',
-            `Workflow execution failed: ${error.message}`,
+            `Workflow execution failed: ${errorMessage}`,
             createExecutionErrorContext(executionId, workflow.id, {
-              originalError: error.message,
-              stack: error.stack
+              originalError: errorMessage,
+              stack: errorStack
             }),
             'Check workflow configuration and node implementations',
             'error',
-            error
+            error instanceof Error ? error : undefined
           );
       
       executionContext.state.status = 'FAILED';
@@ -292,17 +237,6 @@ export class WorkflowExecutionEngine {
    * @returns Promise resolving to comprehensive execution results
    * @throws {WorkflowValidationError} If workflow structure is invalid
    * @throws {ExecutionError} If execution fails with unrecoverable error
-   * 
-   * @example
-   * ```typescript
-   * const streamer = streamingManager.getStreamer('sess-123');
-   * const result = await engine.executeWorkflowStreaming(
-   *   workflow,
-   *   input,
-   *   streamer,
-   *   { enableParallelExecution: true }
-   * );
-   * ```
    */
   async executeWorkflowStreaming(
     workflow: AgentWorkflow,
@@ -328,7 +262,7 @@ export class WorkflowExecutionEngine {
     );
     
     // Attach streamer to context for node-level streaming
-    executionContext.streamer = streamer;
+    (executionContext as any).streamer = streamer;
     this.activeExecutions.set(executionId, executionContext);
     
     // Stream workflow start event
@@ -351,11 +285,14 @@ export class WorkflowExecutionEngine {
       // Stream error event for client notification
       streamer.streamError(input.sessionId, error);
       
-      // Handle error state persistence
+      // Handle error state persistence with proper type safety
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      
       executionContext.state.status = 'FAILED';
       executionContext.state.error = {
-        message: error.message,
-        stack: error.stack,
+        message: errorMessage,
+        stack: errorStack,
         errorType: 'SYSTEM_ERROR',
         retryable: true
       };
@@ -377,12 +314,6 @@ export class WorkflowExecutionEngine {
    * @param context - Previously saved execution context
    * @returns Promise resolving to execution results
    * @throws {ExecutionError} If context is invalid or execution fails
-   * 
-   * @example
-   * ```typescript
-   * const savedContext = await loadExecutionContext('exec-123');
-   * const result = await engine.continueWorkflow(savedContext);
-   * ```
    */
   async continueWorkflow(context: ExecutionContext): Promise<ExecutionResult> {
     // Validate context integrity
@@ -430,7 +361,8 @@ export class WorkflowExecutionEngine {
    * @private
    */
   private async runWorkflow(context: ExecutionContext): Promise<ExecutionResult> {
-    const { workflow, state, streamer } = context;
+    const { workflow, state } = context;
+    const streamer = (context as any).streamer as IStreamer | undefined;
     
     // Step 1: Initialize execution with start nodes (nodes with no dependencies)
     if (state.executionQueue.length === 0) {
@@ -502,7 +434,8 @@ export class WorkflowExecutionEngine {
    * @private
    */
   private async executeNode(context: ExecutionContext, nodeId: string): Promise<void> {
-    const { workflow, state, streamer, input } = context;
+    const { workflow, state, input } = context;
+    const streamer = (context as any).streamer as IStreamer | undefined;
     const node = workflow.nodes.find(n => n.id === nodeId);
     
     if (!node) {
@@ -947,8 +880,9 @@ export class WorkflowExecutionEngine {
     context.state.humanInteractions.push(interaction);
     
     // Stream human prompt if streaming enabled
-    if (context.streamer) {
-      context.streamer.streamHumanPrompt(
+    const streamer = (context as any).streamer as IStreamer | undefined;
+    if (streamer) {
+      streamer.streamHumanPrompt(
         context.input.sessionId,
         interaction.prompt,
         { type: interaction.type, nodeId: node.id }
@@ -1189,8 +1123,7 @@ export class WorkflowExecutionEngine {
       },
       workflow,
       input,
-      options,
-      createdAt: new Date()
+      options
     };
   }
   

@@ -829,7 +829,7 @@ describe('Graph Agent Errors - Utility Functions', () => {
       const sanitized = sanitizeGraphError(error);
 
       expect(sanitized.stack).toHaveLength(1015); // 1000 + '... (truncated)'.length
-      expect(sanitized.stack).toEndWith('... (truncated)');
+      expect(sanitized.stack).toMatch(/\.\.\. \(truncated\)$/);
     });
   });
 

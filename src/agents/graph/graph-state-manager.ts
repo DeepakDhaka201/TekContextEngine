@@ -1197,7 +1197,7 @@ export class GraphStateManager {
     const cutoffTime = new Date(now.getTime() - (24 * 60 * 60 * 1000)); // 24 hours ago
     
     // Clean up completed executions older than cutoff
-    for (const [executionId, state] of this.executionStates) {
+    for (const [executionId, state] of Array.from(this.executionStates.entries())) {
       if (state.status === 'completed' && state.currentTime < cutoffTime) {
         await this.cleanup(executionId);
       }

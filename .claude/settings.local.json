@@ -21,7 +21,10 @@
       "Bash(node:*)",
       "Bash(git commit:*)",
       "Bash(npm run test:unit:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(npm test)",
+      "Bash(git checkout:*)",
+      "Bash(npm test:*)"
     ],
     "deny": []
   }

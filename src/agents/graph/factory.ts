@@ -58,7 +58,10 @@ import {
   GraphErrorConfig,
   GraphMonitoringConfig,
   NodeType,
-  GraphPerformanceProfile
+  GraphPerformanceProfile,
+  GraphStatePersistence,
+  GraphRecoveryStrategy,
+  GraphAlertRule
 } from './types';
 
 /**
@@ -149,6 +152,13 @@ export class GraphAgentFactory {
           maxDelay: 30000,
           retryableErrors: []
         },
+        retryPolicy: {
+          maxAttempts: 3,
+          backoffStrategy: 'exponential',
+          initialDelay: 1000,
+          maxDelay: 30000,
+          retryableErrors: []
+        },
         checkpointing: {
           enabled: true,
           frequency: 'node',
@@ -212,8 +222,15 @@ export class GraphAgentFactory {
         strategy: 'adaptive',
         maxConcurrency: config.maxConcurrency || 16,
         timeout: config.timeout || 600000,
-        errorHandling: 'continue_on_error',
+        errorHandling: 'continue',
         retry: {
+          maxAttempts: 5,
+          backoffStrategy: 'exponential',
+          initialDelay: 500,
+          maxDelay: 10000,
+          retryableErrors: ['NETWORK_ERROR', 'TIMEOUT', 'RESOURCE_BUSY']
+        },
+        retryPolicy: {
           maxAttempts: 5,
           backoffStrategy: 'exponential',
           initialDelay: 500,
@@ -230,7 +247,7 @@ export class GraphAgentFactory {
         },
         optimization: {
           enabled: true,
-          strategies: ['parallel_expansion', 'node_coalescing', 'lazy_evaluation'],
+          strategies: ['parallel_expansion', 'node_coalescing'],
           threshold: 0.7,
           adaptive: true
         }
@@ -291,6 +308,13 @@ export class GraphAgentFactory {
           maxDelay: 60000,
           retryableErrors: ['NETWORK_ERROR', 'TIMEOUT', 'DATA_UNAVAILABLE']
         },
+        retryPolicy: {
+          maxAttempts: 3,
+          backoffStrategy: 'linear',
+          initialDelay: 2000,
+          maxDelay: 60000,
+          retryableErrors: ['NETWORK_ERROR', 'TIMEOUT', 'DATA_UNAVAILABLE']
+        },
         checkpointing: {
           enabled: true,
           frequency: 'node',
@@ -301,7 +325,7 @@ export class GraphAgentFactory {
         },
         optimization: {
           enabled: true,
-          strategies: ['parallel_expansion', 'data_locality'],
+          strategies: ['parallel_expansion', 'dependency_reduction'],
           threshold: 0.6,
           adaptive: false
         }
@@ -362,6 +386,13 @@ export class GraphAgentFactory {
           maxDelay: 300000,
           retryableErrors: ['MODEL_UNAVAILABLE', 'RATE_LIMIT', 'TIMEOUT']
         },
+        retryPolicy: {
+          maxAttempts: 2,
+          backoffStrategy: 'exponential',
+          initialDelay: 5000,
+          maxDelay: 300000,
+          retryableErrors: ['MODEL_UNAVAILABLE', 'RATE_LIMIT', 'TIMEOUT']
+        },
         checkpointing: {
           enabled: true,
           frequency: 'node',
@@ -372,7 +403,7 @@ export class GraphAgentFactory {
         },
         optimization: {
           enabled: true,
-          strategies: ['memoization', 'model_caching'],
+          strategies: ['memory_optimization', 'cpu_optimization'],
           threshold: 0.8,
           adaptive: true
         }
@@ -495,66 +526,18 @@ export class GraphAgentFactory {
     switch (preset) {
       case 'simple':
         return builder.setConfig({
-          metadata: {
-            name: 'Simple Workflow',
-            version: '1.0.0',
-            tags: ['simple', 'basic']
-          },
-          performance: {
-            estimatedDuration: 60000,
-            resourceIntensity: 'low',
-            scalability: 'linear',
-            memoryConcerns: false,
-            cpuIntensive: false
-          }
         });
         
       case 'parallel':
         return builder.setConfig({
-          metadata: {
-            name: 'Parallel Workflow',
-            version: '1.0.0',
-            tags: ['parallel', 'high-throughput']
-          },
-          performance: {
-            estimatedDuration: 30000,
-            resourceIntensity: 'medium',
-            scalability: 'parallel',
-            memoryConcerns: false,
-            cpuIntensive: true
-          }
         });
         
       case 'sequential':
         return builder.setConfig({
-          metadata: {
-            name: 'Sequential Workflow',
-            version: '1.0.0',
-            tags: ['sequential', 'ordered']
-          },
-          performance: {
-            estimatedDuration: 120000,
-            resourceIntensity: 'low',
-            scalability: 'linear',
-            memoryConcerns: false,
-            cpuIntensive: false
-          }
         });
         
       case 'ai-pipeline':
         return builder.setConfig({
-          metadata: {
-            name: 'AI Pipeline',
-            version: '1.0.0',
-            tags: ['ai', 'ml', 'pipeline']
-          },
-          performance: {
-            estimatedDuration: 300000,
-            resourceIntensity: 'high',
-            scalability: 'sequential',
-            memoryConcerns: true,
-            cpuIntensive: true
-          }
         });
         
       default:
@@ -595,7 +578,7 @@ export class GraphAgentFactory {
           metrics: ['duration', 'memory'],
           sampling: 1.0,
           alerting: true,
-          storage: 'memory'
+          storage: 'memory' as GraphStatePersistence
         },
         limits: {
           maxMemory: 500000000,
@@ -626,7 +609,7 @@ export class GraphAgentFactory {
           metrics: ['duration', 'memory', 'cpu'],
           sampling: 1.0,
           alerting: true,
-          storage: 'memory'
+          storage: 'memory' as GraphStatePersistence
         },
         limits: {
           maxMemory: 2000000000,
@@ -657,7 +640,7 @@ export class GraphAgentFactory {
           metrics: ['duration', 'memory', 'disk'],
           sampling: 0.1,
           alerting: true,
-          storage: 'disk'
+          storage: 'disk' as GraphStatePersistence
         },
         limits: {
           maxMemory: 4000000000,
@@ -688,7 +671,7 @@ export class GraphAgentFactory {
           metrics: ['duration', 'memory', 'cpu'],
           sampling: 1.0,
           alerting: true,
-          storage: 'disk'
+          storage: 'disk' as GraphStatePersistence
         },
         limits: {
           maxMemory: 8000000000,
@@ -722,7 +705,7 @@ export class GraphAgentFactory {
         },
         recovery: {
           enabled: true,
-          strategies: ['retry', 'skip'],
+          strategies: ['retry', 'skip'] as GraphRecoveryStrategy[],
           checkpoints: true,
           compensation: false
         },
@@ -740,7 +723,7 @@ export class GraphAgentFactory {
         }
       },
       resilient: {
-        strategy: 'continue_on_error' as const,
+        strategy: 'continue' as const,
         propagation: {
           strategy: 'batched' as const,
           timeout: 10000,
@@ -748,7 +731,7 @@ export class GraphAgentFactory {
         },
         recovery: {
           enabled: true,
-          strategies: ['retry', 'compensate', 'substitute'],
+          strategies: ['retry', 'compensate', 'substitute'] as GraphRecoveryStrategy[],
           checkpoints: true,
           compensation: true
         },
@@ -768,20 +751,20 @@ export class GraphAgentFactory {
       data_processing: {
         strategy: 'compensate' as const,
         propagation: {
-          strategy: 'delayed' as const,
+          strategy: 'deferred' as const,
           timeout: 30000,
           retryLimit: 3
         },
         recovery: {
           enabled: true,
-          strategies: ['compensate', 'rollback'],
+          strategies: ['compensate', 'rollback'] as GraphRecoveryStrategy[],
           checkpoints: true,
           compensation: true
         },
         reporting: {
           enabled: true,
           destinations: ['file', 'remote'],
-          format: 'structured' as const,
+          format: 'json' as const,
           includeStackTrace: false
         },
         circuitBreaker: {
@@ -800,7 +783,7 @@ export class GraphAgentFactory {
         },
         recovery: {
           enabled: true,
-          strategies: ['retry', 'fallback'],
+          strategies: ['retry', 'substitute'] as GraphRecoveryStrategy[],
           checkpoints: true,
           compensation: false
         },
@@ -886,7 +869,11 @@ export class GraphAgentFactory {
         },
         alerting: {
           enabled: true,
-          rules: ['error_rate', 'latency', 'resource_usage'],
+          rules: [
+            { name: 'error_rate', condition: 'error_rate > 0.05', severity: 'high' as const, threshold: 0.05, duration: 60000 },
+            { name: 'latency', condition: 'avg_latency > 5000', severity: 'medium' as const, threshold: 5000, duration: 120000 },
+            { name: 'resource_usage', condition: 'memory_usage > 0.8', severity: 'high' as const, threshold: 0.8, duration: 60000 }
+          ] as GraphAlertRule[],
           destinations: ['email', 'slack'],
           throttling: 60000
         },
@@ -913,13 +900,17 @@ export class GraphAgentFactory {
         },
         logging: {
           level: 'info' as const,
-          format: 'structured' as const,
+          format: 'json' as const,
           destinations: ['file', 'elasticsearch'],
           includeStack: false
         },
         alerting: {
           enabled: true,
-          rules: ['throughput', 'error_rate', 'data_quality'],
+          rules: [
+            { name: 'throughput', condition: 'throughput < 100', severity: 'medium' as const, threshold: 100, duration: 300000 },
+            { name: 'error_rate', condition: 'error_rate > 0.02', severity: 'high' as const, threshold: 0.02, duration: 180000 },
+            { name: 'data_quality', condition: 'quality_score < 0.9', severity: 'high' as const, threshold: 0.9, duration: 300000 }
+          ] as GraphAlertRule[],
           destinations: ['pagerduty'],
           throttling: 300000
         },
@@ -952,7 +943,11 @@ export class GraphAgentFactory {
         },
         alerting: {
           enabled: true,
-          rules: ['model_accuracy', 'inference_latency', 'resource_usage'],
+          rules: [
+            { name: 'model_accuracy', condition: 'accuracy < 0.85', severity: 'critical' as const, threshold: 0.85, duration: 600000 },
+            { name: 'inference_latency', condition: 'inference_time > 30000', severity: 'high' as const, threshold: 30000, duration: 300000 },
+            { name: 'resource_usage', condition: 'gpu_usage > 0.95', severity: 'high' as const, threshold: 0.95, duration: 180000 }
+          ] as GraphAlertRule[],
           destinations: ['slack'],
           throttling: 180000
         },
@@ -1018,16 +1013,58 @@ export const BUILTIN_TEMPLATES: GraphTemplate[] = [
           type: 'data'
         }
       ],
+      name: 'Simple Sequential Workflow',
+      version: '1.0.0',
+      tags: ['simple', 'sequential'],
       metadata: {
-        name: 'Simple Sequential Workflow',
-        version: '1.0.0',
-        tags: ['simple', 'sequential']
+        author: 'System',
+        created: new Date(),
+        updated: new Date(),
+        tags: ['simple', 'sequential'],
+        category: 'workflow',
+        complexity: 'simple',
+        performance: {
+          estimatedDuration: 1000,
+          resourceIntensity: 'low',
+          scalability: 'linear',
+          memoryConcerns: false,
+          cpuIntensive: false
+        }
       }
     },
     config: {
       execution: {
         strategy: 'sequential',
-        maxConcurrency: 1
+        maxConcurrency: 1,
+        timeout: 300000,
+        errorHandling: 'continue',
+        retry: {
+          maxAttempts: 3,
+          backoffStrategy: 'exponential',
+          initialDelay: 1000,
+          maxDelay: 5000,
+          retryableErrors: ['TIMEOUT', 'NETWORK_ERROR']
+        },
+        retryPolicy: {
+          maxAttempts: 3,
+          backoffStrategy: 'exponential',
+          initialDelay: 1000,
+          maxDelay: 5000,
+          retryableErrors: ['TIMEOUT', 'NETWORK_ERROR']
+        },
+        checkpointing: {
+          enabled: true,
+          frequency: 'node',
+          storage: 'memory',
+          compression: 'gzip',
+          retention: 3600000
+        },
+        optimization: {
+          enabled: true,
+          strategies: ['memory_optimization'],
+          threshold: 0.8,
+          adaptive: false
+        }
       }
     }
   },
@@ -1092,16 +1129,58 @@ export const BUILTIN_TEMPLATES: GraphTemplate[] = [
         { id: 'p3-merge', from: 'process-3', to: 'merge', type: 'data' },
         { id: 'merge-output', from: 'merge', to: 'output', type: 'data' }
       ],
+      name: 'Parallel Processing Pipeline',
+      version: '1.0.0',
+      tags: ['parallel', 'high-throughput'],
       metadata: {
-        name: 'Parallel Processing Pipeline',
-        version: '1.0.0',
-        tags: ['parallel', 'high-throughput']
+        author: 'System',
+        created: new Date(),
+        updated: new Date(),
+        tags: ['parallel', 'high-throughput'],
+        category: 'workflow',
+        complexity: 'moderate',
+        performance: {
+          estimatedDuration: 2000,
+          resourceIntensity: 'medium',
+          scalability: 'linear',
+          memoryConcerns: false,
+          cpuIntensive: true
+        }
       }
     },
     config: {
       execution: {
         strategy: 'parallel',
-        maxConcurrency: 8
+        maxConcurrency: 8,
+        timeout: 600000,
+        errorHandling: 'continue',
+        retry: {
+          maxAttempts: 3,
+          backoffStrategy: 'exponential',
+          initialDelay: 1000,
+          maxDelay: 5000,
+          retryableErrors: ['TIMEOUT', 'NETWORK_ERROR']
+        },
+        retryPolicy: {
+          maxAttempts: 3,
+          backoffStrategy: 'exponential',
+          initialDelay: 1000,
+          maxDelay: 5000,
+          retryableErrors: ['TIMEOUT', 'NETWORK_ERROR']
+        },
+        checkpointing: {
+          enabled: true,
+          frequency: 'phase',
+          storage: 'memory',
+          compression: 'gzip',
+          retention: 3600000
+        },
+        optimization: {
+          enabled: true,
+          strategies: ['parallel_expansion', 'cpu_optimization'],
+          threshold: 0.6,
+          adaptive: true
+        }
       }
     }
   }

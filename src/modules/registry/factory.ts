@@ -243,7 +243,7 @@ function registerCoreModules(registry: IModuleRegistry): void {
   registry.registerFactory('executionManager', async (reg) => {
     console.log('Creating Execution Manager module...');
     
-    const { createExecutionManagerModule } = await import('../execution/factory');
+    const { createExecutionManager } = await import('../execution/factory');
     const registryConfig = (reg as any).config;
     const moduleConfig = registryConfig?.modules?.executionManager?.config || {};
     
@@ -251,25 +251,27 @@ function registerCoreModules(registry: IModuleRegistry): void {
     const sessionState = reg.get('sessionState');
     const memory = reg.get('memory');
     
-    return createExecutionManagerModule(moduleConfig, { sessionState, memory });
+    return createExecutionManager(moduleConfig, { sessionState, memory });
   });
   
   // Streaming Manager - Real-time SSE streaming
   registry.registerFactory('streamingManager', async (reg) => {
     console.log('Creating Streaming Manager module...');
     
-    const { createStreamingManagerModule } = await import('../streaming/factory');
+    const { streamingManagerFactory } = await import('../streaming/factory');
     const registryConfig = (reg as any).config;
     const moduleConfig = registryConfig?.modules?.streamingManager?.config || {};
     
-    return createStreamingManagerModule(moduleConfig);
+    return streamingManagerFactory.create(moduleConfig);
   });
   
   // Human-in-the-Loop Module - Interactive workflows
   registry.registerFactory('humanLoop', async (reg) => {
     console.log('Creating Human-in-the-Loop module...');
     
-    const { createHumanLoopModule } = await import('../human-loop/factory');
+    // TODO: Implement human-loop factory
+    throw new Error('Human-loop module not yet implemented');
+    // const { createHumanLoopModule } = await import('../human-loop/factory');
     const registryConfig = (reg as any).config;
     const moduleConfig = registryConfig?.modules?.humanLoop?.config || {};
     
@@ -284,7 +286,9 @@ function registerCoreModules(registry: IModuleRegistry): void {
   registry.registerFactory('tools', async (reg) => {
     console.log('Creating Tools module...');
     
-    const { createToolsModule } = await import('../tools/factory');
+    // TODO: Implement tools factory
+    throw new Error('Tools module not yet implemented');
+    // const { createToolsModule } = await import('../tools/factory');
     const registryConfig = (reg as any).config;
     const moduleConfig = registryConfig?.modules?.tools?.config || {};
     

@@ -65,7 +65,6 @@ import {
   LLMAgentType,
   ILLMAgent,
   ModelRouting,
-  ToolResult,
   TokenUsage,
   LLMInternalResponse,
   LLMRequest,
@@ -77,10 +76,12 @@ import {
 import { 
   AgentInput,
   AgentOutput,
+  AgentResult,
   AgentStreamOutput,
   ExecutionContext,
   Message,
   ToolCall,
+  ToolResult,
   AgentCapabilities
 } from '../base/types';
 import {
@@ -95,6 +96,8 @@ import {
   createLLMErrorContext
 } from './errors';
 import { ConversationMemory } from './conversation-memory';
+import { ILangfuseModule, ITrace, ISpan } from '../../modules/langfuse/types';
+import { generateId } from '../../shared/utils';
 
 /**
  * LLM Agent implementation for direct language model interaction.
@@ -183,8 +186,40 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
   /** Agent type identifier */
   readonly type: LLMAgentType = 'llm';
   
+  /** Agent name - required by BaseAgent */
+  readonly name: string;
+  
+  /** Agent version - required by BaseAgent */
+  readonly version: string = '1.0.0';
+  
+  /** Agent capabilities - required by BaseAgent (string[] for compatibility) */
+  readonly capabilities: string[] = [
+    'text-generation', 
+    'conversation', 
+    'llm-completion', 
+    'tool-execution',
+    'streaming',
+    'memory-management'
+  ];
+  
+  /** LLM-specific detailed capabilities - required by ILLMAgent */
+  readonly llmCapabilities: LLMAgentCapabilities = {
+    maxContextLength: 4096,
+    supportedModels: ['gpt-3.5-turbo', 'gpt-4', 'claude-3-sonnet'],
+    supportsTools: true,
+    supportsStreaming: true,
+    supportsMemory: true,
+    supportsVision: false,
+    supportedFormats: ['text', 'json', 'markdown', 'code'],
+    maxToolIterations: 5,
+    custom: {}
+  };
+  
   /** Agent configuration */
   protected config: Required<LLMAgentConfig>;
+  
+  /** Available modules */
+  protected modules: Record<string, any> = {};
   
   /** Conversation memory instances by session */
   private conversationMemories: Map<string, ConversationMemory> = new Map();
@@ -201,8 +236,8 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
   /** Safety checks */
   private safetyChecks: SafetyCheck[] = [];
   
-  /** Performance metrics */
-  private metrics = {
+  /** LLM-specific performance metrics */
+  private llmMetrics = {
     totalCompletions: 0,
     totalTokens: 0,
     totalCost: 0,
@@ -210,6 +245,12 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     errorRate: 0,
     cacheHitRate: 0
   };
+
+  /** Langfuse module for tracing and observability */
+  private langfuseModule?: ILangfuseModule;
+
+  /** Current trace for session context */
+  private sessionTraces: Map<string, ITrace> = new Map();
   
   /**
    * Creates a new LLMAgent instance.
@@ -218,13 +259,17 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
    * @throws {LLMAgentError} If configuration is invalid
    */
   constructor(config: LLMAgentConfig) {
-    super(config);
+    // BaseAgent constructor takes an optional id string
+    super(config.id);
+    
+    // Set required properties
+    this.name = config.name;
     
     // Apply comprehensive defaults
     this.config = this.applyDefaults(config);
     
     // Validate configuration
-    this.validateConfiguration();
+    this.validateLLMConfiguration();
     
     // Initialize validators and safety checks
     this.initializeValidators();
@@ -239,15 +284,13 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
    * @returns Promise that resolves when initialization is complete
    * @throws {LLMAgentError} If initialization fails
    */
-  async initialize(): Promise<void> {
+  protected async performInitialization(config: any): Promise<void> {
     console.log(`Initializing LLM Agent: ${this.name}`);
     
     try {
-      // Initialize base agent
-      await super.initialize();
-      
-      // Verify required modules are available
-      if (!this.modules.litellm) {
+      // Verify required modules are available via registry
+      const litellmModule = this.registry.get('litellm');
+      if (!litellmModule) {
         throw new LLMAgentError(
           'MISSING_DEPENDENCY',
           'LiteLLM module is required for LLM agent',
@@ -255,12 +298,27 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
         );
       }
       
-      if (this.config.memory.enabled && !this.modules.memory) {
-        throw new LLMAgentError(
-          'MISSING_DEPENDENCY',
-          'Memory module is required when memory is enabled',
-          { requiredModule: 'memory' }
-        );
+      if (this.config.memory.enabled) {
+        const memoryModule = this.registry.get('memory');
+        if (!memoryModule) {
+          throw new LLMAgentError(
+            'MISSING_DEPENDENCY',
+            'Memory module is required when memory is enabled',
+            { requiredModule: 'memory' }
+          );
+        }
+      }
+
+      // Initialize Langfuse module if tracing is enabled
+      const langfuseEnabled = this.isLangfuseEnabled();
+      if (langfuseEnabled) {
+        const langfuseModule = this.registry.get('langfuse') as ILangfuseModule;
+        if (!langfuseModule) {
+          console.warn('Langfuse integration enabled but module not available');
+        } else {
+          this.langfuseModule = langfuseModule;
+          console.log(`✓ Langfuse tracing enabled for LLM Agent: ${this.name}`);
+        }
       }
       
       // Initialize model capabilities
@@ -288,6 +346,58 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
   }
   
   /**
+   * Implementation of BaseAgent's executeTask method.
+   * 
+   * Converts ExecutionContext to LLMAgentInput and processes the request.
+   * 
+   * @param context - Execution context from BaseAgent
+   * @returns Promise resolving to AgentResult
+   */
+  protected async executeTask(context: ExecutionContext): Promise<AgentResult> {
+    const startTime = Date.now();
+    
+    try {
+      // Convert ExecutionContext to LLMAgentInput
+      const input = this.contextToLLMInput(context);
+      
+      // Execute LLM processing
+      const output = await this.executeLLMTask(input);
+      
+      // Convert LLMAgentOutput to AgentResult
+      return this.llmOutputToAgentResult(output, startTime);
+    } catch (error) {
+      // Create proper agent error
+      const agentError = error instanceof Error ? 
+        error : 
+        new Error(String(error));
+        
+      return {
+        success: false,
+        error: {
+          code: 'EXECUTION_ERROR',
+          message: agentError.message,
+          details: { context: context.executionId }
+        },
+        metadata: {
+          endTime: new Date(),
+          duration: Date.now() - startTime
+        }
+      };
+    }
+  }
+  
+  /**
+   * Executes LLM completion directly with LLM-specific input.
+   * This is the primary method for LLM agent usage.
+   * 
+   * @param input - LLM agent input
+   * @returns Promise resolving to LLM agent output
+   */
+  async executeCompletion(input: LLMAgentInput): Promise<LLMAgentOutput> {
+    return await this.executeLLMTask(input);
+  }
+
+  /**
    * Executes a completion request with full LLM capabilities.
    * 
    * Handles the complete LLM workflow including memory retrieval,
@@ -298,21 +408,28 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
    * @returns Promise resolving to LLM agent output
    * @throws {LLMAgentError} If execution fails
    */
-  async execute(input: LLMAgentInput): Promise<LLMAgentOutput> {
+  private async executeLLMTask(input: LLMAgentInput): Promise<LLMAgentOutput> {
     const startTime = Date.now();
     const context = this.createExecutionContext(input);
+    
+    // Start Langfuse trace for this execution
+    const trace = await this.startLangfuseTrace(input.sessionId || 'unknown', 'execution', input);
     
     try {
       // Validate input
       this.validateInput(input);
       
-      // Clear memory if requested
+      // Clear memory if requested - with tracing
       if (input.clearMemory) {
+        const memorySpan = this.createMemorySpan(trace, 'clear', input.sessionId || 'unknown');
         await this.clearMemory(input.sessionId);
+        this.updateMemorySpan(memorySpan, 0, 'clear');
       }
       
-      // Build messages array with memory and context
+      // Build messages array with memory and context - with tracing
+      const memoryRetrieveSpan = this.createMemorySpan(trace, 'retrieve', input.sessionId || 'unknown');
       const messages = await this.buildMessages(input);
+      this.updateMemorySpan(memoryRetrieveSpan, messages.length, 'retrieve');
       
       // Determine tools to make available
       const tools = await this.determineTools(input);
@@ -323,23 +440,39 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
       // Check context length limits
       await this.validateContextLength(messages, model);
       
+      // Create LLM span for main completion
+      const llmSpan = this.createLLMSpan(trace, model, messages, tools);
+      
       // Execute main LLM call
       let response = await this.callLLM(messages, tools, model, input);
       
-      // Handle tool calls if present
-      const toolResults = await this.handleToolCalls(response, input, context);
+      // Update LLM span with response
+      this.updateLLMSpanWithResponse(llmSpan, response, Date.now() - startTime);
       
-      // Update conversation memory
+      // Handle tool calls if present - with tracing
+      let toolResults: ToolResult[] = [];
+      let toolSpans: any[] = [];
+      
+      if (response.toolCalls && response.toolCalls.length > 0) {
+        toolSpans = this.createToolSpans(trace, response.toolCalls);
+        toolResults = await this.handleToolCalls(response, input, context);
+        this.updateToolSpans(toolSpans, toolResults);
+      }
+      
+      // Update conversation memory - with tracing
+      const memoryUpdateSpan = this.createMemorySpan(trace, 'update', input.sessionId || 'unknown');
       const memoryUpdated = await this.updateMemory(input, response, toolResults);
+      this.updateMemorySpan(memoryUpdateSpan, memoryUpdated ? 2 : 0, 'update'); // 2 messages: user + assistant
       
       // Validate response if configured
       await this.validateResponse(response.message.content || '', input, context);
       
       // Update metrics
-      this.updateMetrics(response, Date.now() - startTime);
+      this.updateLLMMetrics(response, Date.now() - startTime);
       
       // Build final output
       const output: LLMAgentOutput = {
+        success: true,
         content: response.message.content || '',
         model: response.model,
         toolCalls: response.toolCalls,
@@ -355,6 +488,24 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
         }
       };
       
+      // Update trace with final output
+      if (trace) {
+        try {
+          trace.update({
+            output: {
+              success: true,
+              content: output.content?.substring(0, 1000),
+              model: output.model,
+              tokenUsage: output.usage,
+              toolsExecuted: toolResults.length,
+              duration: Date.now() - startTime
+            }
+          });
+        } catch (error) {
+          console.error('Failed to update trace with final output:', error);
+        }
+      }
+      
       console.log(`✓ LLM completion for ${this.name}`, {
         model: response.model,
         tokens: response.usage?.totalTokens,
@@ -365,7 +516,22 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
       return output;
       
     } catch (error) {
-      this.metrics.errorRate = (this.metrics.errorRate + 1) / 2; // Moving average
+      this.llmMetrics.errorRate = (this.llmMetrics.errorRate + 1) / 2; // Moving average
+      
+      // Update trace with error information
+      if (trace) {
+        try {
+          trace.update({
+            output: {
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+              duration: Date.now() - startTime
+            }
+          });
+        } catch (traceError) {
+          console.error('Failed to update trace with error:', traceError);
+        }
+      }
       
       console.error(`LLM execution failed for ${this.name}:`, error);
       
@@ -407,6 +573,9 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     const startTime = Date.now();
     const streamId = `stream-${Date.now()}-${Math.random()}`;
     
+    // Start Langfuse trace for streaming
+    const trace = await this.startLangfuseTrace(input.sessionId || 'unknown', 'streaming', input);
+    
     try {
       // Validate input and streaming capability
       this.validateInput(input);
@@ -423,10 +592,36 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
       const abortController = new AbortController();
       this.streamingSessions.set(streamId, abortController);
       
-      // Build messages and determine tools
+      // Build messages and determine tools - with tracing
+      const memoryRetrieveSpan = this.createMemorySpan(trace, 'retrieve', input.sessionId || 'unknown');
       const messages = await this.buildMessages(input);
+      this.updateMemorySpan(memoryRetrieveSpan, messages.length, 'retrieve');
+      
       const tools = await this.determineTools(input);
       const model = await this.selectModel(messages, tools, input);
+      
+      // Create streaming span
+      let streamingSpan: any = null;
+      if (trace) {
+        try {
+          streamingSpan = trace.span({
+            name: 'llm-streaming',
+            input: {
+              model,
+              messageCount: messages.length,
+              toolCount: tools.length,
+              streamingEnabled: true
+            },
+            metadata: {
+              model,
+              streamId,
+              tokenEstimate: this.estimateTokensPrivate(messages.map(m => m.content).join(' '))
+            }
+          });
+        } catch (error) {
+          console.error('Failed to create streaming span:', error);
+        }
+      }
       
       // Initialize streaming state
       let accumulated = '';
@@ -459,7 +654,8 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
       // Start streaming
       console.log(`Starting stream for ${this.name} with model ${model}`);
       
-      for await (const chunk of this.modules.litellm.streamComplete(request)) {
+      const litellmModule = this.registry.get('litellm') as any; // TODO: Add proper LiteLLM module interface
+      for await (const chunk of litellmModule.streamComplete(request)) {
         // Check for abort
         if (abortController.signal.aborted) {
           break;
@@ -481,7 +677,9 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
           accumulated += delta;
           
           yield {
+            id: generateId(),
             delta,
+            done: false,
             accumulated,
             finished: false,
             model,
@@ -512,7 +710,9 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
         // If we have tool results, we might need to make another completion
         // For simplicity, we'll include them in the final output
         yield {
+          id: generateId(),
           delta: '',
+          done: false,
           accumulated,
           finished: false,
           toolCalls,
@@ -521,20 +721,73 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
         };
       }
       
-      // Update memory after streaming completes
+      // Update memory after streaming completes - with tracing
       let memoryUpdated = false;
       if (this.config.memory.enabled && input.includeMemory !== false) {
+        const memoryUpdateSpan = this.createMemorySpan(trace, 'update', input.sessionId || 'unknown');
         await this.updateMemoryFromStream(input, accumulated);
         memoryUpdated = true;
+        this.updateMemorySpan(memoryUpdateSpan, 2, 'update'); // 2 messages: user + assistant
       }
       
       // Calculate streaming metrics
       const totalDuration = Date.now() - startTime;
       const avgChunkTime = streamingMetadata.chunks.reduce((a, b) => a + b, 0) / streamingMetadata.chunks.length;
       
+      // Update streaming span with completion data
+      if (streamingSpan) {
+        try {
+          streamingSpan.update({
+            output: {
+              content: accumulated.substring(0, 1000),
+              model,
+              chunkCount,
+              duration: totalDuration,
+              firstByteLatency: streamingMetadata.firstByteTime,
+              avgChunkLatency: avgChunkTime,
+              totalChars: accumulated.length,
+              tokenEstimate: Math.ceil(accumulated.length / 4)
+            },
+            metadata: {
+              model,
+              duration: totalDuration,
+              chunkCount,
+              success: true,
+              streamingComplete: true
+            }
+          });
+          streamingSpan.end();
+        } catch (error) {
+          console.error('Failed to update streaming span:', error);
+        }
+      }
+      
+      // Update main trace with streaming completion
+      if (trace) {
+        try {
+          trace.update({
+            output: {
+              success: true,
+              content: accumulated.substring(0, 1000),
+              model,
+              streamingData: {
+                chunkCount,
+                duration: totalDuration,
+                firstByteLatency: streamingMetadata.firstByteTime,
+                avgChunkLatency: avgChunkTime
+              }
+            }
+          });
+        } catch (error) {
+          console.error('Failed to update trace with streaming completion:', error);
+        }
+      }
+      
       // Final chunk with completion metadata
       yield {
+        id: generateId(),
         delta: '',
+        done: true,
         accumulated,
         finished: true,
         model,
@@ -556,6 +809,22 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
       });
       
     } catch (error) {
+      // Update trace with streaming error
+      if (trace) {
+        try {
+          trace.update({
+            output: {
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+              duration: Date.now() - startTime,
+              streamingFailed: true
+            }
+          });
+        } catch (traceError) {
+          console.error('Failed to update trace with streaming error:', traceError);
+        }
+      }
+      
       console.error(`Streaming failed for ${this.name}:`, error);
       
       throw new ModelStreamingError(
@@ -586,9 +855,12 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
       this.conversationMemories.delete(sessionId);
       
       // Clear persistent memory if enabled
-      if (this.config.memory.enabled && this.modules.memory) {
-        await this.modules.memory.clearWorkingMemory(sessionId);
+      if (this.config.memory.enabled && this.registry.get("memory")) {
+        await (this.registry.get("memory") as any).clearWorkingMemory(sessionId); // TODO: Add proper Memory module interface
       }
+
+      // Cleanup Langfuse session trace as well
+      this.cleanupSessionTrace(sessionId);
       
       console.log(`✓ Memory cleared for session: ${sessionId}`);
       
@@ -616,8 +888,8 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     }
     
     // Try to load from persistent memory
-    if (this.config.memory.enabled && this.modules.memory) {
-      const memories = await this.modules.memory.getWorkingMemory({
+    if (this.config.memory.enabled && this.registry.get("memory")) {
+      const memories = await (this.registry.get("memory") as any).getWorkingMemory({ // TODO: Add proper Memory module interface
         sessionId,
         limit: this.config.memory.maxMessages,
         types: ['user', 'assistant', 'system']
@@ -633,7 +905,7 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
   }
   
   /**
-   * Estimates token count for input text or messages.
+   * Estimates token count for input text or messages (ILLMAgent interface requirement).
    * 
    * @param input - Input to estimate tokens for
    * @returns Estimated token count
@@ -641,13 +913,12 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
   async estimateTokens(input: string | Message[]): Promise<number> {
     try {
       if (typeof input === 'string') {
-        // Simple estimation: ~4 characters per token
-        return Math.ceil(input.length / 4);
+        return this.estimateTokensPrivate(input);
       }
       
       // For messages, account for role tokens and formatting
       return input.reduce((total, message) => {
-        const contentTokens = Math.ceil((message.content?.length || 0) / 4);
+        const contentTokens = this.estimateTokensPrivate(message.content || '');
         const roleTokens = 4; // Approximate tokens for role and formatting
         return total + contentTokens + roleTokens;
       }, 0);
@@ -754,7 +1025,7 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
    * @throws {LLMAgentError} If configuration is invalid
    * @private
    */
-  private validateConfiguration(): void {
+  private validateLLMConfiguration(): void {
     if (!this.config.name) {
       throw new LLMAgentError(
         'INVALID_CONFIGURATION',
@@ -835,13 +1106,13 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
   }
   
   /**
-   * Creates execution context for a request.
+   * Creates internal execution context for a request.
    * 
    * @param input - Agent input
-   * @returns Execution context
+   * @returns Internal execution context
    * @private
    */
-  private createExecutionContext(input: LLMAgentInput): ExecutionContext {
+  private createExecutionContext(input: LLMAgentInput): any {
     return {
       sessionId: input.sessionId,
       requestId: `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -900,10 +1171,10 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     
     // Add system prompt if configured
     if (this.config.prompting.systemPrompt) {
-      messages.push({
-        role: 'system',
-        content: this.config.prompting.systemPrompt
-      });
+      messages.push(this.createMessage(
+        'system',
+        this.config.prompting.systemPrompt
+      ));
     }
     
     // Add conversation memory if enabled
@@ -916,8 +1187,8 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     if (this.config.prompting.examples && this.config.prompting.examples.length > 0) {
       for (const example of this.config.prompting.examples) {
         messages.push(
-          { role: 'user', content: example.input },
-          { role: 'assistant', content: example.output }
+          this.createMessage('user', example.input),
+          this.createMessage('assistant', example.output)
         );
       }
     }
@@ -927,10 +1198,10 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
       messages.push(...input.messages);
     } else if (input.prompt) {
       const formattedPrompt = this.formatPrompt(input.prompt, input);
-      messages.push({
-        role: 'user',
-        content: formattedPrompt
-      });
+      messages.push(this.createMessage(
+        'user',
+        formattedPrompt
+      ));
     }
     
     return messages;
@@ -949,8 +1220,12 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     }
     
     // If specific tools are requested, use those
-    if (input.tools) {
+    if (input.tools && Array.isArray(input.tools)) {
       return this.resolveToolDefinitions(input.tools);
+    } else if (input.tools === true) {
+      // Use all available tools
+      const allTools = Object.keys(this.modules.tools || {});
+      return this.resolveToolDefinitions(allTools);
     }
     
     // Otherwise, use all available tools from modules
@@ -993,11 +1268,11 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     
     // Determine requirements
     const context: ModelSelectionContext = {
+      messages,
       messageCount: messages.length,
       estimatedTokens: await this.estimateTokens(messages),
-      requiresTools: tools.length > 0,
-      preferredRouting: this.config.model.routing,
-      requiresStreaming: input.streaming || this.config.streaming.enabled
+      capabilities: tools.length > 0 ? ['tools'] : [],
+      preferredRouting: this.config.model.routing
     };
     
     // Select based on routing strategy
@@ -1026,7 +1301,7 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
         model,
         estimatedTokens,
         maxContextLength,
-        'Context length exceeds model limits'
+        { reason: 'Context length exceeds model limits' }
       );
     }
   }
@@ -1047,6 +1322,7 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     model: string,
     input: LLMAgentInput
   ): Promise<LLMInternalResponse> {
+    const startTime = Date.now();
     const request: LLMRequest = {
       model,
       messages,
@@ -1066,11 +1342,14 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     };
     
     try {
-      const response = await this.modules.litellm.complete(request);
+      const response = await (this.registry.get("litellm") as any).complete(request); // TODO: Add proper LiteLLM module interface
+      
+      const duration = Date.now() - startTime;
       
       return {
         message: response.choices[0].message,
         model: response.model,
+        duration,
         usage: response.usage ? {
           promptTokens: response.usage.prompt_tokens,
           completionTokens: response.usage.completion_tokens,
@@ -1114,7 +1393,13 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     const toolCalls: ToolCall[] = response.message.tool_calls.map(tc => ({
       id: tc.id,
       name: tc.function.name,
-      arguments: tc.function.arguments
+      arguments: typeof tc.function.arguments === 'string' 
+        ? JSON.parse(tc.function.arguments) 
+        : tc.function.arguments,
+      function: {
+        name: tc.function.name,
+        arguments: tc.function.arguments
+      }
     }));
     
     return await this.executeToolCalls(toolCalls, input);
@@ -1143,7 +1428,7 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
             toolCallId: toolCall.id,
             success: false,
             error: 'Tool execution requires user confirmation',
-            executionTime: 0
+            duration: 0
           });
           continue;
         }
@@ -1156,8 +1441,8 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
         results.push({
           toolCallId: toolCall.id,
           success: true,
-          result,
-          executionTime
+          output: result,
+          duration: executionTime
         });
         
       } catch (error) {
@@ -1165,7 +1450,7 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
           toolCallId: toolCall.id,
           success: false,
           error: error instanceof Error ? error.message : String(error),
-          executionTime: 0
+          duration: 0
         });
       }
     }
@@ -1197,8 +1482,8 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     
     throw new ToolExecutionError(
       toolCall.name,
-      toolCall.arguments,
-      `Tool not found: ${toolCall.name}`
+      `Tool not found: ${toolCall.name}`,
+      { arguments: toolCall.arguments }
     );
   }
   
@@ -1224,16 +1509,14 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
       // Get or create conversation memory
       let memory = this.conversationMemories.get(input.sessionId);
       if (!memory) {
-        memory = new ConversationMemory({
-          maxMessages: this.config.memory.maxMessages,
-          summarizeAfter: this.config.memory.summarizeAfter
-        });
+        memory = new ConversationMemory(this.config.memory.maxMessages || 50);
         this.conversationMemories.set(input.sessionId, memory);
       }
       
       // Add user message
       if (input.prompt) {
         memory.add({
+          id: generateId('msg'),
           role: 'user',
           content: input.prompt,
           timestamp: new Date()
@@ -1241,6 +1524,7 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
       } else if (input.messages) {
         for (const msg of input.messages) {
           memory.add({
+            id: generateId('msg'),
             role: msg.role,
             content: msg.content || '',
             timestamp: new Date()
@@ -1250,6 +1534,7 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
       
       // Add assistant response
       memory.add({
+        id: generateId('msg'),
         role: 'assistant',
         content: response.message.content || '',
         timestamp: new Date()
@@ -1262,6 +1547,7 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
         ).join(', ');
         
         memory.add({
+          id: generateId('msg'),
           role: 'system',
           content: `Tool execution summary: ${toolSummary}`,
           timestamp: new Date()
@@ -1291,16 +1577,14 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     // Get or create conversation memory
     let memory = this.conversationMemories.get(input.sessionId);
     if (!memory) {
-      memory = new ConversationMemory({
-        maxMessages: this.config.memory.maxMessages,
-        summarizeAfter: this.config.memory.summarizeAfter
-      });
+      memory = new ConversationMemory(this.config.memory.maxMessages || 50);
       this.conversationMemories.set(input.sessionId, memory);
     }
     
     // Add user message
     if (input.prompt) {
       memory.add({
+        id: generateId('msg'),
         role: 'user',
         content: input.prompt,
         timestamp: new Date()
@@ -1309,6 +1593,7 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     
     // Add assistant response
     memory.add({
+      id: generateId('msg'),
       role: 'assistant',
       content,
       timestamp: new Date()
@@ -1328,16 +1613,24 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     // Run all configured validators
     for (const validator of this.validators) {
       const validationContext = {
-        content,
-        input,
-        context,
-        agentName: this.name
+        prompt: input.prompt || '',
+        model: this.config.model.primary,
+        parameters: {
+          temperature: input.modelOverride?.temperature,
+          maxTokens: input.modelOverride?.maxTokens
+        },
+        sessionId: input.sessionId,
+        metadata: {
+          agentName: this.name,
+          executionId: context.executionId
+        }
       };
       
       try {
-        const isValid = await validator(validationContext);
+        const isValid = await validator(content, validationContext);
         if (!isValid) {
           throw new ResponseValidationError(
+            'response-validation',
             'Response failed validation',
             { validator: validator.name }
           );
@@ -1347,6 +1640,7 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
           throw error;
         }
         throw new ResponseValidationError(
+          'validation-error',
           `Validation error: ${error instanceof Error ? error.message : String(error)}`,
           { validator: validator.name }
         );
@@ -1356,17 +1650,21 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     // Run safety checks
     for (const safetyCheck of this.safetyChecks) {
       const safetyContext = {
-        content,
-        input,
-        context,
-        agentName: this.name
+        contentType: 'output' as const,
+        sessionId: input.sessionId,
+        userId: input.userId,
+        metadata: {
+          agentName: this.name,
+          executionId: context.executionId
+        }
       };
       
-      const result = await safetyCheck(safetyContext);
+      const result = await safetyCheck.check(content, safetyContext);
       if (!result.passed) {
         throw new ResponseValidationError(
+          'safety-check',
           `Safety check failed: ${result.reason}`,
-          { safetyCheck: result.checkName }
+          { safetyCheck: safetyCheck.name }
         );
       }
     }
@@ -1379,11 +1677,11 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
    * @param duration - Request duration
    * @private
    */
-  private updateMetrics(response: LLMInternalResponse, duration: number): void {
-    this.metrics.totalCompletions++;
-    this.metrics.totalTokens += response.usage?.totalTokens || 0;
-    this.metrics.totalCost += response.usage?.cost || 0;
-    this.metrics.averageLatency = (this.metrics.averageLatency + duration) / 2; // Moving average
+  private updateLLMMetrics(response: LLMInternalResponse, duration: number): void {
+    this.llmMetrics.totalCompletions++;
+    this.llmMetrics.totalTokens += response.usage?.totalTokens || 0;
+    this.llmMetrics.totalCost += response.usage?.cost || 0;
+    this.llmMetrics.averageLatency = (this.llmMetrics.averageLatency + duration) / 2; // Moving average
   }
   
   /**
@@ -1400,8 +1698,8 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
     }
     
     // Try to load from persistent memory
-    if (this.modules.memory) {
-      const memories = await this.modules.memory.getWorkingMemory({
+    if (this.registry.get("memory")) {
+      const memories = await (this.registry.get("memory") as any).getWorkingMemory({ // TODO: Add proper Memory module interface
         sessionId,
         limit: this.config.memory.maxMessages,
         types: ['user', 'assistant', 'system']
@@ -1551,7 +1849,9 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
    * @private
    */
   private async selectModelByRouting(context: ModelSelectionContext): Promise<string> {
-    const { preferredRouting, estimatedTokens, requiresTools, requiresStreaming } = context;
+    const { preferredRouting, estimatedTokens, capabilities } = context;
+    const requiresTools = capabilities?.includes('tools') || false;
+    const requiresStreaming = false; // Can be derived from capabilities if needed
     
     switch (preferredRouting) {
       case 'cost':
@@ -1576,7 +1876,8 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
    */
   private selectCostOptimalModel(context: ModelSelectionContext): string {
     // For cost optimization, prefer cheaper models when possible
-    if (context.estimatedTokens < 4000 && !context.requiresTools) {
+    const requiresTools = context.capabilities?.includes('tools') || false;
+    if (context.estimatedTokens < 4000 && !requiresTools) {
       return 'gpt-3.5-turbo';
     }
     return this.config.model.primary;
@@ -1697,5 +1998,504 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
         checkName: 'basic-safety'
       };
     };
+  }
+  
+  /**
+   * Creates a properly formatted Message object.
+   * 
+   * @param role - Message role
+   * @param content - Message content
+   * @param metadata - Optional metadata
+   * @returns Properly formatted message
+   * @private
+   */
+  private createMessage(
+    role: 'user' | 'assistant' | 'system',
+    content: string,
+    metadata?: Record<string, any>
+  ): Message {
+    return {
+      id: generateId('msg'),
+      role,
+      content,
+      timestamp: new Date(),
+      metadata
+    };
+  }
+  
+  /**
+   * Converts ExecutionContext to LLMAgentInput for processing.
+   * 
+   * @param context - Execution context from BaseAgent
+   * @returns LLM agent input
+   * @private
+   */
+  private contextToLLMInput(context: ExecutionContext): LLMAgentInput {
+    return {
+      content: context.task.input?.content || '',
+      data: context.task.input?.data,
+      sessionId: context.session?.id || 'default',
+      metadata: {
+        executionId: context.executionId,
+        taskId: context.task.id,
+        taskType: context.task.type,
+        ...context.metadata
+      }
+    };
+  }
+  
+  /**
+   * Converts LLMAgentOutput to AgentResult for BaseAgent.
+   * 
+   * @param output - LLM agent output
+   * @param startTime - Execution start time
+   * @returns Agent result
+   * @private
+   */
+  private llmOutputToAgentResult(output: LLMAgentOutput, startTime: number): AgentResult {
+    return {
+      success: output.success,
+      output: output.message || output.data,
+      metadata: {
+        endTime: new Date(),
+        duration: Date.now() - startTime,
+        model: output.model,
+        tokensUsed: output.usage?.totalTokens,
+        cost: output.usage?.cost
+      }
+    };
+  }
+
+  // Langfuse Integration Methods
+  
+  /**
+   * Checks if Langfuse tracing is enabled for this agent.
+   * 
+   * @returns True if Langfuse tracing should be used
+   * @private
+   */
+  private isLangfuseEnabled(): boolean {
+    const integration = this.config.integrations?.langfuse;
+    
+    // Handle boolean configuration
+    if (typeof integration === 'boolean') {
+      return integration;
+    }
+    
+    // Handle object configuration
+    if (integration && typeof integration === 'object') {
+      return integration.enabled === true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Gets Langfuse configuration options.
+   * 
+   * @returns Langfuse configuration object or default settings
+   * @private
+   */
+  private getLangfuseConfig(): {
+    traceExecutions: boolean;
+    traceStreaming: boolean;
+    traceTools: boolean;
+    traceMemory: boolean;
+    trackTokens: boolean;
+    trackCosts: boolean;
+    sessionTracking: boolean;
+    metadata: Record<string, any>;
+  } {
+    const integration = this.config.integrations?.langfuse;
+    
+    // Default configuration
+    const defaults = {
+      traceExecutions: true,
+      traceStreaming: true,
+      traceTools: true,
+      traceMemory: true,
+      trackTokens: true,
+      trackCosts: true,
+      sessionTracking: true,
+      metadata: {}
+    };
+    
+    // Return defaults for boolean config
+    if (typeof integration === 'boolean') {
+      return defaults;
+    }
+    
+    // Merge with object config
+    if (integration && typeof integration === 'object') {
+      return {
+        traceExecutions: integration.traceExecutions ?? defaults.traceExecutions,
+        traceStreaming: integration.traceStreaming ?? defaults.traceStreaming,
+        traceTools: integration.traceTools ?? defaults.traceTools,
+        traceMemory: integration.traceMemory ?? defaults.traceMemory,
+        trackTokens: integration.trackTokens ?? defaults.trackTokens,
+        trackCosts: integration.trackCosts ?? defaults.trackCosts,
+        sessionTracking: integration.sessionTracking ?? defaults.sessionTracking,
+        metadata: integration.metadata ?? defaults.metadata
+      };
+    }
+    
+    return defaults;
+  }
+
+  /**
+   * Starts or gets a Langfuse trace for the given session.
+   * 
+   * @param sessionId - Session identifier
+   * @param operationType - Type of operation being traced
+   * @param input - Input data for tracing
+   * @returns Langfuse trace or null if tracing disabled
+   * @private
+   */
+  private async startLangfuseTrace(
+    sessionId: string,
+    operationType: 'execution' | 'streaming',
+    input: LLMAgentInput
+  ): Promise<ITrace | null> {
+    if (!this.langfuseModule || !this.isLangfuseEnabled()) {
+      return null;
+    }
+
+    const config = this.getLangfuseConfig();
+    
+    // Check if this operation type should be traced
+    if (operationType === 'execution' && !config.traceExecutions) {
+      return null;
+    }
+    if (operationType === 'streaming' && !config.traceStreaming) {
+      return null;
+    }
+
+    // Check if session already has an active trace
+    let trace = this.sessionTraces.get(sessionId);
+    
+    if (!trace && config.sessionTracking) {
+      try {
+        // Create new session trace
+        trace = this.langfuseModule.startTrace({
+          id: generateId(),
+          name: `llm-agent-session-${sessionId}`,
+          userId: input.userId,
+          sessionId: sessionId,
+          metadata: {
+            agentName: this.name,
+            agentType: this.type,
+            agentVersion: this.version,
+            operationType,
+            primaryModel: this.config.model.primary,
+            ...config.metadata,
+            ...input.metadata
+          },
+          tags: [
+            'llm-agent',
+            this.name,
+            this.config.model.primary || 'unknown-model'
+          ],
+          input: config.traceExecutions ? {
+            prompt: input.prompt,
+            messages: input.messages?.map(m => ({
+              role: m.role,
+              content: m.content?.substring(0, 1000) // Limit content length
+            })),
+            tools: input.tools,
+            modelOverride: input.modelOverride
+          } : undefined,
+          timestamp: new Date()
+        });
+
+        this.sessionTraces.set(sessionId, trace);
+        console.log(`✓ Started Langfuse session trace for ${sessionId}`);
+      } catch (error) {
+        console.error('Failed to start Langfuse trace:', error);
+        return null;
+      }
+    }
+
+    return trace;
+  }
+
+  /**
+   * Creates a span for LLM completion within a trace.
+   * 
+   * @param trace - Parent trace
+   * @param model - Model being used
+   * @param messages - Messages being sent
+   * @param tools - Available tools
+   * @returns Langfuse span or null
+   * @private
+   */
+  private createLLMSpan(
+    trace: ITrace,
+    model: string,
+    messages: Message[],
+    tools: any[]
+  ): ISpan | null {
+    if (!trace) return null;
+
+    try {
+      return trace.span({
+        name: 'llm-completion',
+        input: {
+          model,
+          messages: messages.map(m => ({
+            role: m.role,
+            content: m.content?.substring(0, 500)
+          })),
+          toolCount: tools.length,
+          messageCount: messages.length
+        },
+        metadata: {
+          model,
+          tokenEstimate: this.estimateTokensPrivate(messages.map(m => m.content).join(' ')),
+          toolsAvailable: tools.map(t => t.name || t.type).slice(0, 10)
+        }
+      });
+    } catch (error) {
+      console.error('Failed to create LLM span:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Updates a span with completion results.
+   * 
+   * @param span - Span to update
+   * @param response - LLM response
+   * @param duration - Execution duration
+   * @private
+   */
+  private updateLLMSpanWithResponse(
+    span: ISpan | null,
+    response: LLMInternalResponse,
+    duration: number
+  ): void {
+    if (!span) return;
+
+    const config = this.getLangfuseConfig();
+
+    try {
+      span.update({
+        output: {
+          content: response.message.content?.substring(0, 1000),
+          model: response.model,
+          toolCallCount: response.toolCalls?.length || 0,
+          duration
+        },
+        metadata: {
+          model: response.model,
+          duration,
+          ...(config.trackTokens && response.usage ? {
+            promptTokens: response.usage.promptTokens,
+            completionTokens: response.usage.completionTokens,
+            totalTokens: response.usage.totalTokens
+          } : {}),
+          ...(config.trackCosts && response.usage?.cost ? {
+            cost: response.usage.cost
+          } : {})
+        }
+      });
+
+      span.end();
+      console.log(`✓ Updated Langfuse LLM span with response`);
+    } catch (error) {
+      console.error('Failed to update LLM span:', error);
+    }
+  }
+
+  /**
+   * Creates spans for tool executions.
+   * 
+   * @param trace - Parent trace
+   * @param toolCalls - Tool calls being executed
+   * @returns Array of tool spans
+   * @private
+   */
+  private createToolSpans(
+    trace: ITrace | null,
+    toolCalls: ToolCall[]
+  ): ISpan[] {
+    if (!trace || !this.getLangfuseConfig().traceTools) {
+      return [];
+    }
+
+    const spans: ISpan[] = [];
+
+    for (const toolCall of toolCalls) {
+      try {
+        const span = trace.span({
+          name: `tool-${toolCall.name}`,
+          input: {
+            toolName: toolCall.name,
+            arguments: toolCall.arguments
+          },
+          metadata: {
+            toolCallId: toolCall.id,
+            toolName: toolCall.name
+          }
+        });
+
+        spans.push(span);
+      } catch (error) {
+        console.error(`Failed to create tool span for ${toolCall.name}:`, error);
+      }
+    }
+
+    return spans;
+  }
+
+  /**
+   * Updates tool spans with execution results.
+   * 
+   * @param toolSpans - Tool spans to update
+   * @param toolResults - Tool execution results
+   * @private
+   */
+  private updateToolSpans(
+    toolSpans: ISpan[],
+    toolResults: ToolResult[]
+  ): void {
+    if (!this.getLangfuseConfig().traceTools) return;
+
+    for (let i = 0; i < Math.min(toolSpans.length, toolResults.length); i++) {
+      const span = toolSpans[i];
+      const result = toolResults[i];
+
+      try {
+        span.update({
+          output: {
+            success: result.success,
+            result: result.output,
+            error: result.error,
+            duration: result.duration
+          },
+          metadata: {
+            success: result.success,
+            duration: result.duration,
+            toolName: result.tool
+          }
+        });
+
+        span.end();
+      } catch (error) {
+        console.error(`Failed to update tool span:`, error);
+      }
+    }
+
+    console.log(`✓ Updated ${toolSpans.length} tool spans`);
+  }
+
+  /**
+   * Creates a span for memory operations.
+   * 
+   * @param trace - Parent trace
+   * @param operation - Memory operation type
+   * @param sessionId - Session ID
+   * @returns Memory span or null
+   * @private
+   */
+  private createMemorySpan(
+    trace: ITrace | null,
+    operation: 'retrieve' | 'update' | 'clear',
+    sessionId: string
+  ): ISpan | null {
+    if (!trace || !this.getLangfuseConfig().traceMemory) {
+      return null;
+    }
+
+    try {
+      return trace.span({
+        name: `memory-${operation}`,
+        input: {
+          operation,
+          sessionId
+        },
+        metadata: {
+          operation,
+          sessionId,
+          memoryEnabled: this.config.memory.enabled,
+          maxMessages: this.config.memory.maxMessages
+        }
+      });
+    } catch (error) {
+      console.error(`Failed to create memory span for ${operation}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Updates memory span with operation results.
+   * 
+   * @param memorySpan - Memory span to update
+   * @param messageCount - Number of messages retrieved/updated
+   * @param operation - Operation performed
+   * @private
+   */
+  private updateMemorySpan(
+    memorySpan: ISpan | null,
+    messageCount: number,
+    operation: string
+  ): void {
+    if (!memorySpan) return;
+
+    try {
+      memorySpan.update({
+        output: {
+          messageCount,
+          operation,
+          success: true
+        },
+        metadata: {
+          messageCount,
+          operation
+        }
+      });
+
+      memorySpan.end();
+      console.log(`✓ Updated memory span for ${operation}`);
+    } catch (error) {
+      console.error('Failed to update memory span:', error);
+    }
+  }
+
+  /**
+   * Estimates token count for text (rough approximation).
+   * 
+   * @param text - Text to estimate
+   * @returns Estimated token count
+   * @private
+   */
+  private estimateTokensPrivate(text: string): number {
+    // Rough estimation: ~4 characters per token
+    return Math.ceil(text.length / 4);
+  }
+
+  /**
+   * Cleans up session traces that are no longer active.
+   * 
+   * @param sessionId - Session to clean up
+   * @private
+   */
+  private cleanupSessionTrace(sessionId: string): void {
+    const trace = this.sessionTraces.get(sessionId);
+    if (trace) {
+      try {
+        // End the trace
+        trace.update({
+          output: {
+            sessionEnd: true,
+            endTime: new Date().toISOString()
+          }
+        });
+
+        this.sessionTraces.delete(sessionId);
+        console.log(`✓ Cleaned up Langfuse trace for session ${sessionId}`);
+      } catch (error) {
+        console.error(`Failed to cleanup session trace for ${sessionId}:`, error);
+      }
+    }
   }
 }

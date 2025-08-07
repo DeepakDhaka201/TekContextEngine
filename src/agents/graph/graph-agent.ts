@@ -727,6 +727,13 @@ export class GraphAgent extends BaseAgent implements IGraphAgent {
           maxDelay: config.execution?.retry?.maxDelay || 30000,
           retryableErrors: config.execution?.retry?.retryableErrors || []
         },
+        retryPolicy: {
+          maxAttempts: config.execution?.retry?.maxAttempts || 3,
+          backoffStrategy: config.execution?.retry?.backoffStrategy || 'exponential',
+          initialDelay: config.execution?.retry?.initialDelay || 1000,
+          maxDelay: config.execution?.retry?.maxDelay || 30000,
+          retryableErrors: config.execution?.retry?.retryableErrors || []
+        },
         checkpointing: {
           enabled: config.execution?.checkpointing?.enabled !== false,
           frequency: config.execution?.checkpointing?.frequency || 'node',
