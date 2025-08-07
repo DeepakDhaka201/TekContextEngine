@@ -961,7 +961,7 @@ export class WorkflowExecutionEngine {
    * 
    * @public
    */
-  async validateWorkflow(workflow: AgentWorkflow): ValidationResult {
+  async validateWorkflow(workflow: AgentWorkflow): Promise<ValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
     

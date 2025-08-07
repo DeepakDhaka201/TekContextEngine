@@ -292,7 +292,7 @@ export interface LLMAgentInput extends AgentInput {
  * 
  * @public
  */
-export interface LLMAgentOutput extends AgentOutput {
+export interface LLMAgentOutput extends Omit<AgentOutput, 'usage'> {
   /** Generated text content */
   content?: string;
   
@@ -314,8 +314,8 @@ export interface LLMAgentOutput extends AgentOutput {
   /** Whether conversation memory was updated */
   memoryUpdated?: boolean;
   
-  /** Token usage statistics */
-  usage?: TokenUsage;
+  /** Token usage statistics - LLM-specific structure */
+  usage?: LLMTokenUsage;
   
   /** Response quality metrics */
   quality?: QualityMetrics;
@@ -562,11 +562,11 @@ export interface SafetyCheckResult {
 // ToolResult is now imported from base types for consistency
 
 /**
- * Token usage statistics.
+ * LLM-specific token usage statistics.
  * 
  * @public
  */
-export interface TokenUsage {
+export interface LLMTokenUsage {
   /** Tokens used in prompt */
   promptTokens: number;
   
@@ -592,8 +592,16 @@ export interface TokenUsage {
   };
   
   /** Model-specific usage data */
-  modelUsage?: Record<string, TokenUsage>;
+  modelUsage?: Record<string, LLMTokenUsage>;
 }
+
+/**
+ * Token usage statistics (alias for compatibility).
+ * @deprecated Use LLMTokenUsage instead
+ * 
+ * @public
+ */
+export type TokenUsage = LLMTokenUsage;
 
 /**
  * Response quality metrics.
@@ -896,6 +904,9 @@ export interface ModelSelectionContext {
   
   /** Required capabilities */
   capabilities?: string[];
+  
+  /** Whether tools are required for this request */
+  requiresTools?: boolean;
   
   /** Routing strategy */
   routing?: ModelRouting;

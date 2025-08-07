@@ -1950,9 +1950,9 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
    * @returns Format validator function
    * @private
    */
-  private createFormatValidator(format: ResponseFormat): ResponseValidator {
-    return async (context) => {
-      const { content } = context;
+  private createFormatValidator(format: import('./types').ResponseFormat): import('./types').ResponseValidator {
+    return async (response, context) => {
+      const content = response;
       
       switch (format) {
         case 'json':
@@ -1980,23 +1980,23 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
    * @returns Basic safety check function
    * @private
    */
-  private createBasicSafetyCheck(): SafetyCheck {
-    return async (context) => {
-      const { content } = context;
-      
-      // Basic content length check
-      if (content.length > 50000) {
+  private createBasicSafetyCheck(): import('./types').SafetyCheck {
+    return {
+      id: 'basic-safety',
+      name: 'Basic Safety Check',
+      check: async (content, context) => {
+        // Basic content length check
+        if (content.length > 50000) {
+          return {
+            passed: false,
+            reason: 'Response too long'
+          };
+        }
+        
         return {
-          passed: false,
-          reason: 'Response too long',
-          checkName: 'basic-safety'
+          passed: true
         };
       }
-      
-      return {
-        passed: true,
-        checkName: 'basic-safety'
-      };
     };
   }
   
@@ -2032,13 +2032,13 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
    */
   private contextToLLMInput(context: ExecutionContext): LLMAgentInput {
     return {
-      content: context.task.input?.content || '',
-      data: context.task.input?.data,
+      prompt: context.task.input?.content || '',
       sessionId: context.session?.id || 'default',
       metadata: {
         executionId: context.executionId,
         taskId: context.task.id,
         taskType: context.task.type,
+        data: context.task.input?.data,
         ...context.metadata
       }
     };
@@ -2055,7 +2055,7 @@ export class LLMAgent extends BaseAgent implements ILLMAgent {
   private llmOutputToAgentResult(output: LLMAgentOutput, startTime: number): AgentResult {
     return {
       success: output.success,
-      output: output.message || output.data,
+      output: output.message || output.content,
       metadata: {
         endTime: new Date(),
         duration: Date.now() - startTime,

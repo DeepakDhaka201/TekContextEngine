@@ -366,7 +366,10 @@ function loadConfigFromEnvironment(prefix: string = 'EXECUTION_'): Partial<Execu
   
   // Load parallel execution configuration
   if (!config.parallelExecution) {
-    config.parallelExecution = {};
+    config.parallelExecution = {
+      enabled: true,
+      maxParallelNodes: 5
+    };
   }
   
   const disableParallel = process.env.DISABLE_PARALLEL_EXECUTION || process.env[`${prefix}DISABLE_PARALLEL`];
@@ -386,7 +389,10 @@ function loadConfigFromEnvironment(prefix: string = 'EXECUTION_'): Partial<Execu
   
   // Load state persistence configuration
   if (!config.statePersistence) {
-    config.statePersistence = {};
+    config.statePersistence = {
+      enabled: true,
+      storage: 'memory'
+    };
   }
   
   const disablePersistence = process.env.DISABLE_STATE_PERSISTENCE || process.env[`${prefix}DISABLE_PERSISTENCE`];

@@ -650,6 +650,9 @@ export interface ExecutionContext {
   /** Configuration options for this execution */
   options?: ExecutionOptions;
   
+  /** Optional streaming interface for real-time updates */
+  streamer?: IStreamer;
+  
   /** Management metadata for context lifecycle */
   management?: {
     /** Last access timestamp */
