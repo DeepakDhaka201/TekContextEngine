@@ -15,25 +15,8 @@
  * - Preservation of data structure while removing sensitive content
  * - Performance optimization for large payloads
  * 
- * @example
- * ```typescript
- * import { DataSanitizer } from './sanitizer';
- * 
- * const sanitizer = new DataSanitizer({
- *   maskSensitiveData: true,
- *   redactPatterns: [
- *     /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, // Email
- *     /Bearer\s+[A-Za-z0-9\-._~+\/]+=*/g // Bearer tokens
- *   ],
- *   allowedMetadataKeys: ['userId', 'sessionId', 'model']
- * });
- * 
- * const sanitized = sanitizer.sanitizeSpanOptions({
- *   name: 'llm-call',
- *   input: { prompt: 'User email: john@example.com' },
- *   metadata: { apiKey: 'secret-key-123', userId: 'user-123' }
- * });
- * ```
+ * Usage: Create DataSanitizer with patterns, then use sanitizeSpanOptions
+ * to clean data before sending to Langfuse.
  * 
  * @since 1.0.0
  */
@@ -61,20 +44,7 @@ import { SanitizerConfig, SpanOptions, GenerationOptions, EventOptions, TraceUpd
  * - Sensitive key detection uses case-insensitive matching
  * - Default patterns cover common PII and security-sensitive data
  * 
- * @example
- * ```typescript
- * const sanitizer = new DataSanitizer({
- *   maskSensitiveData: true,
- *   redactPatterns: [
- *     /sk-[a-zA-Z0-9]{48}/g, // OpenAI API keys
- *     /\b\d{16}\b/g // Credit card numbers
- *   ],
- *   allowedMetadataKeys: ['model', 'provider', 'version']
- * });
- * 
- * // Sanitize trace data
- * const cleanData = sanitizer.sanitizeSpanOptions(spanOptions);
- * ```
+ * Configurable patterns for PII and sensitive data detection.
  * 
  * @public
  */
@@ -135,19 +105,6 @@ export class DataSanitizer {
    * Creates a new DataSanitizer instance.
    * 
    * @param config - Sanitizer configuration options
-   * 
-   * @example
-   * ```typescript
-   * const sanitizer = new DataSanitizer({
-   *   maskSensitiveData: true,
-   *   redactPatterns: [/custom-pattern/g],
-   *   allowedMetadataKeys: ['userId', 'model'],
-   *   customRules: [{
-   *     pattern: /internal-id-\d+/g,
-   *     replacement: 'internal-id-XXX'
-   *   }]
-   * });
-   * ```
    */
   constructor(config: SanitizerConfig) {
     this.config = config;
@@ -165,16 +122,6 @@ export class DataSanitizer {
    * 
    * @param options - Span options to sanitize
    * @returns Sanitized span options
-   * 
-   * @example
-   * ```typescript
-   * const sanitized = sanitizer.sanitizeSpanOptions({
-   *   name: 'llm-call',
-   *   input: { prompt: 'User: john@example.com wants access' },
-   *   metadata: { apiKey: 'sk-secret123', model: 'gpt-4' }
-   * });
-   * // Result: input redacted, apiKey removed, model preserved
-   * ```
    */
   sanitizeSpanOptions(options: SpanOptions): SpanOptions {
     if (!this.config.maskSensitiveData) {
@@ -183,7 +130,7 @@ export class DataSanitizer {
     
     return {
       ...options,
-      name: this.sanitizeString(options.name),
+      name: this.sanitizeString(options.name || ''),
       input: this.sanitizeData(options.input),
       output: this.sanitizeData(options.output),
       metadata: this.sanitizeMetadata(options.metadata),
@@ -204,7 +151,7 @@ export class DataSanitizer {
     
     return {
       ...options,
-      name: this.sanitizeString(options.name),
+      name: this.sanitizeString(options.name || ''),
       input: this.sanitizeData(options.input),
       output: this.sanitizeData(options.output),
       metadata: this.sanitizeMetadata(options.metadata),
@@ -225,7 +172,7 @@ export class DataSanitizer {
     
     return {
       ...options,
-      name: this.sanitizeString(options.name),
+      name: this.sanitizeString(options.name || ''),
       input: this.sanitizeData(options.input),
       output: this.sanitizeData(options.output),
       metadata: this.sanitizeMetadata(options.metadata)
@@ -316,8 +263,8 @@ export class DataSanitizer {
    * @param userId - User ID to sanitize
    * @returns Sanitized user ID (may be hashed or anonymized)
    */
-  sanitizeUserId(userId: string): string {
-    if (!this.config.maskSensitiveData) {
+  sanitizeUserId(userId: string | undefined): string | undefined {
+    if (!userId || !this.config.maskSensitiveData) {
       return userId;
     }
     
@@ -393,9 +340,9 @@ export class DataSanitizer {
    * 
    * @private
    */
-  sanitizeString(str?: string): string | undefined {
+  sanitizeString(str?: string): string {
     if (!str || !this.config.maskSensitiveData) {
-      return str;
+      return str || '';
     }
     
     let sanitized = str;
@@ -475,11 +422,6 @@ export class DataSanitizer {
    * 
    * @param key - Metadata key to check
    * @returns True if key is allowed, false otherwise
-   * 
-   * @example
-   * ```typescript
-   * const allowed = sanitizer.isAllowedMetadataKey('userId'); // true if in whitelist
-   * ```
    */
   isAllowedMetadataKey(key: string): boolean {
     // If no whitelist configured, allow all keys
@@ -510,12 +452,6 @@ export class DataSanitizer {
    * Gets sanitizer statistics for monitoring.
    * 
    * @returns Statistics about sanitizer configuration and usage
-   * 
-   * @example
-   * ```typescript
-   * const stats = sanitizer.getStatistics();
-   * console.log('Sanitizer stats:', stats);
-   * ```
    */
   getStatistics(): {
     enabled: boolean;
@@ -542,18 +478,6 @@ export class DataSanitizer {
    * 
    * @param testData - Data to test sanitization on
    * @returns Original and sanitized data for comparison
-   * 
-   * @example
-   * ```typescript
-   * const testResult = sanitizer.testSanitization({
-   *   email: 'user@example.com',
-   *   apiKey: 'sk-secretkey123',
-   *   userId: 'user-123'
-   * });
-   * 
-   * console.log('Original:', testResult.original);
-   * console.log('Sanitized:', testResult.sanitized);
-   * ```
    */
   testSanitization(testData: any): {
     original: any;

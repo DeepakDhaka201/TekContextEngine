@@ -630,6 +630,68 @@ export interface ExecutionOptions {
 }
 
 /**
+ * Complete execution context for workflow state management.
+ * 
+ * Contains all necessary state information for workflow execution,
+ * pause/resume functionality, and persistence across sessions.
+ * 
+ * @public
+ */
+export interface ExecutionContext {
+  /** Execution state with all runtime information */
+  state: ExecutionState;
+  
+  /** Workflow configuration and definition */
+  workflow: AgentWorkflow;
+  
+  /** Original input data for the execution */
+  input: WorkflowInput;
+  
+  /** Configuration options for this execution */
+  options?: ExecutionOptions;
+  
+  /** Management metadata for context lifecycle */
+  management?: {
+    /** Last access timestamp */
+    lastAccessed: Date;
+    
+    /** Access count for usage tracking */
+    accessCount: number;
+    
+    /** Whether context has unsaved changes */
+    isDirty: boolean;
+    
+    /** Context size estimation in bytes */
+    estimatedSize: number;
+  };
+}
+
+/**
+ * Managed execution context with additional tracking metadata.
+ * 
+ * Extends ExecutionContext with management information for lifecycle
+ * tracking, memory management, and optimization.
+ * 
+ * @public
+ */
+export interface ManagedExecutionContext extends ExecutionContext {
+  /** Enhanced management metadata */
+  management?: {
+    /** Last access timestamp for cleanup */
+    lastAccessed: Date;
+    
+    /** Number of times context has been accessed */
+    accessCount: number;
+    
+    /** Whether context has been modified since last save */
+    isDirty: boolean;
+    
+    /** Context size estimation for memory management */
+    estimatedSize: number;
+  };
+}
+
+/**
  * Comprehensive execution results.
  * 
  * Contains execution outcomes, metrics, usage statistics, and detailed

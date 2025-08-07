@@ -16,21 +16,8 @@
  * - Memory integration for distributed state management
  * - Context validation and integrity checking
  * 
- * @example
- * ```typescript
- * import { ExecutionContextManager } from './execution-context';
- * 
- * const contextManager = new ExecutionContextManager(memoryModule);
- * 
- * const context = await contextManager.createExecutionContext(
- *   'exec-123',
- *   workflow,
- *   input,
- *   options
- * );
- * 
- * await contextManager.saveExecutionContext(context);
- * ```
+ * Usage: Create ExecutionContextManager with memoryModule, then use
+ * createExecutionContext to initialize workflow execution state.
  * 
  * @see types.ts for ExecutionContext interface
  * @since 1.0.0
@@ -38,6 +25,7 @@
 
 import {
   ExecutionContext,
+  ManagedExecutionContext,
   ExecutionState,
   AgentWorkflow,
   WorkflowInput,
@@ -57,30 +45,7 @@ import {
 
 import { IMemoryModule } from '../memory/types';
 
-/**
- * Extended execution context interface for internal management.
- * 
- * Includes additional metadata and management information
- * not exposed in the public ExecutionContext interface.
- * 
- * @private
- */
-interface ManagedExecutionContext extends ExecutionContext {
-  /** Context management metadata */
-  management?: {
-    /** Last access timestamp for cleanup */
-    lastAccessed: Date;
-    
-    /** Number of times context has been accessed */
-    accessCount: number;
-    
-    /** Whether context has been modified since last save */
-    isDirty: boolean;
-    
-    /** Context size estimation for memory management */
-    estimatedSize: number;
-  };
-}
+// ManagedExecutionContext is now imported from ./types
 
 /**
  * Execution context manager for workflow execution state management.
@@ -104,23 +69,7 @@ interface ManagedExecutionContext extends ExecutionContext {
  * for performance optimization while ensuring persistent storage
  * for crash recovery and distributed execution scenarios.
  * 
- * @example
- * ```typescript
- * const contextManager = new ExecutionContextManager(memoryModule);
- * 
- * // Create new execution context
- * const context = await contextManager.createExecutionContext(
- *   'exec-123',
- *   workflow,
- *   { sessionId: 'sess-456', input: data }
- * );
- * 
- * // Save context state
- * await contextManager.saveExecutionContext(context);
- * 
- * // Load context for resume
- * const loaded = await contextManager.loadExecutionContext('exec-123', 'sess-456');
- * ```
+ * Core workflow: Create context -> Execute workflow -> Save state
  * 
  * @public
  */
@@ -142,15 +91,6 @@ export class ExecutionContextManager {
    * 
    * @param memoryModule - Memory module for state persistence
    * @param config - Optional configuration for context management
-   * 
-   * @example
-   * ```typescript
-   * const contextManager = new ExecutionContextManager(memoryModule, {
-   *   maxCachedContexts: 100,
-   *   cleanupInterval: 300000,
-   *   contextTimeout: 3600000
-   * });
-   * ```
    */
   constructor(
     memoryModule: IMemoryModule,
@@ -185,28 +125,6 @@ export class ExecutionContextManager {
    * @param options - Optional execution configuration
    * @returns Promise resolving to initialized execution context
    * @throws {ExecutionContextError} If context creation fails
-   * 
-   * @example
-   * ```typescript
-   * const context = await contextManager.createExecutionContext(
-   *   'exec-123',
-   *   {
-   *     id: 'workflow-456',
-   *     name: 'Data Pipeline',
-   *     version: '1.0.0',
-   *     nodes: [/* nodes */],
-   *     edges: [/* edges */],
-   *     variables: [{ name: 'maxItems', type: 'number', defaultValue: 100 }],
-   *     createdAt: new Date(),
-   *     updatedAt: new Date()
-   *   },
-   *   {
-   *     sessionId: 'sess-789',
-   *     input: { data: 'process this' },
-   *     variables: { maxItems: 200 }
-   *   }
-   * );
-   * ```
    * 
    * Context initialization process:
    * 1. Validates input parameters and workflow structure
@@ -257,7 +175,6 @@ export class ExecutionContextManager {
         workflow: this.cloneWorkflow(workflow), // Deep clone to prevent mutations
         input: { ...input }, // Shallow clone input
         options: { ...options }, // Shallow clone options
-        createdAt: new Date(),
         management: {
           lastAccessed: new Date(),
           accessCount: 1,
@@ -306,14 +223,6 @@ export class ExecutionContextManager {
    * 
    * @param executionId - Unique execution identifier
    * @returns Execution context or undefined if not found
-   * 
-   * @example
-   * ```typescript
-   * const context = contextManager.getExecutionContext('exec-123');
-   * if (context) {
-   *   console.log('Found context:', context.state.status);
-   * }
-   * ```
    */
   getExecutionContext(executionId: string): ExecutionContext | undefined {
     const context = this.contexts.get(executionId);
@@ -339,12 +248,6 @@ export class ExecutionContextManager {
    * @param context - Execution context to save
    * @throws {StatePersistenceError} If save operation fails
    * 
-   * @example
-   * ```typescript
-   * await contextManager.saveExecutionContext(context);
-   * console.log('Context saved successfully');
-   * ```
-   * 
    * Serialization process:
    * 1. Converts Map/Set objects to serializable formats
    * 2. Creates comprehensive state snapshot
@@ -363,7 +266,6 @@ export class ExecutionContextManager {
         workflow: context.workflow,
         input: context.input,
         options: context.options,
-        createdAt: context.createdAt.toISOString(),
         savedAt: new Date().toISOString(),
         version: '1.0.0' // For future compatibility
       };
@@ -413,15 +315,6 @@ export class ExecutionContextManager {
    * @throws {StatePersistenceError} If load operation fails
    * @throws {ExecutionContextError} If context data is corrupted
    * 
-   * @example
-   * ```typescript
-   * const context = await contextManager.loadExecutionContext('exec-123', 'sess-456');
-   * if (context) {
-   *   console.log('Loaded context status:', context.state.status);
-   *   await contextManager.resumeExecution(context);
-   * }
-   * ```
-   * 
    * Deserialization process:
    * 1. Retrieves context data from Memory Module
    * 2. Validates data structure and version compatibility
@@ -461,7 +354,6 @@ export class ExecutionContextManager {
         workflow: savedContext.workflow,
         input: savedContext.input,
         options: savedContext.options,
-        createdAt: new Date(savedContext.createdAt),
         management: {
           lastAccessed: new Date(),
           accessCount: 1,
@@ -506,15 +398,6 @@ export class ExecutionContextManager {
    * 
    * @param executionId - Execution identifier to remove
    * @param deletePersistent - Whether to delete from persistent storage
-   * 
-   * @example
-   * ```typescript
-   * // Remove from cache only
-   * contextManager.removeExecutionContext('exec-123');
-   * 
-   * // Remove from cache and persistent storage
-   * await contextManager.removeExecutionContext('exec-123', true);
-   * ```
    */
   async removeExecutionContext(executionId: string, deletePersistent: boolean = false): Promise<void> {
     // Remove from in-memory cache
@@ -543,12 +426,6 @@ export class ExecutionContextManager {
    * for monitoring and resource management purposes.
    * 
    * @returns Number of active execution contexts
-   * 
-   * @example
-   * ```typescript
-   * const activeCount = contextManager.getActiveExecutionCount();
-   * console.log(`Currently managing ${activeCount} execution contexts`);
-   * ```
    */
   getActiveExecutionCount(): number {
     return this.contexts.size;
@@ -558,12 +435,6 @@ export class ExecutionContextManager {
    * Gets context management statistics for monitoring.
    * 
    * @returns Context management statistics
-   * 
-   * @example
-   * ```typescript
-   * const stats = contextManager.getContextStatistics();
-   * console.log(`Memory usage: ${stats.totalMemoryUsage} bytes`);
-   * ```
    */
   getContextStatistics(): ContextStatistics {
     let totalMemoryUsage = 0;
@@ -579,12 +450,12 @@ export class ExecutionContextManager {
       'WAITING_FOR_HUMAN': 0
     };
     
-    for (const context of this.contexts.values()) {
+    for (const context of Array.from(this.contexts.values())) {
       if (context.management) {
         totalMemoryUsage += context.management.estimatedSize;
         totalAccessCount += context.management.accessCount;
       }
-      statusCounts[context.state.status]++;
+      statusCounts[context.state.status as ExecutionStatus]++;
     }
     
     return {
@@ -605,12 +476,6 @@ export class ExecutionContextManager {
    * 
    * Stops cleanup timers, saves all dirty contexts, and prepares
    * for system shutdown.
-   * 
-   * @example
-   * ```typescript
-   * await contextManager.shutdown();
-   * console.log('Context manager shut down successfully');
-   * ```
    */
   async shutdown(): Promise<void> {
     // Stop cleanup timer
@@ -621,7 +486,7 @@ export class ExecutionContextManager {
     
     // Save all dirty contexts
     const savePromises: Promise<void>[] = [];
-    for (const context of this.contexts.values()) {
+    for (const context of Array.from(this.contexts.values())) {
       if (context.management?.isDirty) {
         savePromises.push(this.saveExecutionContext(context));
       }
@@ -743,7 +608,7 @@ export class ExecutionContextManager {
     let oldestId: string | null = null;
     let oldestTime = Date.now();
     
-    for (const [id, context] of this.contexts.entries()) {
+    for (const [id, context] of Array.from(this.contexts.entries())) {
       const lastAccessed = context.management?.lastAccessed?.getTime() || 0;
       if (lastAccessed < oldestTime) {
         oldestTime = lastAccessed;
@@ -882,7 +747,7 @@ export class ExecutionContextManager {
     const now = Date.now();
     const expiredContexts: string[] = [];
     
-    for (const [id, context] of this.contexts.entries()) {
+    for (const [id, context] of Array.from(this.contexts.entries())) {
       const lastAccessed = context.management?.lastAccessed?.getTime() || 0;
       if (now - lastAccessed > this.config.contextTimeout) {
         expiredContexts.push(id);
