@@ -70,7 +70,7 @@ export class HealthChecker {
    * Timer handle for periodic health checks.
    * Null when health checking is not active.
    */
-  private interval?: NodeJS.Timer;
+  private interval?: NodeJS.Timeout;
   
   /**
    * Flag to prevent overlapping health checks.

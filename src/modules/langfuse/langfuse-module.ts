@@ -133,7 +133,7 @@ export class LangfuseModule implements ILangfuseModule {
   private config?: LangfuseConfig;
   
   /** Auto-flush timer */
-  private flushInterval?: NodeJS.Timer;
+  private flushInterval?: NodeJS.Timeout;
   
   /** Initialization state */
   private initialized = false;
@@ -460,7 +460,6 @@ export class LangfuseModule implements ILangfuseModule {
         name: score.name,
         value: score.value,
         comment: score.comment,
-        source: score.source,
         dataType: score.dataType,
         config: score.config
       });
@@ -502,7 +501,6 @@ export class LangfuseModule implements ILangfuseModule {
         name: score.name,
         value: score.value,
         comment: score.comment,
-        source: score.source,
         dataType: score.dataType,
         config: score.config
       });
@@ -544,10 +542,10 @@ export class LangfuseModule implements ILangfuseModule {
     try {
       console.log(`Retrieving prompt: ${name}${version ? ` v${version}` : ' (latest)'}`);
       
-      const prompt = await this.client.getPrompt({
+      const prompt = await this.client.getPrompt(
         name,
-        version
-      });
+        version ? (version === 'latest' ? undefined : parseInt(version)) : undefined
+      );
       
       const wrapped = new WrappedPrompt(prompt);
       console.log(`✓ Retrieved prompt ${name} v${wrapped.version}`);

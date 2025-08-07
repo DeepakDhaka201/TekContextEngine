@@ -402,7 +402,7 @@ function validateFactoryConfiguration(config: Partial<LangfuseConfig>): void {
   }
   
   // Check for required keys only if we expect to use Langfuse
-  if (config.enabled !== false) {
+  if (config.enabled === true) {
     if (!config.publicKey) {
       throw new LangfuseConfigurationError(
         'Langfuse public key is required when enabled. Set LANGFUSE_PUBLIC_KEY environment variable or provide publicKey in configuration.',

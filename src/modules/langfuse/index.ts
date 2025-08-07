@@ -62,7 +62,8 @@ export type {
   ISpan,
   IGeneration,
   IPrompt,
-  SanitizerConfig
+  SanitizerConfig,
+  TraceOptions
 } from './types';
 
 // Error classes
