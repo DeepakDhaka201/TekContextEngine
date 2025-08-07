@@ -174,7 +174,7 @@ export class WrappedTrace implements ITrace {
       throw new LangfuseTraceError(
         'span_creation',
         `Failed to create span: ${error instanceof Error ? error.message : String(error)}`,
-        { traceId: this.id, spanOptions: options },
+        { traceId: this.id, spanCount: this.spanCount },
         error instanceof Error ? error : undefined
       );
     }
@@ -229,7 +229,7 @@ export class WrappedTrace implements ITrace {
       throw new LangfuseTraceError(
         'span_creation',
         `Failed to create generation: ${error instanceof Error ? error.message : String(error)}`,
-        { traceId: this.id, generationOptions: options },
+        { traceId: this.id, spanCount: this.spanCount },
         error instanceof Error ? error : undefined
       );
     }
@@ -872,7 +872,7 @@ export class WrappedPrompt implements IPrompt {
       throw new LangfusePromptError(
         'template_rendering',
         'getChatMessages() can only be called on chat-type prompts',
-        { promptName: this.name, version: this.version, type: this.type }
+        { promptName: this.name, version: this.version }
       );
     }
     

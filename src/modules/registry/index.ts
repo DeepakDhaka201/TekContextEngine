@@ -43,12 +43,12 @@ export { ModuleRegistry } from './registry';
 
 // Factory functions and singleton management
 export {
-  createModuleRegistry,
+  // createModuleRegistry, // TODO: implement
   getGlobalRegistry,
   setGlobalRegistry,
   resetGlobalRegistry,
   hasGlobalRegistry,
-  createTestRegistry
+  // createTestRegistry // TODO: implement
 } from './factory';
 
 // Type definitions - all interfaces and types needed by consumers
@@ -57,11 +57,8 @@ export type {
   IModuleRegistry,
   ModuleFactory,
   ModuleRegistryConfig,
-  ModuleConfig,
   ModuleMetadata,
   ModuleStatus,
-  RegistryConfig,
-  DevelopmentConfig,
   HealthStatus,
   RegistryHealth
 } from './types';
@@ -138,18 +135,19 @@ export const DEFAULT_CONFIG = {
  * use createModuleRegistry() and initialize() separately.
  */
 export async function quickStart(
-  moduleConfigs?: Record<string, ModuleConfig>
-): Promise<IModuleRegistry> {
-  const registry = createModuleRegistry({
-    modules: moduleConfigs || {}
-  });
-  
-  await registry.initialize({
-    modules: moduleConfigs || {},
-    registry: DEFAULT_CONFIG.registry
-  });
-  
-  return registry;
+  moduleConfigs?: Record<string, any>
+): Promise<any> {
+  throw new Error('Registry factory functions not implemented yet');
+  // const registry = createModuleRegistry({
+  //   modules: moduleConfigs || {}
+  // });
+  // 
+  // await registry.initialize({
+  //   modules: moduleConfigs || {},
+  //   registry: DEFAULT_CONFIG.registry
+  // });
+  // 
+  // return registry;
 }
 
 /**
@@ -180,21 +178,22 @@ export async function quickStart(
  * ```
  */
 export async function createTestSetup(
-  moduleConfigs?: Record<string, ModuleConfig>
-): Promise<IModuleRegistry> {
-  const registry = createTestRegistry({
-    modules: moduleConfigs || {}
-  });
-  
-  await registry.initialize({
-    modules: moduleConfigs || {},
-    registry: {
-      strict: true,
-      lazyLoad: false,
-      healthCheckInterval: 0, // No health checks in tests
-      shutdownTimeout: 1000
-    }
-  });
-  
-  return registry;
+  moduleConfigs?: Record<string, any>
+): Promise<any> {
+  throw new Error('Test registry functions not implemented yet');
+  // const registry = createTestRegistry({
+  //   modules: moduleConfigs || {}
+  // });
+  // 
+  // await registry.initialize({
+  //   modules: moduleConfigs || {},
+  //   registry: {
+  //     strict: true,
+  //     lazyLoad: false,
+  //     healthCheckInterval: 0, // No health checks in tests
+  //     shutdownTimeout: 1000
+  //   }
+  // });
+  // 
+  // return registry;
 }

@@ -461,7 +461,7 @@ export class LangfuseModule implements ILangfuseModule {
         value: score.value,
         comment: score.comment,
         dataType: score.dataType,
-        configId: score.configId
+        configId: score.config
       });
       
       console.log(`✓ Scored trace ${traceId}`);
@@ -502,7 +502,7 @@ export class LangfuseModule implements ILangfuseModule {
         value: score.value,
         comment: score.comment,
         dataType: score.dataType,
-        configId: score.configId
+        configId: score.config
       });
       
       console.log(`✓ Scored generation ${generationId}`);

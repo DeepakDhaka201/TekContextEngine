@@ -279,7 +279,7 @@ function registerCoreModules(registry: IModuleRegistry): void {
     const sessionState = reg.get('sessionState');
     const streamingManager = reg.get('streamingManager');
     
-    return createHumanLoopModule(moduleConfig, { sessionState, streamingManager });
+    throw new Error('Human Loop module not implemented yet');
   });
   
   // Tools Module - Tool management and execution
@@ -292,7 +292,7 @@ function registerCoreModules(registry: IModuleRegistry): void {
     const registryConfig = (reg as any).config;
     const moduleConfig = registryConfig?.modules?.tools?.config || {};
     
-    return createToolsModule(moduleConfig);
+    throw new Error('Tools module not implemented yet');
   });
   
   console.log('✓ Core module factories registered');

@@ -367,7 +367,7 @@ export const SESSION_UTILS = {
    * @param turns - Array of conversation turns
    * @returns Conversation statistics
    */
-  calculateConversationStats(turns: ConversationTurn[]): {
+  calculateConversationStats(turns: import('../../agents/base/types').ConversationTurn[]): {
     totalTurns: number;
     userTurns: number;
     assistantTurns: number;
