@@ -174,7 +174,7 @@ export class WrappedTrace implements ITrace {
       throw new LangfuseTraceError(
         'span_creation',
         `Failed to create span: ${error instanceof Error ? error.message : String(error)}`,
-        { traceId: this.id, spanName: options.name },
+        { traceId: this.id, spanOptions: options },
         error instanceof Error ? error : undefined
       );
     }
@@ -229,7 +229,7 @@ export class WrappedTrace implements ITrace {
       throw new LangfuseTraceError(
         'span_creation',
         `Failed to create generation: ${error instanceof Error ? error.message : String(error)}`,
-        { traceId: this.id, generationName: options.name },
+        { traceId: this.id, generationOptions: options },
         error instanceof Error ? error : undefined
       );
     }
@@ -437,7 +437,7 @@ export class WrappedSpan implements ISpan {
    * @param traceId - Parent trace ID
    */
   constructor(
-    private readonly span: any, // Langfuse span type
+    private readonly langfuseSpan: any, // Langfuse span type
     private readonly contextManager: TraceContextManager,
     private readonly sanitizer: DataSanitizer,
     private readonly traceId: string
@@ -449,7 +449,7 @@ export class WrappedSpan implements ISpan {
    * Gets the span identifier.
    */
   get id(): string {
-    return this.span.id;
+    return this.langfuseSpan.id;
   }
   
   /**
@@ -475,7 +475,7 @@ export class WrappedSpan implements ISpan {
       const sanitized = this.sanitizer.sanitizeSpanOptions(options);
       
       // Create nested span
-      const nestedSpan = this.span.span(sanitized);
+      const nestedSpan = this.langfuseSpan.span(sanitized);
       
       // Wrap the span
       const wrappedSpan = new WrappedSpan(
@@ -526,7 +526,7 @@ export class WrappedSpan implements ISpan {
       const sanitized = this.sanitizer.sanitizeGenerationOptions(options);
       
       // Create generation
-      const langfuseGeneration = this.span.generation(sanitized);
+      const langfuseGeneration = this.langfuseSpan.generation(sanitized);
       
       // Wrap and return
       const wrapped = new WrappedGeneration(langfuseGeneration, this.sanitizer);
@@ -563,7 +563,7 @@ export class WrappedSpan implements ISpan {
       const sanitized = this.sanitizer.sanitizeEventOptions(options);
       
       // Create event
-      this.span.event(sanitized);
+      this.langfuseSpan.event(sanitized);
       
       console.log(`✓ Recorded event ${options.name}`);
       
@@ -600,7 +600,7 @@ export class WrappedSpan implements ISpan {
       const sanitized = data ? this.sanitizer.sanitizeSpanEnd(data) : undefined;
       
       // End underlying span
-      this.span.end(sanitized);
+      this.langfuseSpan.end(sanitized);
       
       // Mark as ended
       this.ended = true;
@@ -640,7 +640,7 @@ export class WrappedSpan implements ISpan {
       const sanitized = this.sanitizer.sanitizeSpanUpdate(data);
       
       // Update underlying span
-      this.span.update(sanitized);
+      this.langfuseSpan.update(sanitized);
       
       console.log(`✓ Updated span ${this.id}`);
       
@@ -669,9 +669,9 @@ export class WrappedSpan implements ISpan {
     try {
       const sanitizedValue = this.sanitizer.sanitizeData(value);
       
-      this.span.update({
+      this.langfuseSpan.update({
         metadata: {
-          ...this.span.metadata,
+          ...this.langfuseSpan.metadata,
           [key]: sanitizedValue
         }
       });

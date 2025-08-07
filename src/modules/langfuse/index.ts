@@ -62,8 +62,7 @@ export type {
   ISpan,
   IGeneration,
   IPrompt,
-  SanitizerConfig,
-  TraceOptions
+  SanitizerConfig
 } from './types';
 
 // Error classes
@@ -276,7 +275,7 @@ export const LANGFUSE_UTILS = {
    * @param options - Trace options to validate
    * @returns Validation result with issues
    */
-  validateTraceOptions(options: TraceOptions): {
+  validateTraceOptions(options: import('./types').TraceOptions): {
     isValid: boolean;
     issues: string[];
   } {

@@ -461,7 +461,7 @@ export class LangfuseModule implements ILangfuseModule {
         value: score.value,
         comment: score.comment,
         dataType: score.dataType,
-        config: score.config
+        configId: score.configId
       });
       
       console.log(`✓ Scored trace ${traceId}`);
@@ -502,7 +502,7 @@ export class LangfuseModule implements ILangfuseModule {
         value: score.value,
         comment: score.comment,
         dataType: score.dataType,
-        config: score.config
+        configId: score.configId
       });
       
       console.log(`✓ Scored generation ${generationId}`);
@@ -544,7 +544,7 @@ export class LangfuseModule implements ILangfuseModule {
       
       const prompt = await this.client.getPrompt(
         name,
-        version ? (version === 'latest' ? undefined : parseInt(version)) : undefined
+        version === 'latest' ? undefined : (version ? parseInt(version) : undefined)
       );
       
       const wrapped = new WrappedPrompt(prompt);
