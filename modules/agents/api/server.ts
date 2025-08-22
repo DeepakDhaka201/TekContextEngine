@@ -2,9 +2,10 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { configManager } from '../config/configManager';
 import { graphBuilder } from '../graphs/graphBuilder';
-import { 
-  CreateAgentRequest, 
-  CreateGraphRequest, 
+import {
+  AgentConfig,
+  CreateAgentRequest,
+  CreateGraphRequest,
   InvokeGraphRequest
 } from '../types';
 import { HumanMessage } from '@langchain/core/messages';
@@ -35,7 +36,7 @@ app.post('/agents/create', async (req: Request, res: Response) => {
     }
     
     // Save agent configuration
-    const filepath = await configManager.saveAgentConfig(agent);
+    const filepath : string = await configManager.saveAgentConfig(agent);
     
     res.json({
       success: true,

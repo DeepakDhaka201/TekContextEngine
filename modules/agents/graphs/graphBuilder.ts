@@ -1,6 +1,12 @@
 import { StateGraph, START, END, MemorySaver } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
-import { AgentStateAnnotation, AgentState, GraphConfig, AgentConfig } from "../types";
+import { 
+  AgentStateAnnotation, 
+  AgentState, 
+  GraphConfig, 
+  AgentConfig,
+  ConditionalEdgeConfig
+} from "../types";
 import { LLMAgentExecutor } from "../agents/llmAgentExecutor";
 import { toolRegistry } from "../tools/dummyTools";
 import { configManager } from "../config/configManager";
@@ -21,8 +27,8 @@ export class GraphBuilder {
    * Build a graph from configuration
    */
   async buildGraph(graphConfig: GraphConfig) {
-    // Initialize new state graph
-    const workflow = new StateGraph(AgentStateAnnotation);
+    // Initialize new state graph - cast to any for dynamic node names
+    const workflow = new StateGraph(AgentStateAnnotation) as any;
 
     // Add nodes to the graph
     for (const node of graphConfig.nodes) {
@@ -50,11 +56,11 @@ export class GraphBuilder {
     // Configure entry point
     if (graphConfig.entryPoint === "__start__") {
       const startEdge = graphConfig.edges.find(e => e.from === "__start__");
-      if (startEdge) {
-        workflow.addEdge(START, startEdge.to as any);
+      if (startEdge && startEdge.to !== "__end__") {
+        workflow.addEdge(START, startEdge.to);
       }
-    } else {
-      workflow.addEdge(START, graphConfig.entryPoint as any);
+    } else if (graphConfig.entryPoint !== "__end__") {
+      workflow.addEdge(START, graphConfig.entryPoint);
     }
 
     // Add edges between nodes
@@ -62,23 +68,29 @@ export class GraphBuilder {
       if (edge.from === "__start__") continue; // Already handled
       
       if (edge.to === "__end__") {
-        workflow.addEdge(edge.from as any, END);
+        workflow.addEdge(edge.from, END);
       } else {
-        workflow.addEdge(edge.from as any, edge.to as any);
+        workflow.addEdge(edge.from, edge.to);
       }
     }
 
     // Add conditional edges if configured
     if (graphConfig.conditionalEdges) {
       for (const condEdge of graphConfig.conditionalEdges) {
-        const routingFunction = this.createRoutingFunction(condEdge.conditions);
-        workflow.addConditionalEdges(condEdge.from as any, routingFunction as any);
+        const routingFunction = this.createEnhancedRoutingFunction(condEdge);
+        
+        // If pathMap is provided, use it for cleaner routing
+        if (condEdge.pathMap) {
+          workflow.addConditionalEdges(condEdge.from, routingFunction, condEdge.pathMap);
+        } else {
+          workflow.addConditionalEdges(condEdge.from, routingFunction);
+        }
       }
     }
 
     // Set finish point if specified
     if (graphConfig.finishPoint) {
-      workflow.addEdge(graphConfig.finishPoint as any, END);
+      workflow.addEdge(graphConfig.finishPoint, END);
     }
 
     // Compile graph with memory persistence
@@ -139,48 +151,126 @@ export class GraphBuilder {
   }
 
   /**
-   * Create routing function for conditional edges
+   * Create configurable routing function based on expressions defined in JSON
+   * This is fully configurable from the graph configuration
    */
-  private createRoutingFunction(conditions: { condition: string; to: string }[]) {
-    return (state: AgentState) => {
+  private createEnhancedRoutingFunction(condEdge: ConditionalEdgeConfig) {
+    return (state: AgentState): string | typeof END => {
       const lastMessage = state.messages[state.messages.length - 1];
-      if (!lastMessage || !lastMessage.content) {
-        return END;
-      }
       
-      // Normalize content for comparison
-      const content = typeof lastMessage.content === 'string' 
-        ? lastMessage.content.toLowerCase() 
-        : JSON.stringify(lastMessage.content).toLowerCase();
+      // Prepare context for expression evaluation
+      const context = this.createRoutingContext(state, lastMessage);
       
-      // Check each condition
-      for (const cond of conditions) {
-        if (cond.condition === "has_tool_calls") {
-          if ('tool_calls' in lastMessage && Array.isArray(lastMessage.tool_calls) && lastMessage.tool_calls.length > 0) {
-            return cond.to;
-          }
-        } else if (cond.condition === "contains_search") {
-          if (content.includes('search')) {
-            return cond.to;
-          }
-        } else if (cond.condition === "contains_weather") {
-          if (content.includes('weather')) {
-            return cond.to;
-          }
-        } else if (cond.condition === "default") {
-          return cond.to;
+      // Evaluate each route condition in order
+      for (const route of condEdge.routes) {
+        if (this.evaluateRoutingExpression(route.condition, context)) {
+          return condEdge.pathMap ? route.condition.expression : 
+                 (route.to === "__end__" ? END : route.to);
         }
       }
       
-      return END; // Default if no condition matches
+      // Default route if specified
+      if (condEdge.defaultTo) {
+        return condEdge.defaultTo === "__end__" ? END : condEdge.defaultTo;
+      }
+      
+      return END;
     };
+  }
+
+  /**
+   * Create context object for routing expression evaluation
+   */
+  private createRoutingContext(state: AgentState, lastMessage: any) {
+    const content = lastMessage?.content || '';
+    const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
+    
+    return {
+      // Message properties
+      message: {
+        content: contentStr,
+        contentLower: contentStr.toLowerCase(),
+        length: contentStr.length,
+        hasToolCalls: 'tool_calls' in lastMessage && 
+                     Array.isArray(lastMessage.tool_calls) && 
+                     lastMessage.tool_calls.length > 0
+      },
+      // State properties
+      state: {
+        messageCount: state.messages?.length || 0,
+        currentAgent: state.currentAgent || '',
+        sessionId: state.sessionId || ''
+      },
+      // Utility functions that can be used in expressions
+      utils: {
+        contains: (text: string, keyword: string) => text.toLowerCase().includes(keyword.toLowerCase()),
+        length: (text: string) => text.length,
+        isEmpty: (text: string) => !text || text.trim() === ''
+      }
+    };
+  }
+
+  /**
+   * Evaluate routing expressions defined in the graph configuration
+   */
+  private evaluateRoutingExpression(condition: any, context: any): boolean {
+    try {
+      if (condition.type === 'javascript') {
+        // For JavaScript expressions, create a safe evaluation environment
+        const func = new Function('context', `
+          const { message, state, utils } = context;
+          return ${condition.expression};
+        `);
+        return func(context);
+      } else {
+        // Simple expression evaluation for basic conditions
+        return this.evaluateSimpleExpression(condition.expression, context);
+      }
+    } catch (error) {
+      console.warn(`Error evaluating routing condition: ${condition.expression}`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Evaluate simple expressions for basic routing
+   */
+  private evaluateSimpleExpression(expression: string, context: any): boolean {
+    const { message } = context;
+    
+    // Simple pattern matching for common cases
+    if (expression === 'has_tool_calls') {
+      return message.hasToolCalls;
+    }
+    
+    if (expression.startsWith('contains:')) {
+      const keyword = expression.substring(9);
+      return message.contentLower.includes(keyword.toLowerCase());
+    }
+    
+    if (expression.startsWith('length_gt:')) {
+      const threshold = parseInt(expression.substring(10));
+      return message.length > threshold;
+    }
+    
+    if (expression.startsWith('length_lt:')) {
+      const threshold = parseInt(expression.substring(10));
+      return message.length < threshold;
+    }
+    
+    if (expression === 'default' || expression === 'true') {
+      return true;
+    }
+    
+    // Default: check if expression matches content as keyword
+    return message.contentLower.includes(expression.toLowerCase());
   }
 
   /**
    * Create a simple graph for testing
    */
   async createSimpleTestGraph() {
-    const workflow = new StateGraph(AgentStateAnnotation);
+    const workflow = new StateGraph(AgentStateAnnotation) as any;
     
     // Add a simple agent node
     workflow.addNode("agent", async (state: AgentState) => {
@@ -216,7 +306,7 @@ export class GraphBuilder {
     workflow.addNode("tools", toolNode);
     
     // Add routing function
-    function shouldContinue(state: AgentState) {
+    function shouldContinue(state: AgentState): string | typeof END {
       const lastMessage = state.messages[state.messages.length - 1];
       if ('tool_calls' in lastMessage && Array.isArray(lastMessage.tool_calls) && lastMessage.tool_calls.length > 0) {
         return "tools";
@@ -225,9 +315,9 @@ export class GraphBuilder {
     }
     
     // Set up edges
-    workflow.addEdge(START, "agent" as any);
-    workflow.addConditionalEdges("agent" as any, shouldContinue as any);
-    workflow.addEdge("tools" as any, "agent" as any);
+    workflow.addEdge(START, "agent");
+    workflow.addConditionalEdges("agent", shouldContinue);
+    workflow.addEdge("tools", "agent");
     
     return workflow.compile({ checkpointer: this.checkpointer });
   }

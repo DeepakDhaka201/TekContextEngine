@@ -2,9 +2,7 @@ import { AgentState, AgentConfig } from "../types";
 import { SystemMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
 import { ChatOpenAI } from "@langchain/openai";
 import { toolRegistry } from "../tools/dummyTools";
-import * as dotenv from 'dotenv';
-
-dotenv.config();
+import { secretManager } from "../config/secretManager";
 
 /**
  * LLM-based Agent Executor
@@ -18,14 +16,21 @@ export class LLMAgentExecutor {
    */
   static createAgentFunction(agentConfig: AgentConfig) {
     return async (state: AgentState): Promise<Partial<AgentState>> => {
-      // Get API key from agent config or environment
-      const apiKey = agentConfig.openAIApiKey || process.env.OPENAI_API_KEY;
-      
-      // Validate API key is present
-      if (!apiKey) {
+      // Resolve API key using SecretManager
+      let apiKey: string;
+      try {
+        // Support both new (apiKeyRef) and old (openAIApiKey) formats
+        if (agentConfig.openAIApiKey) {
+          // Backwards compatibility: direct key in config (deprecated)
+          console.warn(`Agent '${agentConfig.name}' uses deprecated direct API key. Consider using apiKeyRef instead.`);
+          apiKey = agentConfig.openAIApiKey;
+        } else {
+          // Use SecretManager to resolve key from environment
+          apiKey = secretManager.resolveAgentKey(agentConfig);
+        }
+      } catch (error) {
         throw new Error(
-          `OpenAI API key not found. Please provide it in agent config or set OPENAI_API_KEY in your .env file. ` +
-          `Agent "${agentConfig.name}" requires an LLM to function.`
+          `Failed to resolve API key for agent '${agentConfig.name}': ${error.message}`
         );
       }
 

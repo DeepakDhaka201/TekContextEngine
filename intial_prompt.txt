@@ -1,0 +1,102 @@
+Structured Prompt PDLC for AI Coding Agent: LangGraph Agentic System (TypeScript)
+1. Project Overview
+The goal of this project is to create a flexible and extensible agentic system using the langgraph-js library in a TypeScript environment. This system will allow for the dynamic creation and management of agents and their interactions through a graph-based structure defined in JSON configuration files. The system will be exposed through a simple API built with Node.js and will include basic, independent implementations for memory, session, state, and tool management.
+
+2. Core Requirements
+2.1. Module and Directory Structure
+Create a new directory named modules.
+
+Inside modules, create a TypeScript module named agents. All the core logic for agent creation, graph management, and the API will reside within this module.
+
+2.2. Agent and Graph Creation via JSON Configuration
+Agent Definition: Implement a mechanism to define individual agents using a JSON configuration. This configuration should specify the agent's name, a reference to its function (the code it executes), and an array of tools it has access to.
+
+Graph Definition: Implement a way to define the connections and workflow between agents using a JSON configuration. This file will represent the StateGraph from langgraph-js. It should define the nodes (our agents), edges (the connections between them, including conditional edges), and tool nodes.
+
+Local Storage: All JSON configuration files for agents and graphs should be stored and retrieved from the local filesystem.
+
+2.3. API for Agentic System
+Create a simple API using Node.js with Express (or a similar framework) with the following endpoints:
+
+POST /agents/create: This endpoint will accept a JSON payload defining a new agent and will create a corresponding JSON configuration file.
+
+POST /graphs/create: This endpoint will accept a JSON payload defining a new agent graph and will create the corresponding JSON configuration file.
+
+POST /graphs/invoke: This endpoint will take the ID of a saved graph and an initial input, then execute the agentic workflow defined by that graph, returning the final result.
+
+2.4. State, Memory, and Session Management
+State: Implement a basic state management system as required by langgraph-js. The state will be a simple object that is passed between nodes in the graph, defined using a TypeScript interface or type.
+
+Session: Each call to the /graphs/invoke endpoint should be treated as an independent session. There's no need for cross-session persistence at this stage.
+
+Memory: Implement a very simple memory mechanism. For now, this can be part of the state object that gets passed around, allowing agents within a single graph execution to have a shared "scratchpad". This should be independent of any long-term persistent memory.
+
+2.5. Tool Integration
+Dummy Tools: Create a few simple, dummy tool functions (e.g., a function that returns a static weather report, a mock search function). These will serve as placeholders for real tools.
+
+Tool Nodes: Agents should be able to invoke these tools. Following langgraph patterns, this will involve creating specific "tool nodes" within the graph that execute the tool and return the result.
+
+Tool Manager (Future Scope): While not required for the initial implementation, the design should keep in mind that a more dynamic tool manager will be added later to handle tool discovery and execution.
+
+3. Agent Operating Principles
+3.1. Consult Documentation Continuously
+You must heavily and continuously reference the official langgraph-js documentation for all implementation details. Prioritize solutions and patterns for implementing graphs, states, nodes, and edges as described in the official documentation.
+
+3.2. Incremental and Systematic Workflow
+One Step at a Time: Approach the development in a systematic, step-by-step manner. Do not attempt to implement all features at once.
+
+Test After Each Step: After completing each small, incremental step, you must devise and execute a simple test to verify that the new code works as expected before moving on to the next step.
+
+3.3. Task Decomposition and Prompt Generation
+Break Down Tasks: Before writing any code for a new feature or phase, first break the task down into smaller, manageable sub-tasks.
+
+Create Prompt Files: For each sub-task, create a separate, detailed prompt file (e.g., task_1a_create_directory_structure.txt). This prompt file should contain the specific instructions for that sub-task. This ensures a clear plan and allows for tasks to be executed systematically.
+
+4. Development Phases (Incremental Approach)
+Follow the operating principles above to tackle these phases. For each phase, first generate the necessary sub-task prompt files.
+
+Phase 1: Core Agent and Graph Logic
+Setup: Create the modules/agents directory structure and initialize a new Node.js/TypeScript project (npm init, tsc --init).
+
+Agent Function: Create a simple TypeScript function that can represent an agent. This will be the callable that a node in the graph executes.
+
+Dummy Tools: Create a separate file for dummy tool functions (e.g., getWeather(city: string)).
+
+Graph from Code: Initially, create a hardcoded langgraph-js StateGraph in a TypeScript script to demonstrate a simple 2-agent interaction, including a call to a dummy tool via a tool node. This will validate the understanding of langgraph-js basics.
+
+JSON Loading: Refactor the hardcoded graph to be loaded from a JSON configuration file.
+
+Phase 2: API Implementation
+Basic Server: Set up a basic web server using Node.js and Express.
+
+Implement Endpoints: Create the three API endpoints (/agents/create, /graphs/create, /graphs/invoke). The "create" endpoints will simply save the JSON to a file, and the "invoke" endpoint will load a graph configuration, compile it using langgraph-js, and run it with the provided input.
+
+Phase 3: State and Memory
+State Definition: Define a simple TypeScript interface for the state of the graph.
+
+Memory in State: Ensure that the state interface has a property (e.g., memory: string[]) that agents can read from and write to, allowing them to share information within a single run.
+
+5. Example JSON Configurations
+Agent (search_agent.json)
+{
+  "name": "search_agent",
+  "description": "An agent that searches for information.",
+  "functionReference": "agentFunctions.search",
+  "tools": ["web_search_tool"]
+}
+
+Graph (research_graph.json)
+{
+  "name": "research_graph",
+  "nodes": [
+    { "name": "search", "agent": "search_agent" },
+    { "name": "summarize", "agent": "summarize_agent" },
+    { "name": "search_tool_node", "tool": "web_search_tool" }
+  ],
+  "entryPoint": "search",
+  "edges": [
+    { "from": "search", "to": "search_tool_node" },
+    { "from": "search_tool_node", "to": "summarize" }
+  ],
+  "finishPoint": "summarize"
+}

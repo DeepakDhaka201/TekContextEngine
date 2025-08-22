@@ -45,3 +45,74 @@ Thumbs.db
 
 # Storage
 storage/
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# TypeScript build outputs
+*.tsbuildinfo
+
+# Package manager files
+pnpm-debug.log*
+lerna-debug.log*
+.yarn-integrity
+*.tgz
+
+# Cache directories
+.cache
+.parcel-cache
+.npm
+.eslintcache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Test and coverage
+test-results/
+playwright-report/
+*.lcov
+.nyc_output
+
+# Temporary folders and files
+tmp/
+temp/
+*.bak
+*.backup
+*.old
+*~
+
+# Generated agent and graph configs (may contain API keys)
+config/agents/*.json
+config/graphs/*.json
+
+# Keep example configs but ignore actual configs
+!config/agents/example_*.json
+!config/graphs/example_*.json
+
+# API keys and certificates
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+
+# Memory/session data and checkpoints
+sessions/
+checkpoints/
+
+# Any files with secrets in the name
+*secret*
+*private*
+*credential*
+
+# Docker override files
+docker-compose.override.yml
+
+# Local development files
+.local
+
+# Generated documentation
+docs/generated/

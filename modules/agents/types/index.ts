@@ -1,5 +1,6 @@
 import { Annotation } from "@langchain/langgraph";
 import { BaseMessage } from "@langchain/core/messages";
+import { END } from "@langchain/langgraph";
 
 /**
  * Agent State Definition
@@ -38,7 +39,9 @@ export interface AgentConfig {
   description: string;
   systemPrompt: string;  // The system prompt that defines the agent's behavior
   tools: string[];
-  openAIApiKey?: string;  // OpenAI API key for this agent
+  apiKeyRef?: string;     // Reference to environment variable containing API key
+  // Deprecated - use apiKeyRef instead
+  openAIApiKey?: string;  // Direct API key (deprecated, for backwards compatibility)
   // Optional LLM configuration
   llmConfig?: {
     model?: string;  // e.g., "gpt-4", "gpt-3.5-turbo"
@@ -66,20 +69,42 @@ export interface GraphEdge {
 }
 
 /**
+ * Routing Expression Types
+ */
+export interface RoutingExpression {
+  type: 'javascript' | 'simple'; // Expression type
+  expression: string; // The actual expression/condition
+  description?: string; // Human readable description
+}
+
+/**
+ * Conditional Route Configuration
+ */
+export interface ConditionalRoute {
+  condition: RoutingExpression;
+  to: string; // Target node
+}
+
+/**
+ * Conditional Edge Configuration
+ */
+export interface ConditionalEdgeConfig {
+  from: string;
+  routes: ConditionalRoute[];
+  defaultTo?: string; // Default route if no conditions match
+  pathMap?: Record<string, string>; // Maps function outputs to node names
+}
+
+/**
  * Graph Configuration from JSON
  */
 export interface GraphConfig {
   name: string;
+  description?: string;
   nodes: GraphNode[];
   entryPoint: string;
   edges: GraphEdge[];
-  conditionalEdges?: {
-    from: string;
-    conditions: {
-      condition: string;
-      to: string;
-    }[];
-  }[];
+  conditionalEdges?: ConditionalEdgeConfig[];
   finishPoint?: string;
 }
 
@@ -127,3 +152,11 @@ export interface CleanInvokeResponse {
     messageCount: number;
   };
 }
+
+// Graph Node Types for proper TypeScript typing
+export type NodeName = string;
+export type EdgeTarget = NodeName | typeof END;
+export type EdgeSource = NodeName | "__start__";
+
+// Routing function return type
+export type RoutingResult = NodeName | typeof END | string;
