@@ -11,7 +11,9 @@
       "Bash(npm run lint)",
       "Bash(find:*)",
       "Bash(npm run start:dev:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(npm init:*)",
+      "Bash(npm run:*)"
     ],
     "deny": []
   }
