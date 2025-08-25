@@ -156,15 +156,6 @@ export class JobWorkerService implements OnModuleInit {
   }
 
   /**
-   * Get queue position for a job (if queued)
-   */
-  getQueuePosition(_jobId: string): number | null {
-    // This would require extending the worker pool to track queue positions
-    // For now, return null (not implemented)
-    return null;
-  }
-
-  /**
    * Cancel a queued job (if possible)
    */
   async cancelQueuedJob(jobId: string): Promise<boolean> {

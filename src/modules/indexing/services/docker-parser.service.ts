@@ -34,7 +34,7 @@ export class DockerParserService {
     const { dockerImage, sourcePath, outputPath, options: dockerOptions = [], timeout = 600000 } = options;
 
     // Use a unique container name so we can copy files out before removal
-    const containerName = `java-parser-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    const containerName = `language-parser-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
     this.logger.debug(`[DOCKER-PARSER] Starting parser execution`, {
       dockerImage,

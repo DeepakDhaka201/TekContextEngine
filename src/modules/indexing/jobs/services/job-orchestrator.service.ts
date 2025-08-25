@@ -5,21 +5,20 @@ import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { TekProject, Codebase } from '@/entities';
 import { IndexJob, IndexJobStatus, IndexJobType } from '../../entities/index-job.entity';
-import { JobContext, TaskExecutionResult } from '../interfaces/job-context.interface';
+import { JobContext } from '../interfaces/job-context.interface';
 import { ITask } from '../interfaces/base-task.interface';
 import { GitSyncTask } from '../tasks/git-sync.task';
 import { CodeParsingTask } from '../tasks/code-parsing.task';
 import { GraphUpdateTask } from '../tasks/graph-update.task';
 import { CleanupTask } from '../tasks/cleanup.task';
-import { TaskConfigService } from '../../config/task-config.service';
 import { JobWorkerService } from './job-worker.service';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 
 export interface CreateJobRequest {
-  projectId: string;
-  codebaseId?: string;
+  project: TekProject;
+  codebase?: Codebase;
   type: IndexJobType;
   description?: string;
   baseCommit?: string;
@@ -43,12 +42,7 @@ export class JobOrchestratorService {
   constructor(
     @InjectRepository(IndexJob)
     private jobRepository: Repository<IndexJob>,
-    @InjectRepository(TekProject)
-    private projectRepository: Repository<TekProject>,
-    @InjectRepository(Codebase)
-    private codebaseRepository: Repository<Codebase>,
     private configService: ConfigService,
-    private taskConfigService: TaskConfigService,
     private jobWorkerService: JobWorkerService,
     private gitSyncTask: GitSyncTask,
     private codeParsingTask: CodeParsingTask,
@@ -62,30 +56,7 @@ export class JobOrchestratorService {
    * Create and start a new job
    */
   async createJob(request: CreateJobRequest): Promise<IndexJob> {
-    this.logger.log(`[JOB-ORCHESTRATOR] Creating job: ${request.type} for project ${request.projectId}`);
-
-    // Validate project exists
-    const project = await this.projectRepository.findOne({
-      where: { id: request.projectId },
-    });
-    if (!project) {
-      throw new Error(`Project ${request.projectId} not found`);
-    }
-
-    // Validate codebase if provided
-    let codebase: Codebase | undefined;
-    if (request.codebaseId) {
-      codebase = await this.codebaseRepository.findOne({
-        where: { id: request.codebaseId },
-        relations: ['project'],
-      });
-      if (!codebase) {
-        throw new Error(`Codebase ${request.codebaseId} not found`);
-      }
-      if (codebase.project.id !== request.projectId) {
-        throw new Error(`Codebase ${request.codebaseId} does not belong to project ${request.projectId}`);
-      }
-    }
+    this.logger.log(`[JOB-ORCHESTRATOR] Creating job: ${request.type} for project ${request.project.id}`);
 
     // Create job entity
     const job = new IndexJob();
@@ -94,8 +65,8 @@ export class JobOrchestratorService {
     job.priority = request.priority || 0;
     job.description = request.description;
     job.metadata = this.createInitialMetadata(request);
-    job.project = project;
-    job.codebase = codebase;
+    job.project = request.project;
+    job.codebase = request.codebase;
 
     const savedJob = await this.jobRepository.save(job);
 
@@ -140,96 +111,81 @@ export class JobOrchestratorService {
         relations: ['project', 'codebase'],
       });
 
-      if (!job) {
+      if (job) {
+        this.logger.log(`Starting job execution: ${jobId}`);
+        await this.updateJobStatus(job, IndexJobStatus.RUNNING);
+        const context = await this.createJobContext(job);
+        const tasks = this.getTaskInstancesForJobType(job.type);
+        for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
+          const task = tasks[taskIndex];
+          const taskNumber = taskIndex + 1;
+
+          if (!task.shouldExecute(context)) {
+            this.logger.debug(`Skipping task: ${task.name} (conditions not met)`);
+            continue;
+          }
+
+          tasksExecuted++;
+          this.logger.log(`Executing task ${taskNumber}/${tasks.length}: ${task.name}`);
+
+          try {
+            // Update current task
+            job.currentTask = task.name;
+            job.progress = Math.round((tasksExecuted / tasks.length) * 100);
+            await this.jobRepository.save(job);
+
+            // Execute task
+            const result = await task.execute(context);
+
+            if (result.success) {
+              tasksSucceeded++;
+              this.logger.log(`Task completed successfully: ${task.name}`);
+            } else {
+              tasksFailed++;
+              finalError = result.error;
+              this.logger.error(`Task failed: ${task.name}`, {error: result.error});
+              break;
+            }
+
+          } catch (error) {
+            tasksFailed++;
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            finalError = errorMessage;
+            this.logger.error(`Task execution error: ${task.name}`, {error: errorMessage});
+            break;
+          } finally {
+            // Always run task cleanup
+            try {
+              await task.cleanup(context);
+            } catch (cleanupError) {
+              this.logger.warn(`Task cleanup failed: ${task.name}`, {error: cleanupError});
+            }
+          }
+        }
+        const finalStatus = tasksFailed > 0 ? IndexJobStatus.FAILED : IndexJobStatus.COMPLETED;
+        job.progress = finalStatus === IndexJobStatus.COMPLETED ? 100 : job.progress;
+        await this.updateJobStatus(job, finalStatus, finalError);
+        await this.cleanupJobContext(context);
+        const duration = Date.now() - startTime;
+        this.logger.log(`Job ${jobId} execution completed`, {
+          status: finalStatus,
+          duration,
+          tasksExecuted,
+          tasksSucceeded,
+          tasksFailed,
+        });
+        return {
+          jobId,
+          status: finalStatus,
+          duration,
+          tasksExecuted,
+          tasksSucceeded,
+          tasksFailed,
+          finalError,
+        };
+      } else {
         throw new Error(`Job ${jobId} not found`);
       }
-
-      this.logger.log(`Starting job execution: ${jobId}`);
-
-      // Update job status to running
-      await this.updateJobStatus(job, IndexJobStatus.RUNNING);
-
-      // Create job context
-      const context = await this.createJobContext(job);
-
-      // Get task instances based on job type
-      const tasks = this.getTaskInstancesForJobType(job.type);
-
-      // Execute tasks in order
-      for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
-        const task = tasks[taskIndex];
-        const taskNumber = taskIndex + 1;
-
-        if (!task.shouldExecute(context)) {
-          this.logger.debug(`Skipping task: ${task.name} (conditions not met)`);
-          continue;
-        }
-
-        tasksExecuted++;
-        this.logger.log(`Executing task ${taskNumber}/${tasks.length}: ${task.name}`);
-
-        try {
-          // Update current task
-          job.currentTask = task.name;
-          job.progress = Math.round((tasksExecuted / tasks.length) * 100);
-          await this.jobRepository.save(job);
-
-          // Execute task
-          const result = await task.execute(context);
-
-          if (result.success) {
-            tasksSucceeded++;
-            this.logger.log(`Task completed successfully: ${task.name}`);
-          } else {
-            tasksFailed++;
-            finalError = result.error;
-            this.logger.error(`Task failed: ${task.name}`, { error: result.error });
-            break;
-          }
-
-        } catch (error) {
-          tasksFailed++;
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          finalError = errorMessage;
-          this.logger.error(`Task execution error: ${task.name}`, { error: errorMessage });
-          break;
-        } finally {
-          // Always run task cleanup
-          try {
-            await task.cleanup(context);
-          } catch (cleanupError) {
-            this.logger.warn(`Task cleanup failed: ${task.name}`, { error: cleanupError });
-          }
-        }
-      }
-
-      // Update final job status
-      const finalStatus = tasksFailed > 0 ? IndexJobStatus.FAILED : IndexJobStatus.COMPLETED;
-      job.progress = finalStatus === IndexJobStatus.COMPLETED ? 100 : job.progress;
-      await this.updateJobStatus(job, finalStatus, finalError);
-
-      // Final context cleanup
-      await this.cleanupJobContext(context);
-
-      const duration = Date.now() - startTime;
-
-      this.logger.log(`Job ${jobId} execution completed`, {
-        status: finalStatus,
-        duration,
-        tasksExecuted,
-        tasksSucceeded,
-        tasksFailed,
-      });
-
-      return {
-        jobId,
-        status: finalStatus,
-        duration,
-        tasksExecuted,
-        tasksSucceeded,
-        tasksFailed,
-        finalError,
-      };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -414,7 +370,6 @@ export class JobOrchestratorService {
   private createInitialMetadata(request?: CreateJobRequest): any {
     const metadata: any = {
       filesProcessed: 0,
-      symbolsExtracted: 0,
       duration: 0,
       tasks: {},
       metrics: {
@@ -433,19 +388,5 @@ export class JobOrchestratorService {
     }
 
     return metadata;
-  }
-
-  /**
-   * Get all active jobs being processed
-   */
-  getActiveJobs(): string[] {
-    return Array.from(this.runningJobs.keys());
-  }
-
-  /**
-   * Check if a specific job is currently active
-   */
-  isJobActive(jobId: string): boolean {
-    return this.runningJobs.has(jobId);
   }
 }

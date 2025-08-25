@@ -4,7 +4,7 @@ import { BaseTask } from '../interfaces/base-task.interface';
 import { JobContext, TaskExecutionResult } from '../interfaces/job-context.interface';
 import { GraphUpdateConfig } from '../../entities/index-job.entity';
 import { TaskConfigService } from '../../config/task-config.service';
-import { StandardizedParserOutput, StandardizedFile, StandardizedSymbol } from '../../services/parser-output-transformer.service';
+import { StandardizedGraphOutput } from '../../services/parser-output-transformer.service';
 import { GraphService } from '../../services/graph.service';
 
 @Injectable()
@@ -70,38 +70,39 @@ export class GraphUpdateTask extends BaseTask {
       // Initialize graph database
       await this.graphService.initializeGraph(config);
 
-      // Process parsing results
-      const parsingResults: StandardizedParserOutput[] = codeParsingData.parsingResults;
+      // Process parsing results - now expecting StandardizedGraphOutput
+      const parsingResults: StandardizedGraphOutput[] = codeParsingData.parsingResults;
 
-      // Flatten all files from all parser outputs
-      const allFiles: StandardizedFile[] = [];
+      // Combine all nodes and relationships from all parser outputs
+      const allNodes = [];
+      const allRelationships = [];
+
       for (const parserOutput of parsingResults) {
-        allFiles.push(...parserOutput.files);
+        allNodes.push(...parserOutput.nodes);
+        allRelationships.push(...parserOutput.relationships);
       }
 
-      context.logger.info(`[${jobId}] [GRAPH-UPDATE] Total files from parser: ${allFiles.length}`);
+      context.logger.info(`[${jobId}] [GRAPH-UPDATE] Total nodes from parser: ${allNodes.length}`);
+      context.logger.info(`[${jobId}] [GRAPH-UPDATE] Total relationships from parser: ${allRelationships.length}`);
       context.logger.info(`[${jobId}] [GRAPH-UPDATE] Parser results structure:`, {
         parsingResultsCount: parsingResults.length,
         firstResultStructure: parsingResults[0] ? {
           hasMetadata: !!parsingResults[0].metadata,
-          hasFiles: !!parsingResults[0].files,
-          filesCount: parsingResults[0].files?.length || 0,
-          metadataSymbols: parsingResults[0].metadata?.totalSymbols || 0
+          hasNodes: !!parsingResults[0].nodes,
+          nodesCount: parsingResults[0].nodes?.length || 0,
+          relationshipsCount: parsingResults[0].relationships?.length || 0,
+          totalNodes: parsingResults[0].metadata?.totalNodes || 0
         } : 'No results'
       });
 
-      context.logger.info(`[${jobId}] [GRAPH-UPDATE] Sample file structure:`, allFiles[0] ? {
-        path: allFiles[0].path,
-        symbolsCount: allFiles[0].symbols?.length || 0,
-        hasSymbols: !!allFiles[0].symbols,
-        symbolsArray: allFiles[0].symbols,
-        fileStructure: Object.keys(allFiles[0])
-      } : 'No files');
+      context.logger.info(`[${jobId}] [GRAPH-UPDATE] Sample node structure:`, allNodes[0] ? {
+        id: allNodes[0].id,
+        nodeType: allNodes[0].nodeType,
+        propertiesKeys: Object.keys(allNodes[0].properties || {}),
+        nodeStructure: Object.keys(allNodes[0])
+      } : 'No nodes');
 
-      // Filter files that have symbols (skip empty files)
-      const filesWithSymbols = allFiles.filter(file => file.symbols && file.symbols.length > 0);
-
-      context.logger.info(`[${jobId}] [GRAPH-UPDATE] Processing ${filesWithSymbols.length} files with symbols in batches of ${config.batchSize}`);
+      context.logger.info(`[${jobId}] [GRAPH-UPDATE] Processing ${allNodes.length} nodes and ${allRelationships.length} relationships in batches of ${config.batchSize}`);
 
       // Get codebase ID from job context
       if (!context.codebase) {
@@ -109,10 +110,11 @@ export class GraphUpdateTask extends BaseTask {
       }
       const codebaseId = context.codebase.id;
 
-      // Update the graph with parsed files
+      // Update the graph with parsed nodes and relationships
       const result = await this.graphService.updateCodebaseGraph(
         codebaseId,
-        filesWithSymbols,
+        allNodes,
+        allRelationships,
         config
       );
 
@@ -121,7 +123,8 @@ export class GraphUpdateTask extends BaseTask {
 
       context.logger.info(`[${jobId}] [GRAPH-UPDATE] Graph update completed successfully`, {
         ...result,
-        filesProcessed: filesWithSymbols.length
+        nodesProcessed: allNodes.length,
+        relationshipsProcessed: allRelationships.length
       });
 
       return {

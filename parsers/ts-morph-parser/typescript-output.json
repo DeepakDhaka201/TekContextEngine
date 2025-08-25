@@ -1,0 +1,2692 @@
+{
+  "metadata": {
+    "codebaseName": "test-project",
+    "version": "1.0.0",
+    "parserVersion": "2.0.0",
+    "parseTime": "2025-08-06T17:23:07.281Z",
+    "parsingDurationMs": 276,
+    "framework": "react",
+    "detectedFrameworks": [
+      "react"
+    ],
+    "statistics": {
+      "totalFiles": 9,
+      "totalLines": 1497,
+      "totalClasses": 4,
+      "totalInterfaces": 14,
+      "totalMethods": 39,
+      "totalFields": 0,
+      "complexity": 95,
+      "testCoverage": 0,
+      "duplicateLines": 0,
+      "averageMethodComplexity": 2.4358974358974357,
+      "maxMethodComplexity": 11,
+      "linesOfCode": 1047,
+      "commentLines": 299,
+      "blankLines": 151
+    },
+    "configuration": {},
+    "errors": null,
+    "warnings": null
+  },
+  "codebaseName": "test-project",
+  "files": [
+    {
+      "path": "/src/components/UserCard.tsx",
+      "fileName": "UserCard.tsx",
+      "packageName": ".src.components",
+      "fileExtension": ".tsx",
+      "fileSize": 4028,
+      "checksum": "131c2e9684be349d683595dd1d6f282a",
+      "lastModified": 1754500987329,
+      "isTestFile": false,
+      "sourceCode": "import React, { useState, useCallback } from 'react';\nimport { User, UserRole } from '../types/user';\n\ninterface UserCardProps {\n  user: User;\n  onEdit?: (user: User) => void;\n  onDelete?: (userId: string) => void;\n  className?: string;\n  showActions?: boolean;\n}\n\n/**\n * UserCard component for displaying user information\n */\nexport const UserCard: React.FC<UserCardProps> = ({\n  user,\n  onEdit,\n  onDelete,\n  className = '',\n  showActions = true\n}) => {\n  const [isLoading, setIsLoading] = useState(false);\n  const [isExpanded, setIsExpanded] = useState(false);\n\n  const handleEdit = useCallback(() => {\n    if (onEdit) {\n      onEdit(user);\n    }\n  }, [user, onEdit]);\n\n  const handleDelete = useCallback(async () => {\n    if (onDelete && window.confirm('Are you sure you want to delete this user?')) {\n      setIsLoading(true);\n      try {\n        await onDelete(user.id);\n      } finally {\n        setIsLoading(false);\n      }\n    }\n  }, [user.id, onDelete]);\n\n  const toggleExpanded = useCallback(() => {\n    setIsExpanded(prev => !prev);\n  }, []);\n\n  const getRoleColor = (role: UserRole): string => {\n    switch (role) {\n      case UserRole.ADMIN:\n        return 'bg-red-100 text-red-800';\n      case UserRole.MODERATOR:\n        return 'bg-blue-100 text-blue-800';\n      case UserRole.USER:\n        return 'bg-green-100 text-green-800';\n      case UserRole.GUEST:\n        return 'bg-gray-100 text-gray-800';\n      default:\n        return 'bg-gray-100 text-gray-800';\n    }\n  };\n\n  return (\n    <div className={`bg-white rounded-lg shadow-md p-6 ${className}`}>\n      <div className=\"flex items-center justify-between\">\n        <div className=\"flex items-center space-x-4\">\n          <div className=\"w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center\">\n            <span className=\"text-lg font-semibold text-gray-600\">\n              {user.name.charAt(0).toUpperCase()}\n            </span>\n          </div>\n          \n          <div>\n            <h3 className=\"text-lg font-semibold text-gray-900\">{user.name}</h3>\n            <p className=\"text-sm text-gray-600\">{user.email}</p>\n            <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getRoleColor(user.role)}`}>\n              {user.role}\n            </span>\n          </div>\n        </div>\n\n        <div className=\"flex items-center space-x-2\">\n          <button\n            onClick={toggleExpanded}\n            className=\"text-gray-400 hover:text-gray-600\"\n            aria-label={isExpanded ? 'Collapse' : 'Expand'}\n          >\n            {isExpanded ? '▲' : '▼'}\n          </button>\n          \n          {showActions && (\n            <>\n              <button\n                onClick={handleEdit}\n                disabled={isLoading}\n                className=\"px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50\"\n              >\n                Edit\n              </button>\n              \n              <button\n                onClick={handleDelete}\n                disabled={isLoading}\n                className=\"px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50\"\n              >\n                {isLoading ? 'Deleting...' : 'Delete'}\n              </button>\n            </>\n          )}\n        </div>\n      </div>\n\n      {isExpanded && (\n        <div className=\"mt-4 pt-4 border-t border-gray-200\">\n          <div className=\"grid grid-cols-2 gap-4 text-sm\">\n            <div>\n              <span className=\"font-medium text-gray-700\">Created:</span>\n              <span className=\"ml-2 text-gray-600\">\n                {new Date(user.createdAt).toLocaleDateString()}\n              </span>\n            </div>\n            <div>\n              <span className=\"font-medium text-gray-700\">Updated:</span>\n              <span className=\"ml-2 text-gray-600\">\n                {new Date(user.updatedAt).toLocaleDateString()}\n              </span>\n            </div>\n          </div>\n        </div>\n      )}\n    </div>\n  );\n};\n\nexport default UserCard;\n"
+    },
+    {
+      "path": "/src/components/UserList.tsx",
+      "fileName": "UserList.tsx",
+      "packageName": ".src.components",
+      "fileExtension": ".tsx",
+      "fileSize": 6996,
+      "checksum": "07b776d5f2949c91d7351a78ce3440e4",
+      "lastModified": 1754500987513,
+      "isTestFile": false,
+      "sourceCode": "import React, { useState, useEffect, useMemo } from 'react';\nimport { User, UserRole } from '../types/user';\nimport { UserCard } from './UserCard';\nimport { UserService } from '../services/UserService';\n\ninterface UserListProps {\n  userService: UserService;\n  initialUsers?: User[];\n  showFilters?: boolean;\n  pageSize?: number;\n}\n\n/**\n * UserList component for displaying and managing a list of users\n */\nexport const UserList: React.FC<UserListProps> = ({\n  userService,\n  initialUsers = [],\n  showFilters = true,\n  pageSize = 10\n}) => {\n  const [users, setUsers] = useState<User[]>(initialUsers);\n  const [loading, setLoading] = useState(false);\n  const [error, setError] = useState<string | null>(null);\n  const [currentPage, setCurrentPage] = useState(1);\n  const [totalUsers, setTotalUsers] = useState(0);\n  const [searchQuery, setSearchQuery] = useState('');\n  const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');\n\n  // Load users on component mount and when filters change\n  useEffect(() => {\n    loadUsers();\n  }, [currentPage, roleFilter]);\n\n  // Search users when search query changes\n  useEffect(() => {\n    if (searchQuery.trim()) {\n      searchUsers();\n    } else {\n      loadUsers();\n    }\n  }, [searchQuery]);\n\n  const loadUsers = async () => {\n    setLoading(true);\n    setError(null);\n    \n    try {\n      if (roleFilter === 'all') {\n        const response = await userService.getAllUsers(currentPage, pageSize);\n        setUsers(response.users);\n        setTotalUsers(response.total);\n      } else {\n        const roleUsers = await userService.getUsersByRole(roleFilter);\n        setUsers(roleUsers);\n        setTotalUsers(roleUsers.length);\n      }\n    } catch (err) {\n      setError(err instanceof Error ? err.message : 'Failed to load users');\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  const searchUsers = async () => {\n    if (!searchQuery.trim()) return;\n    \n    setLoading(true);\n    setError(null);\n    \n    try {\n      const searchResults = await userService.searchUsers(searchQuery);\n      setUsers(searchResults);\n      setTotalUsers(searchResults.length);\n    } catch (err) {\n      setError(err instanceof Error ? err.message : 'Failed to search users');\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  const handleEditUser = (user: User) => {\n    // In a real app, this would open an edit modal or navigate to edit page\n    console.log('Edit user:', user);\n  };\n\n  const handleDeleteUser = async (userId: string) => {\n    try {\n      await userService.deleteUser(userId);\n      setUsers(prev => prev.filter(user => user.id !== userId));\n      setTotalUsers(prev => prev - 1);\n    } catch (err) {\n      setError(err instanceof Error ? err.message : 'Failed to delete user');\n    }\n  };\n\n  const handlePageChange = (page: number) => {\n    setCurrentPage(page);\n  };\n\n  const handleRoleFilterChange = (role: UserRole | 'all') => {\n    setRoleFilter(role);\n    setCurrentPage(1); // Reset to first page when filter changes\n  };\n\n  // Memoized filtered users for performance\n  const filteredUsers = useMemo(() => {\n    return users.filter(user => {\n      const matchesSearch = !searchQuery || \n        user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||\n        user.email.toLowerCase().includes(searchQuery.toLowerCase());\n      \n      const matchesRole = roleFilter === 'all' || user.role === roleFilter;\n      \n      return matchesSearch && matchesRole;\n    });\n  }, [users, searchQuery, roleFilter]);\n\n  const totalPages = Math.ceil(totalUsers / pageSize);\n\n  if (error) {\n    return (\n      <div className=\"bg-red-50 border border-red-200 rounded-md p-4\">\n        <div className=\"text-red-800\">\n          <strong>Error:</strong> {error}\n        </div>\n        <button\n          onClick={loadUsers}\n          className=\"mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700\"\n        >\n          Retry\n        </button>\n      </div>\n    );\n  }\n\n  return (\n    <div className=\"space-y-6\">\n      {/* Filters */}\n      {showFilters && (\n        <div className=\"bg-gray-50 p-4 rounded-lg\">\n          <div className=\"flex flex-col sm:flex-row gap-4\">\n            {/* Search */}\n            <div className=\"flex-1\">\n              <input\n                type=\"text\"\n                placeholder=\"Search users by name or email...\"\n                value={searchQuery}\n                onChange={(e) => setSearchQuery(e.target.value)}\n                className=\"w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500\"\n              />\n            </div>\n            \n            {/* Role Filter */}\n            <div>\n              <select\n                value={roleFilter}\n                onChange={(e) => handleRoleFilterChange(e.target.value as UserRole | 'all')}\n                className=\"px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500\"\n              >\n                <option value=\"all\">All Roles</option>\n                <option value={UserRole.ADMIN}>Admin</option>\n                <option value={UserRole.MODERATOR}>Moderator</option>\n                <option value={UserRole.USER}>User</option>\n                <option value={UserRole.GUEST}>Guest</option>\n              </select>\n            </div>\n          </div>\n        </div>\n      )}\n\n      {/* Loading State */}\n      {loading && (\n        <div className=\"flex justify-center py-8\">\n          <div className=\"animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600\"></div>\n        </div>\n      )}\n\n      {/* User Cards */}\n      {!loading && (\n        <div className=\"grid gap-4 md:grid-cols-2 lg:grid-cols-3\">\n          {filteredUsers.map(user => (\n            <UserCard\n              key={user.id}\n              user={user}\n              onEdit={handleEditUser}\n              onDelete={handleDeleteUser}\n            />\n          ))}\n        </div>\n      )}\n\n      {/* Empty State */}\n      {!loading && filteredUsers.length === 0 && (\n        <div className=\"text-center py-8\">\n          <p className=\"text-gray-500\">No users found</p>\n        </div>\n      )}\n\n      {/* Pagination */}\n      {totalPages > 1 && (\n        <div className=\"flex justify-center space-x-2\">\n          <button\n            onClick={() => handlePageChange(currentPage - 1)}\n            disabled={currentPage === 1}\n            className=\"px-3 py-2 border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-50\"\n          >\n            Previous\n          </button>\n          \n          <span className=\"px-3 py-2 text-sm text-gray-700\">\n            Page {currentPage} of {totalPages}\n          </span>\n          \n          <button\n            onClick={() => handlePageChange(currentPage + 1)}\n            disabled={currentPage === totalPages}\n            className=\"px-3 py-2 border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-50\"\n          >\n            Next\n          </button>\n        </div>\n      )}\n    </div>\n  );\n};\n\nexport default UserList;\n"
+    },
+    {
+      "path": "/src/hooks/useUsers.ts",
+      "fileName": "useUsers.ts",
+      "packageName": ".src.hooks",
+      "fileExtension": ".ts",
+      "fileSize": 6020,
+      "checksum": "b03aa41786414173fefe87f40c0dd841",
+      "lastModified": 1754500987514,
+      "isTestFile": false,
+      "sourceCode": "import { useState, useEffect, useCallback } from 'react';\nimport { User, UserCreateRequest, UserUpdateRequest, UserRole } from '../types/user';\nimport { UserService } from '../services/UserService';\n\ninterface UseUsersOptions {\n  userService: UserService;\n  initialPage?: number;\n  pageSize?: number;\n  autoLoad?: boolean;\n}\n\ninterface UseUsersReturn {\n  users: User[];\n  loading: boolean;\n  error: string | null;\n  currentPage: number;\n  totalUsers: number;\n  totalPages: number;\n  \n  // Actions\n  loadUsers: () => Promise<void>;\n  createUser: (userData: UserCreateRequest) => Promise<User>;\n  updateUser: (id: string, userData: UserUpdateRequest) => Promise<User>;\n  deleteUser: (id: string) => Promise<void>;\n  searchUsers: (query: string) => Promise<User[]>;\n  getUsersByRole: (role: UserRole) => Promise<User[]>;\n  \n  // Pagination\n  goToPage: (page: number) => void;\n  nextPage: () => void;\n  prevPage: () => void;\n  \n  // Utilities\n  refreshUsers: () => Promise<void>;\n  clearError: () => void;\n}\n\n/**\n * Custom hook for managing users state and operations\n */\nexport const useUsers = ({\n  userService,\n  initialPage = 1,\n  pageSize = 10,\n  autoLoad = true\n}: UseUsersOptions): UseUsersReturn => {\n  const [users, setUsers] = useState<User[]>([]);\n  const [loading, setLoading] = useState(false);\n  const [error, setError] = useState<string | null>(null);\n  const [currentPage, setCurrentPage] = useState(initialPage);\n  const [totalUsers, setTotalUsers] = useState(0);\n\n  const totalPages = Math.ceil(totalUsers / pageSize);\n\n  // Load users with pagination\n  const loadUsers = useCallback(async () => {\n    setLoading(true);\n    setError(null);\n    \n    try {\n      const response = await userService.getAllUsers(currentPage, pageSize);\n      setUsers(response.users);\n      setTotalUsers(response.total);\n    } catch (err) {\n      const errorMessage = err instanceof Error ? err.message : 'Failed to load users';\n      setError(errorMessage);\n      console.error('Error loading users:', err);\n    } finally {\n      setLoading(false);\n    }\n  }, [userService, currentPage, pageSize]);\n\n  // Create a new user\n  const createUser = useCallback(async (userData: UserCreateRequest): Promise<User> => {\n    setLoading(true);\n    setError(null);\n    \n    try {\n      const newUser = await userService.createUser(userData);\n      setUsers(prev => [newUser, ...prev]);\n      setTotalUsers(prev => prev + 1);\n      return newUser;\n    } catch (err) {\n      const errorMessage = err instanceof Error ? err.message : 'Failed to create user';\n      setError(errorMessage);\n      throw err;\n    } finally {\n      setLoading(false);\n    }\n  }, [userService]);\n\n  // Update an existing user\n  const updateUser = useCallback(async (id: string, userData: UserUpdateRequest): Promise<User> => {\n    setLoading(true);\n    setError(null);\n    \n    try {\n      const updatedUser = await userService.updateUser(id, userData);\n      setUsers(prev => prev.map(user => user.id === id ? updatedUser : user));\n      return updatedUser;\n    } catch (err) {\n      const errorMessage = err instanceof Error ? err.message : 'Failed to update user';\n      setError(errorMessage);\n      throw err;\n    } finally {\n      setLoading(false);\n    }\n  }, [userService]);\n\n  // Delete a user\n  const deleteUser = useCallback(async (id: string): Promise<void> => {\n    setLoading(true);\n    setError(null);\n    \n    try {\n      await userService.deleteUser(id);\n      setUsers(prev => prev.filter(user => user.id !== id));\n      setTotalUsers(prev => prev - 1);\n    } catch (err) {\n      const errorMessage = err instanceof Error ? err.message : 'Failed to delete user';\n      setError(errorMessage);\n      throw err;\n    } finally {\n      setLoading(false);\n    }\n  }, [userService]);\n\n  // Search users\n  const searchUsers = useCallback(async (query: string): Promise<User[]> => {\n    setLoading(true);\n    setError(null);\n    \n    try {\n      const searchResults = await userService.searchUsers(query);\n      setUsers(searchResults);\n      setTotalUsers(searchResults.length);\n      return searchResults;\n    } catch (err) {\n      const errorMessage = err instanceof Error ? err.message : 'Failed to search users';\n      setError(errorMessage);\n      throw err;\n    } finally {\n      setLoading(false);\n    }\n  }, [userService]);\n\n  // Get users by role\n  const getUsersByRole = useCallback(async (role: UserRole): Promise<User[]> => {\n    setLoading(true);\n    setError(null);\n    \n    try {\n      const roleUsers = await userService.getUsersByRole(role);\n      setUsers(roleUsers);\n      setTotalUsers(roleUsers.length);\n      return roleUsers;\n    } catch (err) {\n      const errorMessage = err instanceof Error ? err.message : 'Failed to get users by role';\n      setError(errorMessage);\n      throw err;\n    } finally {\n      setLoading(false);\n    }\n  }, [userService]);\n\n  // Pagination functions\n  const goToPage = useCallback((page: number) => {\n    if (page >= 1 && page <= totalPages) {\n      setCurrentPage(page);\n    }\n  }, [totalPages]);\n\n  const nextPage = useCallback(() => {\n    if (currentPage < totalPages) {\n      setCurrentPage(prev => prev + 1);\n    }\n  }, [currentPage, totalPages]);\n\n  const prevPage = useCallback(() => {\n    if (currentPage > 1) {\n      setCurrentPage(prev => prev - 1);\n    }\n  }, [currentPage]);\n\n  // Refresh users (reload current page)\n  const refreshUsers = useCallback(async () => {\n    await loadUsers();\n  }, [loadUsers]);\n\n  // Clear error\n  const clearError = useCallback(() => {\n    setError(null);\n  }, []);\n\n  // Auto-load users on mount and page change\n  useEffect(() => {\n    if (autoLoad) {\n      loadUsers();\n    }\n  }, [loadUsers, autoLoad]);\n\n  return {\n    users,\n    loading,\n    error,\n    currentPage,\n    totalUsers,\n    totalPages,\n    \n    // Actions\n    loadUsers,\n    createUser,\n    updateUser,\n    deleteUser,\n    searchUsers,\n    getUsersByRole,\n    \n    // Pagination\n    goToPage,\n    nextPage,\n    prevPage,\n    \n    // Utilities\n    refreshUsers,\n    clearError\n  };\n};\n"
+    },
+    {
+      "path": "/src/services/AdminService.ts",
+      "fileName": "AdminService.ts",
+      "packageName": ".src.services",
+      "fileExtension": ".ts",
+      "fileSize": 3628,
+      "checksum": "acd974c4a42ce1645236b848935914d6",
+      "lastModified": 1754500987514,
+      "isTestFile": false,
+      "sourceCode": "import { UserService } from './UserService';\nimport { User, UserRole, UserStatus } from '../types/user';\n\n/**\n * Admin service extending UserService with administrative functions\n */\nexport class AdminService extends UserService {\n  private readonly adminRole: UserRole = UserRole.ADMIN;\n\n  constructor(baseUrl?: string, apiKey?: string) {\n    super(baseUrl, apiKey);\n  }\n\n  /**\n   * Promote user to admin role\n   */\n  public async promoteToAdmin(userId: string): Promise<User> {\n    return this.updateUser(userId, { role: UserRole.ADMIN });\n  }\n\n  /**\n   * Demote admin to regular user\n   */\n  public async demoteFromAdmin(userId: string): Promise<User> {\n    return this.updateUser(userId, { role: UserRole.USER });\n  }\n\n  /**\n   * Suspend a user account\n   */\n  public async suspendUser(userId: string, reason?: string): Promise<void> {\n    try {\n      // In a real implementation, this would call a specific suspend endpoint\n      await this.updateUser(userId, { \n        // Note: status is not in UserUpdateRequest, this is for demo purposes\n      });\n      console.log(`User ${userId} suspended. Reason: ${reason || 'No reason provided'}`);\n    } catch (error) {\n      throw new Error(`Failed to suspend user ${userId}: ${error}`);\n    }\n  }\n\n  /**\n   * Reactivate a suspended user\n   */\n  public async reactivateUser(userId: string): Promise<User> {\n    try {\n      const user = await this.getUserById(userId);\n      // Reactivate user logic would go here\n      console.log(`User ${userId} reactivated`);\n      return user;\n    } catch (error) {\n      throw new Error(`Failed to reactivate user ${userId}: ${error}`);\n    }\n  }\n\n  /**\n   * Get all admin users\n   */\n  public async getAllAdmins(): Promise<User[]> {\n    return this.getUsersByRole(UserRole.ADMIN);\n  }\n\n  /**\n   * Get all moderators\n   */\n  public async getAllModerators(): Promise<User[]> {\n    return this.getUsersByRole(UserRole.MODERATOR);\n  }\n\n  /**\n   * Bulk delete users\n   */\n  public async bulkDeleteUsers(userIds: string[]): Promise<void> {\n    const deletePromises = userIds.map(id => this.deleteUser(id));\n    \n    try {\n      await Promise.all(deletePromises);\n      console.log(`Successfully deleted ${userIds.length} users`);\n    } catch (error) {\n      throw new Error(`Failed to bulk delete users: ${error}`);\n    }\n  }\n\n  /**\n   * Get user statistics\n   */\n  public async getUserStatistics(): Promise<UserStatistics> {\n    try {\n      const allUsers = await this.getAllUsers(1, 1000); // Get all users\n      \n      const stats: UserStatistics = {\n        total: allUsers.total,\n        byRole: {\n          admin: 0,\n          moderator: 0,\n          user: 0,\n          guest: 0\n        },\n        byStatus: {\n          active: 0,\n          inactive: 0,\n          pending: 0,\n          suspended: 0\n        }\n      };\n\n      // Count users by role (simplified for demo)\n      allUsers.users.forEach(user => {\n        stats.byRole[user.role]++;\n      });\n\n      return stats;\n    } catch (error) {\n      throw new Error(`Failed to get user statistics: ${error}`);\n    }\n  }\n\n  /**\n   * Check if user has admin privileges\n   */\n  public async isAdmin(userId: string): Promise<boolean> {\n    try {\n      const user = await this.getUserById(userId);\n      return user.role === UserRole.ADMIN;\n    } catch (error) {\n      return false;\n    }\n  }\n}\n\n/**\n * Interface for user statistics\n */\nexport interface UserStatistics {\n  total: number;\n  byRole: {\n    admin: number;\n    moderator: number;\n    user: number;\n    guest: number;\n  };\n  byStatus: {\n    active: number;\n    inactive: number;\n    pending: number;\n    suspended: number;\n  };\n}\n"
+    },
+    {
+      "path": "/src/services/UserService.ts",
+      "fileName": "UserService.ts",
+      "packageName": ".src.services",
+      "fileExtension": ".ts",
+      "fileSize": 3859,
+      "checksum": "db5f11f14a4ad87eb05ec7eb29970143",
+      "lastModified": 1754500987531,
+      "isTestFile": false,
+      "sourceCode": "import axios, { AxiosResponse } from 'axios';\nimport { User, UserCreateRequest, UserUpdateRequest, UserListResponse, UserRole } from '../types/user';\n\n/**\n * Service class for managing user operations\n */\nexport class UserService {\n  private readonly baseUrl: string;\n  private readonly apiKey: string;\n\n  constructor(baseUrl: string = '/api', apiKey: string = '') {\n    this.baseUrl = baseUrl;\n    this.apiKey = apiKey;\n  }\n\n  /**\n   * Get all users with pagination\n   */\n  public async getAllUsers(page: number = 1, limit: number = 10): Promise<UserListResponse> {\n    try {\n      const response: AxiosResponse<UserListResponse> = await axios.get(\n        `${this.baseUrl}/users`,\n        {\n          params: { page, limit },\n          headers: this.getHeaders()\n        }\n      );\n      return response.data;\n    } catch (error) {\n      throw new Error(`Failed to fetch users: ${error}`);\n    }\n  }\n\n  /**\n   * Get user by ID\n   */\n  public async getUserById(id: string): Promise<User> {\n    try {\n      const response: AxiosResponse<User> = await axios.get(\n        `${this.baseUrl}/users/${id}`,\n        { headers: this.getHeaders() }\n      );\n      return response.data;\n    } catch (error) {\n      throw new Error(`Failed to fetch user ${id}: ${error}`);\n    }\n  }\n\n  /**\n   * Create a new user\n   */\n  public async createUser(userData: UserCreateRequest): Promise<User> {\n    try {\n      const response: AxiosResponse<User> = await axios.post(\n        `${this.baseUrl}/users`,\n        userData,\n        { headers: this.getHeaders() }\n      );\n      return response.data;\n    } catch (error) {\n      throw new Error(`Failed to create user: ${error}`);\n    }\n  }\n\n  /**\n   * Update an existing user\n   */\n  public async updateUser(id: string, userData: UserUpdateRequest): Promise<User> {\n    try {\n      const response: AxiosResponse<User> = await axios.put(\n        `${this.baseUrl}/users/${id}`,\n        userData,\n        { headers: this.getHeaders() }\n      );\n      return response.data;\n    } catch (error) {\n      throw new Error(`Failed to update user ${id}: ${error}`);\n    }\n  }\n\n  /**\n   * Delete a user\n   */\n  public async deleteUser(id: string): Promise<void> {\n    try {\n      await axios.delete(\n        `${this.baseUrl}/users/${id}`,\n        { headers: this.getHeaders() }\n      );\n    } catch (error) {\n      throw new Error(`Failed to delete user ${id}: ${error}`);\n    }\n  }\n\n  /**\n   * Get users by role\n   */\n  public async getUsersByRole(role: UserRole): Promise<User[]> {\n    try {\n      const response: AxiosResponse<User[]> = await axios.get(\n        `${this.baseUrl}/users/role/${role}`,\n        { headers: this.getHeaders() }\n      );\n      return response.data;\n    } catch (error) {\n      throw new Error(`Failed to fetch users by role ${role}: ${error}`);\n    }\n  }\n\n  /**\n   * Search users by name or email\n   */\n  public async searchUsers(query: string): Promise<User[]> {\n    try {\n      const response: AxiosResponse<User[]> = await axios.get(\n        `${this.baseUrl}/users/search`,\n        {\n          params: { q: query },\n          headers: this.getHeaders()\n        }\n      );\n      return response.data;\n    } catch (error) {\n      throw new Error(`Failed to search users: ${error}`);\n    }\n  }\n\n  /**\n   * Get request headers with authentication\n   */\n  private getHeaders(): Record<string, string> {\n    const headers: Record<string, string> = {\n      'Content-Type': 'application/json'\n    };\n\n    if (this.apiKey) {\n      headers['Authorization'] = `Bearer ${this.apiKey}`;\n    }\n\n    return headers;\n  }\n\n  /**\n   * Validate user data\n   */\n  private validateUserData(userData: UserCreateRequest | UserUpdateRequest): boolean {\n    if ('email' in userData && userData.email) {\n      const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n      return emailRegex.test(userData.email);\n    }\n    return true;\n  }\n}\n"
+    },
+    {
+      "path": "/src/types/user.ts",
+      "fileName": "user.ts",
+      "packageName": ".src.types",
+      "fileExtension": ".ts",
+      "fileSize": 892,
+      "checksum": "138357a5e643acd7a602994b85e0409b",
+      "lastModified": 1754500987537,
+      "isTestFile": false,
+      "sourceCode": "/**\n * User-related type definitions\n */\n\nexport interface User {\n  id: string;\n  name: string;\n  email: string;\n  role: UserRole;\n  createdAt: Date;\n  updatedAt: Date;\n}\n\nexport enum UserRole {\n  ADMIN = 'admin',\n  MODERATOR = 'moderator',\n  USER = 'user',\n  GUEST = 'guest'\n}\n\nexport interface UserCreateRequest {\n  name: string;\n  email: string;\n  role?: UserRole;\n}\n\nexport interface UserUpdateRequest {\n  name?: string;\n  email?: string;\n  role?: UserRole;\n}\n\nexport interface UserListResponse {\n  users: User[];\n  total: number;\n  page: number;\n  limit: number;\n}\n\nexport type UserStatus = 'active' | 'inactive' | 'pending' | 'suspended';\n\nexport interface UserProfile extends User {\n  avatar?: string;\n  bio?: string;\n  status: UserStatus;\n  preferences: UserPreferences;\n}\n\nexport interface UserPreferences {\n  theme: 'light' | 'dark';\n  notifications: boolean;\n  language: string;\n}\n"
+    },
+    {
+      "path": "/src/utils/validation.ts",
+      "fileName": "validation.ts",
+      "packageName": ".src.utils",
+      "fileExtension": ".ts",
+      "fileSize": 4163,
+      "checksum": "4057ca7f71c66775706e10e2c84c5ddd",
+      "lastModified": 1754500987538,
+      "isTestFile": false,
+      "sourceCode": "import { UserCreateRequest, UserUpdateRequest, UserRole } from '../types/user';\n\n/**\n * Validation utilities for user data\n */\n\nexport interface ValidationResult {\n  isValid: boolean;\n  errors: string[];\n}\n\n/**\n * Validate email format\n */\nexport function validateEmail(email: string): boolean {\n  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  return emailRegex.test(email);\n}\n\n/**\n * Validate user name\n */\nexport function validateName(name: string): boolean {\n  return name.trim().length >= 2 && name.trim().length <= 50;\n}\n\n/**\n * Validate user role\n */\nexport function validateUserRole(role: string): role is UserRole {\n  return Object.values(UserRole).includes(role as UserRole);\n}\n\n/**\n * Validate user creation data\n */\nexport function validateUserCreate(data: UserCreateRequest): ValidationResult {\n  const errors: string[] = [];\n\n  // Validate name\n  if (!data.name || !validateName(data.name)) {\n    errors.push('Name must be between 2 and 50 characters');\n  }\n\n  // Validate email\n  if (!data.email || !validateEmail(data.email)) {\n    errors.push('Please provide a valid email address');\n  }\n\n  // Validate role if provided\n  if (data.role && !validateUserRole(data.role)) {\n    errors.push('Invalid user role');\n  }\n\n  return {\n    isValid: errors.length === 0,\n    errors\n  };\n}\n\n/**\n * Validate user update data\n */\nexport function validateUserUpdate(data: UserUpdateRequest): ValidationResult {\n  const errors: string[] = [];\n\n  // Validate name if provided\n  if (data.name !== undefined && !validateName(data.name)) {\n    errors.push('Name must be between 2 and 50 characters');\n  }\n\n  // Validate email if provided\n  if (data.email !== undefined && !validateEmail(data.email)) {\n    errors.push('Please provide a valid email address');\n  }\n\n  // Validate role if provided\n  if (data.role !== undefined && !validateUserRole(data.role)) {\n    errors.push('Invalid user role');\n  }\n\n  return {\n    isValid: errors.length === 0,\n    errors\n  };\n}\n\n/**\n * Sanitize user input\n */\nexport function sanitizeString(input: string): string {\n  return input.trim().replace(/[<>]/g, '');\n}\n\n/**\n * Check if password meets requirements\n */\nexport function validatePassword(password: string): ValidationResult {\n  const errors: string[] = [];\n\n  if (password.length < 8) {\n    errors.push('Password must be at least 8 characters long');\n  }\n\n  if (!/[A-Z]/.test(password)) {\n    errors.push('Password must contain at least one uppercase letter');\n  }\n\n  if (!/[a-z]/.test(password)) {\n    errors.push('Password must contain at least one lowercase letter');\n  }\n\n  if (!/\\d/.test(password)) {\n    errors.push('Password must contain at least one number');\n  }\n\n  if (!/[!@#$%^&*(),.?\":{}|<>]/.test(password)) {\n    errors.push('Password must contain at least one special character');\n  }\n\n  return {\n    isValid: errors.length === 0,\n    errors\n  };\n}\n\n/**\n * Validation error class\n */\nexport class ValidationError extends Error {\n  public readonly errors: string[];\n\n  constructor(errors: string[]) {\n    super(`Validation failed: ${errors.join(', ')}`);\n    this.name = 'ValidationError';\n    this.errors = errors;\n  }\n}\n\n/**\n * Form validation helper\n */\nexport class FormValidator {\n  private errors: Map<string, string[]> = new Map();\n\n  /**\n   * Add validation error for a field\n   */\n  addError(field: string, error: string): void {\n    const fieldErrors = this.errors.get(field) || [];\n    fieldErrors.push(error);\n    this.errors.set(field, fieldErrors);\n  }\n\n  /**\n   * Check if form has any errors\n   */\n  hasErrors(): boolean {\n    return this.errors.size > 0;\n  }\n\n  /**\n   * Get errors for a specific field\n   */\n  getFieldErrors(field: string): string[] {\n    return this.errors.get(field) || [];\n  }\n\n  /**\n   * Get all errors\n   */\n  getAllErrors(): Record<string, string[]> {\n    const result: Record<string, string[]> = {};\n    this.errors.forEach((errors, field) => {\n      result[field] = errors;\n    });\n    return result;\n  }\n\n  /**\n   * Clear all errors\n   */\n  clear(): void {\n    this.errors.clear();\n  }\n\n  /**\n   * Clear errors for a specific field\n   */\n  clearField(field: string): void {\n    this.errors.delete(field);\n  }\n}\n"
+    },
+    {
+      "path": "/src/pages/api/users.ts",
+      "fileName": "users.ts",
+      "packageName": ".src.pages.api",
+      "fileExtension": ".ts",
+      "fileSize": 4445,
+      "checksum": "377db07feea564232ceb0c1908769f4c",
+      "lastModified": 1754500987543,
+      "isTestFile": false,
+      "sourceCode": "import { NextApiRequest, NextApiResponse } from 'next';\nimport { User, UserCreateRequest, UserRole } from '../../types/user';\n\n// Mock database - in a real app, this would be a proper database\nlet mockUsers: User[] = [\n  {\n    id: '1',\n    name: 'John Doe',\n    email: 'john@example.com',\n    role: UserRole.ADMIN,\n    createdAt: new Date('2024-01-15'),\n    updatedAt: new Date('2024-01-20')\n  },\n  {\n    id: '2',\n    name: 'Jane Smith',\n    email: 'jane@example.com',\n    role: UserRole.USER,\n    createdAt: new Date('2024-02-10'),\n    updatedAt: new Date('2024-02-15')\n  },\n  {\n    id: '3',\n    name: 'Bob Wilson',\n    email: 'bob@example.com',\n    role: UserRole.MODERATOR,\n    createdAt: new Date('2024-03-05'),\n    updatedAt: new Date('2024-03-10')\n  }\n];\n\n/**\n * API handler for users endpoint\n * Supports GET (list users) and POST (create user)\n */\nexport default function handler(req: NextApiRequest, res: NextApiResponse) {\n  switch (req.method) {\n    case 'GET':\n      return handleGetUsers(req, res);\n    case 'POST':\n      return handleCreateUser(req, res);\n    default:\n      res.setHeader('Allow', ['GET', 'POST']);\n      return res.status(405).json({ error: 'Method not allowed' });\n  }\n}\n\n/**\n * Handle GET request - list users with pagination\n */\nfunction handleGetUsers(req: NextApiRequest, res: NextApiResponse) {\n  try {\n    const { page = '1', limit = '10', role, search } = req.query;\n    \n    const pageNum = parseInt(page as string, 10);\n    const limitNum = parseInt(limit as string, 10);\n    \n    // Validate pagination parameters\n    if (isNaN(pageNum) || pageNum < 1) {\n      return res.status(400).json({ error: 'Invalid page number' });\n    }\n    \n    if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {\n      return res.status(400).json({ error: 'Invalid limit (must be 1-100)' });\n    }\n\n    let filteredUsers = [...mockUsers];\n\n    // Filter by role if specified\n    if (role && role !== 'all') {\n      filteredUsers = filteredUsers.filter(user => user.role === role);\n    }\n\n    // Filter by search query if specified\n    if (search) {\n      const searchLower = (search as string).toLowerCase();\n      filteredUsers = filteredUsers.filter(user =>\n        user.name.toLowerCase().includes(searchLower) ||\n        user.email.toLowerCase().includes(searchLower)\n      );\n    }\n\n    // Apply pagination\n    const startIndex = (pageNum - 1) * limitNum;\n    const endIndex = startIndex + limitNum;\n    const paginatedUsers = filteredUsers.slice(startIndex, endIndex);\n\n    const response = {\n      users: paginatedUsers,\n      total: filteredUsers.length,\n      page: pageNum,\n      limit: limitNum,\n      totalPages: Math.ceil(filteredUsers.length / limitNum)\n    };\n\n    return res.status(200).json(response);\n  } catch (error) {\n    console.error('Error in handleGetUsers:', error);\n    return res.status(500).json({ error: 'Internal server error' });\n  }\n}\n\n/**\n * Handle POST request - create new user\n */\nfunction handleCreateUser(req: NextApiRequest, res: NextApiResponse) {\n  try {\n    const userData: UserCreateRequest = req.body;\n\n    // Validate required fields\n    if (!userData.name || !userData.email) {\n      return res.status(400).json({ error: 'Name and email are required' });\n    }\n\n    // Validate email format\n    const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n    if (!emailRegex.test(userData.email)) {\n      return res.status(400).json({ error: 'Invalid email format' });\n    }\n\n    // Check if email already exists\n    const existingUser = mockUsers.find(user => user.email === userData.email);\n    if (existingUser) {\n      return res.status(409).json({ error: 'User with this email already exists' });\n    }\n\n    // Create new user\n    const newUser: User = {\n      id: generateUserId(),\n      name: userData.name,\n      email: userData.email,\n      role: userData.role || UserRole.USER,\n      createdAt: new Date(),\n      updatedAt: new Date()\n    };\n\n    // Add to mock database\n    mockUsers.push(newUser);\n\n    return res.status(201).json(newUser);\n  } catch (error) {\n    console.error('Error in handleCreateUser:', error);\n    return res.status(500).json({ error: 'Internal server error' });\n  }\n}\n\n/**\n * Generate a unique user ID\n */\nfunction generateUserId(): string {\n  return Math.random().toString(36).substr(2, 9);\n}\n\n/**\n * Validate user role\n */\nfunction isValidUserRole(role: string): role is UserRole {\n  return Object.values(UserRole).includes(role as UserRole);\n}\n"
+    },
+    {
+      "path": "/src/pages/users/index.tsx",
+      "fileName": "index.tsx",
+      "packageName": ".src.pages",
+      "fileExtension": ".tsx",
+      "fileSize": 5459,
+      "checksum": "1f24db5518a43c5bf6cd286f795c51f0",
+      "lastModified": 1754500987556,
+      "isTestFile": false,
+      "sourceCode": "import React, { useMemo } from 'react';\nimport { GetServerSideProps, NextPage } from 'next';\nimport Head from 'next/head';\nimport { UserList } from '../../components/UserList';\nimport { UserService } from '../../services/UserService';\nimport { User } from '../../types/user';\n\ninterface UsersPageProps {\n  initialUsers: User[];\n  error?: string;\n}\n\n/**\n * Users page component - Next.js page for displaying users\n */\nconst UsersPage: NextPage<UsersPageProps> = ({ initialUsers, error }) => {\n  // Create user service instance\n  const userService = useMemo(() => new UserService(), []);\n\n  if (error) {\n    return (\n      <div className=\"min-h-screen bg-gray-50 flex items-center justify-center\">\n        <div className=\"bg-white p-8 rounded-lg shadow-md max-w-md w-full\">\n          <h1 className=\"text-2xl font-bold text-red-600 mb-4\">Error</h1>\n          <p className=\"text-gray-700 mb-4\">{error}</p>\n          <button\n            onClick={() => window.location.reload()}\n            className=\"w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700\"\n          >\n            Retry\n          </button>\n        </div>\n      </div>\n    );\n  }\n\n  return (\n    <>\n      <Head>\n        <title>Users - User Management System</title>\n        <meta name=\"description\" content=\"Manage users in the system\" />\n        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n      </Head>\n\n      <div className=\"min-h-screen bg-gray-50\">\n        <div className=\"container mx-auto px-4 py-8\">\n          {/* Header */}\n          <div className=\"mb-8\">\n            <h1 className=\"text-3xl font-bold text-gray-900 mb-2\">Users</h1>\n            <p className=\"text-gray-600\">Manage and view all users in the system</p>\n          </div>\n\n          {/* Stats Cards */}\n          <div className=\"grid grid-cols-1 md:grid-cols-4 gap-6 mb-8\">\n            <StatsCard\n              title=\"Total Users\"\n              value={initialUsers.length.toString()}\n              icon=\"👥\"\n              color=\"blue\"\n            />\n            <StatsCard\n              title=\"Active Users\"\n              value={initialUsers.filter(u => u.role !== 'guest').length.toString()}\n              icon=\"✅\"\n              color=\"green\"\n            />\n            <StatsCard\n              title=\"Admins\"\n              value={initialUsers.filter(u => u.role === 'admin').length.toString()}\n              icon=\"👑\"\n              color=\"purple\"\n            />\n            <StatsCard\n              title=\"New This Month\"\n              value={getNewUsersThisMonth(initialUsers).toString()}\n              icon=\"📈\"\n              color=\"orange\"\n            />\n          </div>\n\n          {/* User List */}\n          <div className=\"bg-white rounded-lg shadow-sm p-6\">\n            <UserList\n              userService={userService}\n              initialUsers={initialUsers}\n              showFilters={true}\n              pageSize={12}\n            />\n          </div>\n        </div>\n      </div>\n    </>\n  );\n};\n\n/**\n * Stats card component\n */\ninterface StatsCardProps {\n  title: string;\n  value: string;\n  icon: string;\n  color: 'blue' | 'green' | 'purple' | 'orange';\n}\n\nconst StatsCard: React.FC<StatsCardProps> = ({ title, value, icon, color }) => {\n  const colorClasses = {\n    blue: 'bg-blue-50 text-blue-600',\n    green: 'bg-green-50 text-green-600',\n    purple: 'bg-purple-50 text-purple-600',\n    orange: 'bg-orange-50 text-orange-600'\n  };\n\n  return (\n    <div className=\"bg-white rounded-lg shadow-sm p-6\">\n      <div className=\"flex items-center\">\n        <div className={`p-3 rounded-full ${colorClasses[color]} mr-4`}>\n          <span className=\"text-2xl\">{icon}</span>\n        </div>\n        <div>\n          <p className=\"text-sm font-medium text-gray-600\">{title}</p>\n          <p className=\"text-2xl font-bold text-gray-900\">{value}</p>\n        </div>\n      </div>\n    </div>\n  );\n};\n\n/**\n * Helper function to count new users this month\n */\nconst getNewUsersThisMonth = (users: User[]): number => {\n  const now = new Date();\n  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);\n  \n  return users.filter(user => {\n    const createdAt = new Date(user.createdAt);\n    return createdAt >= startOfMonth;\n  }).length;\n};\n\n/**\n * Server-side props for initial data loading\n */\nexport const getServerSideProps: GetServerSideProps<UsersPageProps> = async (context) => {\n  try {\n    // In a real app, this would fetch from an API or database\n    // For demo purposes, we'll return mock data\n    const mockUsers: User[] = [\n      {\n        id: '1',\n        name: 'John Doe',\n        email: 'john@example.com',\n        role: 'admin' as const,\n        createdAt: new Date('2024-01-15'),\n        updatedAt: new Date('2024-01-20')\n      },\n      {\n        id: '2',\n        name: 'Jane Smith',\n        email: 'jane@example.com',\n        role: 'user' as const,\n        createdAt: new Date('2024-02-10'),\n        updatedAt: new Date('2024-02-15')\n      },\n      {\n        id: '3',\n        name: 'Bob Wilson',\n        email: 'bob@example.com',\n        role: 'moderator' as const,\n        createdAt: new Date('2024-03-05'),\n        updatedAt: new Date('2024-03-10')\n      }\n    ];\n\n    return {\n      props: {\n        initialUsers: mockUsers\n      }\n    };\n  } catch (error) {\n    console.error('Error loading users:', error);\n    \n    return {\n      props: {\n        initialUsers: [],\n        error: 'Failed to load users'\n      }\n    };\n  }\n};\n\nexport default UsersPage;\n"
+    }
+  ],
+  "classes": [
+    {
+      "id": "test-project:class:.src.services.AdminService.AdminService",
+      "name": "AdminService",
+      "fullyQualifiedName": ".src.services.AdminService.AdminService",
+      "comment": "Admin service extending UserService with administrative functions",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isInnerClass": false,
+      "isAnonymous": false,
+      "isGeneric": false,
+      "filePath": "/src/services/AdminService.ts",
+      "startLine": 7,
+      "endLine": 130,
+      "decorators": [],
+      "isController": false,
+      "isService": false,
+      "isRepository": false,
+      "isComponent": false,
+      "isConfiguration": false,
+      "isEntity": false,
+      "isTestClass": false,
+      "genericTypeParameters": null,
+      "isLocal": false,
+      "enclosingClassId": null,
+      "enclosingMethodId": null,
+      "properties": {}
+    },
+    {
+      "id": "test-project:class:.src.services.UserService.UserService",
+      "name": "UserService",
+      "fullyQualifiedName": ".src.services.UserService.UserService",
+      "comment": "Service class for managing user operations",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isInnerClass": false,
+      "isAnonymous": false,
+      "isGeneric": false,
+      "filePath": "/src/services/UserService.ts",
+      "startLine": 7,
+      "endLine": 153,
+      "decorators": [],
+      "isController": false,
+      "isService": false,
+      "isRepository": false,
+      "isComponent": false,
+      "isConfiguration": false,
+      "isEntity": false,
+      "isTestClass": false,
+      "genericTypeParameters": null,
+      "isLocal": false,
+      "enclosingClassId": null,
+      "enclosingMethodId": null,
+      "properties": {}
+    },
+    {
+      "id": "test-project:class:.src.utils.validation.ValidationError",
+      "name": "ValidationError",
+      "fullyQualifiedName": ".src.utils.validation.ValidationError",
+      "comment": "Validation error class",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isInnerClass": false,
+      "isAnonymous": false,
+      "isGeneric": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 130,
+      "endLine": 138,
+      "decorators": [],
+      "isController": false,
+      "isService": false,
+      "isRepository": false,
+      "isComponent": false,
+      "isConfiguration": false,
+      "isEntity": false,
+      "isTestClass": false,
+      "genericTypeParameters": null,
+      "isLocal": false,
+      "enclosingClassId": null,
+      "enclosingMethodId": null,
+      "properties": {}
+    },
+    {
+      "id": "test-project:class:.src.utils.validation.FormValidator",
+      "name": "FormValidator",
+      "fullyQualifiedName": ".src.utils.validation.FormValidator",
+      "comment": "Form validation helper",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isInnerClass": false,
+      "isAnonymous": false,
+      "isGeneric": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 143,
+      "endLine": 193,
+      "decorators": [],
+      "isController": false,
+      "isService": false,
+      "isRepository": false,
+      "isComponent": false,
+      "isConfiguration": false,
+      "isEntity": false,
+      "isTestClass": false,
+      "genericTypeParameters": null,
+      "isLocal": false,
+      "enclosingClassId": null,
+      "enclosingMethodId": null,
+      "properties": {}
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "test-project:interface:.src.components.UserCard.tsx.UserCardProps",
+      "name": "UserCardProps",
+      "fullyQualifiedName": ".src.components.UserCard.tsx.UserCardProps",
+      "comment": "",
+      "visibility": "package",
+      "filePath": "/src/components/UserCard.tsx",
+      "startLine": 4,
+      "endLine": 10,
+      "decorators": [],
+      "properties": {}
+    },
+    {
+      "id": "test-project:interface:.src.components.UserList.tsx.UserListProps",
+      "name": "UserListProps",
+      "fullyQualifiedName": ".src.components.UserList.tsx.UserListProps",
+      "comment": "",
+      "visibility": "package",
+      "filePath": "/src/components/UserList.tsx",
+      "startLine": 6,
+      "endLine": 11,
+      "decorators": [],
+      "properties": {}
+    },
+    {
+      "id": "test-project:interface:.src.hooks.useUsers.UseUsersOptions",
+      "name": "UseUsersOptions",
+      "fullyQualifiedName": ".src.hooks.useUsers.UseUsersOptions",
+      "comment": "",
+      "visibility": "package",
+      "filePath": "/src/hooks/useUsers.ts",
+      "startLine": 5,
+      "endLine": 10,
+      "decorators": [],
+      "properties": {}
+    },
+    {
+      "id": "test-project:interface:.src.hooks.useUsers.UseUsersReturn",
+      "name": "UseUsersReturn",
+      "fullyQualifiedName": ".src.hooks.useUsers.UseUsersReturn",
+      "comment": "",
+      "visibility": "package",
+      "filePath": "/src/hooks/useUsers.ts",
+      "startLine": 12,
+      "endLine": 36,
+      "decorators": [],
+      "properties": {}
+    },
+    {
+      "id": "test-project:interface:.src.services.AdminService.UserStatistics",
+      "name": "UserStatistics",
+      "fullyQualifiedName": ".src.services.AdminService.UserStatistics",
+      "comment": "Interface for user statistics",
+      "visibility": "public",
+      "filePath": "/src/services/AdminService.ts",
+      "startLine": 135,
+      "endLine": 149,
+      "decorators": [],
+      "properties": {}
+    },
+    {
+      "id": "test-project:interface:.src.types.user.User",
+      "name": "User",
+      "fullyQualifiedName": ".src.types.user.User",
+      "comment": "User-related type definitions",
+      "visibility": "public",
+      "filePath": "/src/types/user.ts",
+      "startLine": 5,
+      "endLine": 12,
+      "decorators": [],
+      "properties": {}
+    },
+    {
+      "id": "test-project:interface:.src.types.user.UserCreateRequest",
+      "name": "UserCreateRequest",
+      "fullyQualifiedName": ".src.types.user.UserCreateRequest",
+      "comment": "",
+      "visibility": "public",
+      "filePath": "/src/types/user.ts",
+      "startLine": 21,
+      "endLine": 25,
+      "decorators": [],
+      "properties": {}
+    },
+    {
+      "id": "test-project:interface:.src.types.user.UserUpdateRequest",
+      "name": "UserUpdateRequest",
+      "fullyQualifiedName": ".src.types.user.UserUpdateRequest",
+      "comment": "",
+      "visibility": "public",
+      "filePath": "/src/types/user.ts",
+      "startLine": 27,
+      "endLine": 31,
+      "decorators": [],
+      "properties": {}
+    },
+    {
+      "id": "test-project:interface:.src.types.user.UserListResponse",
+      "name": "UserListResponse",
+      "fullyQualifiedName": ".src.types.user.UserListResponse",
+      "comment": "",
+      "visibility": "public",
+      "filePath": "/src/types/user.ts",
+      "startLine": 33,
+      "endLine": 38,
+      "decorators": [],
+      "properties": {}
+    },
+    {
+      "id": "test-project:interface:.src.types.user.UserProfile",
+      "name": "UserProfile",
+      "fullyQualifiedName": ".src.types.user.UserProfile",
+      "comment": "",
+      "visibility": "public",
+      "filePath": "/src/types/user.ts",
+      "startLine": 42,
+      "endLine": 47,
+      "decorators": [],
+      "properties": {}
+    },
+    {
+      "id": "test-project:interface:.src.types.user.UserPreferences",
+      "name": "UserPreferences",
+      "fullyQualifiedName": ".src.types.user.UserPreferences",
+      "comment": "",
+      "visibility": "public",
+      "filePath": "/src/types/user.ts",
+      "startLine": 49,
+      "endLine": 53,
+      "decorators": [],
+      "properties": {}
+    },
+    {
+      "id": "test-project:interface:.src.utils.validation.ValidationResult",
+      "name": "ValidationResult",
+      "fullyQualifiedName": ".src.utils.validation.ValidationResult",
+      "comment": "Validation utilities for user data",
+      "visibility": "public",
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 7,
+      "endLine": 10,
+      "decorators": [],
+      "properties": {}
+    },
+    {
+      "id": "test-project:interface:.src.pages.users.index.tsx.UsersPageProps",
+      "name": "UsersPageProps",
+      "fullyQualifiedName": ".src.pages.users.index.tsx.UsersPageProps",
+      "comment": "",
+      "visibility": "package",
+      "filePath": "/src/pages/users/index.tsx",
+      "startLine": 8,
+      "endLine": 11,
+      "decorators": [],
+      "properties": {}
+    },
+    {
+      "id": "test-project:interface:.src.pages.users.index.tsx.StatsCardProps",
+      "name": "StatsCardProps",
+      "fullyQualifiedName": ".src.pages.users.index.tsx.StatsCardProps",
+      "comment": "Stats card component",
+      "visibility": "package",
+      "filePath": "/src/pages/users/index.tsx",
+      "startLine": 99,
+      "endLine": 104,
+      "decorators": [],
+      "properties": {}
+    }
+  ],
+  "enums": [
+    {
+      "id": "test-project:enum:.src.types.user.UserRole",
+      "name": "UserRole",
+      "fullyQualifiedName": ".src.types.user.UserRole",
+      "comment": "",
+      "visibility": "public",
+      "filePath": "/src/types/user.ts",
+      "startLine": 14,
+      "endLine": 19,
+      "enumConstants": [
+        {
+          "name": "ADMIN",
+          "ordinal": 0,
+          "comment": "",
+          "properties": {}
+        },
+        {
+          "name": "MODERATOR",
+          "ordinal": 1,
+          "comment": "",
+          "properties": {}
+        },
+        {
+          "name": "USER",
+          "ordinal": 2,
+          "comment": "",
+          "properties": {}
+        },
+        {
+          "name": "GUEST",
+          "ordinal": 3,
+          "comment": "",
+          "properties": {}
+        }
+      ],
+      "decorators": [],
+      "properties": {}
+    }
+  ],
+  "methods": [
+    {
+      "id": "test-project:method:AdminService.promoteToAdminuserId_string_Promise_importsrctypesuser.User_",
+      "name": "promoteToAdmin",
+      "signature": "promoteToAdmin(userId: string): Promise<import(\"/src/types/user\").User>",
+      "returnType": "Promise<import(\"/src/types/user\").User>",
+      "comment": "Promote user to admin role",
+      "body": "return this.updateUser(userId, { role: UserRole.ADMIN });",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/AdminService.ts",
+      "startLine": 17,
+      "endLine": 19,
+      "cyclomaticComplexity": 1,
+      "parameters": [
+        {
+          "name": "userId",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "AdminService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:AdminService.demoteFromAdminuserId_string_Promise_importsrctypesuser.User_",
+      "name": "demoteFromAdmin",
+      "signature": "demoteFromAdmin(userId: string): Promise<import(\"/src/types/user\").User>",
+      "returnType": "Promise<import(\"/src/types/user\").User>",
+      "comment": "Demote admin to regular user",
+      "body": "return this.updateUser(userId, { role: UserRole.USER });",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/AdminService.ts",
+      "startLine": 24,
+      "endLine": 26,
+      "cyclomaticComplexity": 1,
+      "parameters": [
+        {
+          "name": "userId",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "AdminService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:AdminService.suspendUseruserId_string_reason_string__undefined_Promise_void_",
+      "name": "suspendUser",
+      "signature": "suspendUser(userId: string, reason: string | undefined): Promise<void>",
+      "returnType": "Promise<void>",
+      "comment": "Suspend a user account",
+      "body": "try {\n  // In a real implementation, this would call a specific suspend endpoint\n  await this.updateUser(userId, { \n    // Note: status is not in UserUpdateRequest, this is for demo purposes\n  });\n  console.log(`User ${userId} suspended. Reason: ${reason || 'No reason provided'}`);\n} catch (error) {\n  throw new Error(`Failed to suspend user ${userId}: ${error}`);\n}",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/AdminService.ts",
+      "startLine": 31,
+      "endLine": 41,
+      "cyclomaticComplexity": 3,
+      "parameters": [
+        {
+          "name": "userId",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        },
+        {
+          "name": "reason",
+          "type": "string | undefined",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": true
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "AdminService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:AdminService.reactivateUseruserId_string_Promise_importsrctypesuser.User_",
+      "name": "reactivateUser",
+      "signature": "reactivateUser(userId: string): Promise<import(\"/src/types/user\").User>",
+      "returnType": "Promise<import(\"/src/types/user\").User>",
+      "comment": "Reactivate a suspended user",
+      "body": "try {\n  const user = await this.getUserById(userId);\n  // Reactivate user logic would go here\n  console.log(`User ${userId} reactivated`);\n  return user;\n} catch (error) {\n  throw new Error(`Failed to reactivate user ${userId}: ${error}`);\n}",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/AdminService.ts",
+      "startLine": 46,
+      "endLine": 55,
+      "cyclomaticComplexity": 2,
+      "parameters": [
+        {
+          "name": "userId",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "AdminService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:AdminService.getAllAdmins_Promise_importsrctypesuser.User_",
+      "name": "getAllAdmins",
+      "signature": "getAllAdmins(): Promise<import(\"/src/types/user\").User[]>",
+      "returnType": "Promise<import(\"/src/types/user\").User[]>",
+      "comment": "Get all admin users",
+      "body": "return this.getUsersByRole(UserRole.ADMIN);",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/AdminService.ts",
+      "startLine": 60,
+      "endLine": 62,
+      "cyclomaticComplexity": 1,
+      "parameters": [],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "AdminService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:AdminService.getAllModerators_Promise_importsrctypesuser.User_",
+      "name": "getAllModerators",
+      "signature": "getAllModerators(): Promise<import(\"/src/types/user\").User[]>",
+      "returnType": "Promise<import(\"/src/types/user\").User[]>",
+      "comment": "Get all moderators",
+      "body": "return this.getUsersByRole(UserRole.MODERATOR);",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/AdminService.ts",
+      "startLine": 67,
+      "endLine": 69,
+      "cyclomaticComplexity": 1,
+      "parameters": [],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "AdminService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:AdminService.bulkDeleteUsersuserIds_string_Promise_void_",
+      "name": "bulkDeleteUsers",
+      "signature": "bulkDeleteUsers(userIds: string[]): Promise<void>",
+      "returnType": "Promise<void>",
+      "comment": "Bulk delete users",
+      "body": "const deletePromises = userIds.map(id => this.deleteUser(id));\n\ntry {\n  await Promise.all(deletePromises);\n  console.log(`Successfully deleted ${userIds.length} users`);\n} catch (error) {\n  throw new Error(`Failed to bulk delete users: ${error}`);\n}",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/AdminService.ts",
+      "startLine": 74,
+      "endLine": 83,
+      "cyclomaticComplexity": 2,
+      "parameters": [
+        {
+          "name": "userIds",
+          "type": "string[]",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "AdminService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:AdminService.getUserStatistics_Promise_importsrcservicesAdminService.UserStatistics_",
+      "name": "getUserStatistics",
+      "signature": "getUserStatistics(): Promise<import(\"/src/services/AdminService\").UserStatistics>",
+      "returnType": "Promise<import(\"/src/services/AdminService\").UserStatistics>",
+      "comment": "Get user statistics",
+      "body": "try {\n  const allUsers = await this.getAllUsers(1, 1000); // Get all users\n  \n  const stats: UserStatistics = {\n    total: allUsers.total,\n    byRole: {\n      admin: 0,\n      moderator: 0,\n      user: 0,\n      guest: 0\n    },\n    byStatus: {\n      active: 0,\n      inactive: 0,\n      pending: 0,\n      suspended: 0\n    }\n  };\n\n  // Count users by role (simplified for demo)\n  allUsers.users.forEach(user => {\n    stats.byRole[user.role]++;\n  });\n\n  return stats;\n} catch (error) {\n  throw new Error(`Failed to get user statistics: ${error}`);\n}",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/AdminService.ts",
+      "startLine": 88,
+      "endLine": 117,
+      "cyclomaticComplexity": 2,
+      "parameters": [],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "AdminService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:AdminService.isAdminuserId_string_Promise_boolean_",
+      "name": "isAdmin",
+      "signature": "isAdmin(userId: string): Promise<boolean>",
+      "returnType": "Promise<boolean>",
+      "comment": "Check if user has admin privileges",
+      "body": "try {\n  const user = await this.getUserById(userId);\n  return user.role === UserRole.ADMIN;\n} catch (error) {\n  return false;\n}",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/AdminService.ts",
+      "startLine": 122,
+      "endLine": 129,
+      "cyclomaticComplexity": 2,
+      "parameters": [
+        {
+          "name": "userId",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "AdminService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:AdminService.constructorbaseUrl_string__undefined_apiKey_string__undefined",
+      "name": "constructor",
+      "signature": "constructor(baseUrl: string | undefined, apiKey: string | undefined)",
+      "returnType": "void",
+      "comment": "",
+      "body": "super(baseUrl, apiKey);",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": true,
+      "isTestMethod": false,
+      "filePath": "/src/services/AdminService.ts",
+      "startLine": 10,
+      "endLine": 12,
+      "cyclomaticComplexity": 1,
+      "parameters": [
+        {
+          "name": "baseUrl",
+          "type": "string | undefined",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": true
+          }
+        },
+        {
+          "name": "apiKey",
+          "type": "string | undefined",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": true
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "className": "AdminService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:UserService.getAllUserspage_number_limit_number_Promise_importsrctypesuser.UserListResponse_",
+      "name": "getAllUsers",
+      "signature": "getAllUsers(page: number, limit: number): Promise<import(\"/src/types/user\").UserListResponse>",
+      "returnType": "Promise<import(\"/src/types/user\").UserListResponse>",
+      "comment": "Get all users with pagination",
+      "body": "try {\n  const response: AxiosResponse<UserListResponse> = await axios.get(\n    `${this.baseUrl}/users`,\n    {\n      params: { page, limit },\n      headers: this.getHeaders()\n    }\n  );\n  return response.data;\n} catch (error) {\n  throw new Error(`Failed to fetch users: ${error}`);\n}",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/UserService.ts",
+      "startLine": 19,
+      "endLine": 32,
+      "cyclomaticComplexity": 2,
+      "parameters": [
+        {
+          "name": "page",
+          "type": "number",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false,
+            "defaultValue": "1"
+          }
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false,
+            "defaultValue": "10"
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "UserService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:UserService.getUserByIdid_string_Promise_importsrctypesuser.User_",
+      "name": "getUserById",
+      "signature": "getUserById(id: string): Promise<import(\"/src/types/user\").User>",
+      "returnType": "Promise<import(\"/src/types/user\").User>",
+      "comment": "Get user by ID",
+      "body": "try {\n  const response: AxiosResponse<User> = await axios.get(\n    `${this.baseUrl}/users/${id}`,\n    { headers: this.getHeaders() }\n  );\n  return response.data;\n} catch (error) {\n  throw new Error(`Failed to fetch user ${id}: ${error}`);\n}",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/UserService.ts",
+      "startLine": 37,
+      "endLine": 47,
+      "cyclomaticComplexity": 2,
+      "parameters": [
+        {
+          "name": "id",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "UserService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:UserService.createUseruserData_importsrctypesuser.UserCreateRequest_Promise_importsrctypesuser.User_",
+      "name": "createUser",
+      "signature": "createUser(userData: import(\"/src/types/user\").UserCreateRequest): Promise<import(\"/src/types/user\").User>",
+      "returnType": "Promise<import(\"/src/types/user\").User>",
+      "comment": "Create a new user",
+      "body": "try {\n  const response: AxiosResponse<User> = await axios.post(\n    `${this.baseUrl}/users`,\n    userData,\n    { headers: this.getHeaders() }\n  );\n  return response.data;\n} catch (error) {\n  throw new Error(`Failed to create user: ${error}`);\n}",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/UserService.ts",
+      "startLine": 52,
+      "endLine": 63,
+      "cyclomaticComplexity": 2,
+      "parameters": [
+        {
+          "name": "userData",
+          "type": "import(\"/src/types/user\").UserCreateRequest",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "UserService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:UserService.updateUserid_string_userData_importsrctypesuser.UserUpdateRequest_Promise_importsrctypesuser.User_",
+      "name": "updateUser",
+      "signature": "updateUser(id: string, userData: import(\"/src/types/user\").UserUpdateRequest): Promise<import(\"/src/types/user\").User>",
+      "returnType": "Promise<import(\"/src/types/user\").User>",
+      "comment": "Update an existing user",
+      "body": "try {\n  const response: AxiosResponse<User> = await axios.put(\n    `${this.baseUrl}/users/${id}`,\n    userData,\n    { headers: this.getHeaders() }\n  );\n  return response.data;\n} catch (error) {\n  throw new Error(`Failed to update user ${id}: ${error}`);\n}",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/UserService.ts",
+      "startLine": 68,
+      "endLine": 79,
+      "cyclomaticComplexity": 2,
+      "parameters": [
+        {
+          "name": "id",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        },
+        {
+          "name": "userData",
+          "type": "import(\"/src/types/user\").UserUpdateRequest",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "UserService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:UserService.deleteUserid_string_Promise_void_",
+      "name": "deleteUser",
+      "signature": "deleteUser(id: string): Promise<void>",
+      "returnType": "Promise<void>",
+      "comment": "Delete a user",
+      "body": "try {\n  await axios.delete(\n    `${this.baseUrl}/users/${id}`,\n    { headers: this.getHeaders() }\n  );\n} catch (error) {\n  throw new Error(`Failed to delete user ${id}: ${error}`);\n}",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/UserService.ts",
+      "startLine": 84,
+      "endLine": 93,
+      "cyclomaticComplexity": 2,
+      "parameters": [
+        {
+          "name": "id",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "UserService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:UserService.getUsersByRolerole_importsrctypesuser.UserRole_Promise_importsrctypesuser.User_",
+      "name": "getUsersByRole",
+      "signature": "getUsersByRole(role: import(\"/src/types/user\").UserRole): Promise<import(\"/src/types/user\").User[]>",
+      "returnType": "Promise<import(\"/src/types/user\").User[]>",
+      "comment": "Get users by role",
+      "body": "try {\n  const response: AxiosResponse<User[]> = await axios.get(\n    `${this.baseUrl}/users/role/${role}`,\n    { headers: this.getHeaders() }\n  );\n  return response.data;\n} catch (error) {\n  throw new Error(`Failed to fetch users by role ${role}: ${error}`);\n}",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/UserService.ts",
+      "startLine": 98,
+      "endLine": 108,
+      "cyclomaticComplexity": 2,
+      "parameters": [
+        {
+          "name": "role",
+          "type": "import(\"/src/types/user\").UserRole",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "UserService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:UserService.searchUsersquery_string_Promise_importsrctypesuser.User_",
+      "name": "searchUsers",
+      "signature": "searchUsers(query: string): Promise<import(\"/src/types/user\").User[]>",
+      "returnType": "Promise<import(\"/src/types/user\").User[]>",
+      "comment": "Search users by name or email",
+      "body": "try {\n  const response: AxiosResponse<User[]> = await axios.get(\n    `${this.baseUrl}/users/search`,\n    {\n      params: { q: query },\n      headers: this.getHeaders()\n    }\n  );\n  return response.data;\n} catch (error) {\n  throw new Error(`Failed to search users: ${error}`);\n}",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/UserService.ts",
+      "startLine": 113,
+      "endLine": 126,
+      "cyclomaticComplexity": 2,
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": true,
+        "className": "UserService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:UserService.getHeaders_Record_string_string_",
+      "name": "getHeaders",
+      "signature": "getHeaders(): Record<string, string>",
+      "returnType": "Record<string, string>",
+      "comment": "Get request headers with authentication",
+      "body": "const headers: Record<string, string> = {\n  'Content-Type': 'application/json'\n};\n\nif (this.apiKey) {\n  headers['Authorization'] = `Bearer ${this.apiKey}`;\n}\n\nreturn headers;",
+      "visibility": "private",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/UserService.ts",
+      "startLine": 131,
+      "endLine": 141,
+      "cyclomaticComplexity": 2,
+      "parameters": [],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "className": "UserService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:UserService.validateUserDatauserData_importsrctypesuser.UserCreateRequest__importsrctypesuser.UserUpdateRequest_boolean",
+      "name": "validateUserData",
+      "signature": "validateUserData(userData: import(\"/src/types/user\").UserCreateRequest | import(\"/src/types/user\").UserUpdateRequest): boolean",
+      "returnType": "boolean",
+      "comment": "Validate user data",
+      "body": "if ('email' in userData && userData.email) {\n  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  return emailRegex.test(userData.email);\n}\nreturn true;",
+      "visibility": "private",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/services/UserService.ts",
+      "startLine": 146,
+      "endLine": 152,
+      "cyclomaticComplexity": 3,
+      "parameters": [
+        {
+          "name": "userData",
+          "type": "import(\"/src/types/user\").UserCreateRequest | import(\"/src/types/user\").UserUpdateRequest",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "className": "UserService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:UserService.constructorbaseUrl_string_apiKey_string",
+      "name": "constructor",
+      "signature": "constructor(baseUrl: string, apiKey: string)",
+      "returnType": "void",
+      "comment": "",
+      "body": "this.baseUrl = baseUrl;\nthis.apiKey = apiKey;",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": true,
+      "isTestMethod": false,
+      "filePath": "/src/services/UserService.ts",
+      "startLine": 11,
+      "endLine": 14,
+      "cyclomaticComplexity": 1,
+      "parameters": [
+        {
+          "name": "baseUrl",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false,
+            "defaultValue": "'/api'"
+          }
+        },
+        {
+          "name": "apiKey",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false,
+            "defaultValue": "''"
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "className": "UserService",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:ValidationError.constructorerrors_string",
+      "name": "constructor",
+      "signature": "constructor(errors: string[])",
+      "returnType": "void",
+      "comment": "",
+      "body": "super(`Validation failed: ${errors.join(', ')}`);\nthis.name = 'ValidationError';\nthis.errors = errors;",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": true,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 133,
+      "endLine": 137,
+      "cyclomaticComplexity": 1,
+      "parameters": [
+        {
+          "name": "errors",
+          "type": "string[]",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "className": "ValidationError",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:FormValidator.addErrorfield_string_error_string_void",
+      "name": "addError",
+      "signature": "addError(field: string, error: string): void",
+      "returnType": "void",
+      "comment": "Add validation error for a field",
+      "body": "const fieldErrors = this.errors.get(field) || [];\nfieldErrors.push(error);\nthis.errors.set(field, fieldErrors);",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 149,
+      "endLine": 153,
+      "cyclomaticComplexity": 2,
+      "parameters": [
+        {
+          "name": "field",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        },
+        {
+          "name": "error",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "className": "FormValidator",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:FormValidator.hasErrors_boolean",
+      "name": "hasErrors",
+      "signature": "hasErrors(): boolean",
+      "returnType": "boolean",
+      "comment": "Check if form has any errors",
+      "body": "return this.errors.size > 0;",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 158,
+      "endLine": 160,
+      "cyclomaticComplexity": 1,
+      "parameters": [],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "className": "FormValidator",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:FormValidator.getFieldErrorsfield_string_string",
+      "name": "getFieldErrors",
+      "signature": "getFieldErrors(field: string): string[]",
+      "returnType": "string[]",
+      "comment": "Get errors for a specific field",
+      "body": "return this.errors.get(field) || [];",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 165,
+      "endLine": 167,
+      "cyclomaticComplexity": 2,
+      "parameters": [
+        {
+          "name": "field",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "className": "FormValidator",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:FormValidator.getAllErrors_Record_string_string_",
+      "name": "getAllErrors",
+      "signature": "getAllErrors(): Record<string, string[]>",
+      "returnType": "Record<string, string[]>",
+      "comment": "Get all errors",
+      "body": "const result: Record<string, string[]> = {};\nthis.errors.forEach((errors, field) => {\n  result[field] = errors;\n});\nreturn result;",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 172,
+      "endLine": 178,
+      "cyclomaticComplexity": 1,
+      "parameters": [],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "className": "FormValidator",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:FormValidator.clear_void",
+      "name": "clear",
+      "signature": "clear(): void",
+      "returnType": "void",
+      "comment": "Clear all errors",
+      "body": "this.errors.clear();",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 183,
+      "endLine": 185,
+      "cyclomaticComplexity": 1,
+      "parameters": [],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "className": "FormValidator",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:FormValidator.clearFieldfield_string_void",
+      "name": "clearField",
+      "signature": "clearField(field: string): void",
+      "returnType": "void",
+      "comment": "Clear errors for a specific field",
+      "body": "this.errors.delete(field);",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 190,
+      "endLine": 192,
+      "cyclomaticComplexity": 1,
+      "parameters": [
+        {
+          "name": "field",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "className": "FormValidator",
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:global.validateEmailemail_string_boolean",
+      "name": "validateEmail",
+      "signature": "validateEmail(email: string): boolean",
+      "returnType": "boolean",
+      "comment": "Validate email format",
+      "body": "const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nreturn emailRegex.test(email);",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 15,
+      "endLine": 18,
+      "cyclomaticComplexity": 1,
+      "parameters": [
+        {
+          "name": "email",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:global.validateNamename_string_boolean",
+      "name": "validateName",
+      "signature": "validateName(name: string): boolean",
+      "returnType": "boolean",
+      "comment": "Validate user name",
+      "body": "return name.trim().length >= 2 && name.trim().length <= 50;",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 23,
+      "endLine": 25,
+      "cyclomaticComplexity": 2,
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:global.validateUserRolerole_string_boolean",
+      "name": "validateUserRole",
+      "signature": "validateUserRole(role: string): boolean",
+      "returnType": "boolean",
+      "comment": "Validate user role",
+      "body": "return Object.values(UserRole).includes(role as UserRole);",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 30,
+      "endLine": 32,
+      "cyclomaticComplexity": 1,
+      "parameters": [
+        {
+          "name": "role",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:global.validateUserCreatedata_importsrctypesuser.UserCreateRequest_importsrcutilsvalidation.ValidationResult",
+      "name": "validateUserCreate",
+      "signature": "validateUserCreate(data: import(\"/src/types/user\").UserCreateRequest): import(\"/src/utils/validation\").ValidationResult",
+      "returnType": "import(\"/src/utils/validation\").ValidationResult",
+      "comment": "Validate user creation data",
+      "body": "const errors: string[] = [];\n\n// Validate name\nif (!data.name || !validateName(data.name)) {\nerrors.push('Name must be between 2 and 50 characters');\n}\n\n// Validate email\nif (!data.email || !validateEmail(data.email)) {\nerrors.push('Please provide a valid email address');\n}\n\n// Validate role if provided\nif (data.role && !validateUserRole(data.role)) {\nerrors.push('Invalid user role');\n}\n\nreturn {\nisValid: errors.length === 0,\nerrors\n};",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 37,
+      "endLine": 59,
+      "cyclomaticComplexity": 7,
+      "parameters": [
+        {
+          "name": "data",
+          "type": "import(\"/src/types/user\").UserCreateRequest",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:global.validateUserUpdatedata_importsrctypesuser.UserUpdateRequest_importsrcutilsvalidation.ValidationResult",
+      "name": "validateUserUpdate",
+      "signature": "validateUserUpdate(data: import(\"/src/types/user\").UserUpdateRequest): import(\"/src/utils/validation\").ValidationResult",
+      "returnType": "import(\"/src/utils/validation\").ValidationResult",
+      "comment": "Validate user update data",
+      "body": "const errors: string[] = [];\n\n// Validate name if provided\nif (data.name !== undefined && !validateName(data.name)) {\nerrors.push('Name must be between 2 and 50 characters');\n}\n\n// Validate email if provided\nif (data.email !== undefined && !validateEmail(data.email)) {\nerrors.push('Please provide a valid email address');\n}\n\n// Validate role if provided\nif (data.role !== undefined && !validateUserRole(data.role)) {\nerrors.push('Invalid user role');\n}\n\nreturn {\nisValid: errors.length === 0,\nerrors\n};",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 64,
+      "endLine": 86,
+      "cyclomaticComplexity": 7,
+      "parameters": [
+        {
+          "name": "data",
+          "type": "import(\"/src/types/user\").UserUpdateRequest",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:global.sanitizeStringinput_string_string",
+      "name": "sanitizeString",
+      "signature": "sanitizeString(input: string): string",
+      "returnType": "string",
+      "comment": "Sanitize user input",
+      "body": "return input.trim().replace(/[<>]/g, '');",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 91,
+      "endLine": 93,
+      "cyclomaticComplexity": 1,
+      "parameters": [
+        {
+          "name": "input",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:global.validatePasswordpassword_string_importsrcutilsvalidation.ValidationResult",
+      "name": "validatePassword",
+      "signature": "validatePassword(password: string): import(\"/src/utils/validation\").ValidationResult",
+      "returnType": "import(\"/src/utils/validation\").ValidationResult",
+      "comment": "Check if password meets requirements",
+      "body": "const errors: string[] = [];\n\nif (password.length < 8) {\nerrors.push('Password must be at least 8 characters long');\n}\n\nif (!/[A-Z]/.test(password)) {\nerrors.push('Password must contain at least one uppercase letter');\n}\n\nif (!/[a-z]/.test(password)) {\nerrors.push('Password must contain at least one lowercase letter');\n}\n\nif (!/\\d/.test(password)) {\nerrors.push('Password must contain at least one number');\n}\n\nif (!/[!@#$%^&*(),.?\":{}|<>]/.test(password)) {\nerrors.push('Password must contain at least one special character');\n}\n\nreturn {\nisValid: errors.length === 0,\nerrors\n};",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/utils/validation.ts",
+      "startLine": 98,
+      "endLine": 125,
+      "cyclomaticComplexity": 7,
+      "parameters": [
+        {
+          "name": "password",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:global.handlerreq_NextApiRequest_res_NextApiResponse_any",
+      "name": "handler",
+      "signature": "handler(req: NextApiRequest, res: NextApiResponse): any",
+      "returnType": "any",
+      "comment": "API handler for users endpoint\nSupports GET (list users) and POST (create user)",
+      "body": "switch (req.method) {\ncase 'GET':\n  return handleGetUsers(req, res);\ncase 'POST':\n  return handleCreateUser(req, res);\ndefault:\n  res.setHeader('Allow', ['GET', 'POST']);\n  return res.status(405).json({ error: 'Method not allowed' });\n}",
+      "visibility": "public",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/pages/api/users.ts",
+      "startLine": 36,
+      "endLine": 46,
+      "cyclomaticComplexity": 4,
+      "parameters": [
+        {
+          "name": "req",
+          "type": "NextApiRequest",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        },
+        {
+          "name": "res",
+          "type": "NextApiResponse",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "isGetter": false,
+        "isSetter": false,
+        "isEventHandler": true
+      }
+    },
+    {
+      "id": "test-project:method:global.handleGetUsersreq_NextApiRequest_res_NextApiResponse_any",
+      "name": "handleGetUsers",
+      "signature": "handleGetUsers(req: NextApiRequest, res: NextApiResponse): any",
+      "returnType": "any",
+      "comment": "Handle GET request - list users with pagination",
+      "body": "try {\nconst { page = '1', limit = '10', role, search } = req.query;\n\nconst pageNum = parseInt(page as string, 10);\nconst limitNum = parseInt(limit as string, 10);\n\n// Validate pagination parameters\nif (isNaN(pageNum) || pageNum < 1) {\n  return res.status(400).json({ error: 'Invalid page number' });\n}\n\nif (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {\n  return res.status(400).json({ error: 'Invalid limit (must be 1-100)' });\n}\n\nlet filteredUsers = [...mockUsers];\n\n// Filter by role if specified\nif (role && role !== 'all') {\n  filteredUsers = filteredUsers.filter(user => user.role === role);\n}\n\n// Filter by search query if specified\nif (search) {\n  const searchLower = (search as string).toLowerCase();\n  filteredUsers = filteredUsers.filter(user =>\n    user.name.toLowerCase().includes(searchLower) ||\n    user.email.toLowerCase().includes(searchLower)\n  );\n}\n\n// Apply pagination\nconst startIndex = (pageNum - 1) * limitNum;\nconst endIndex = startIndex + limitNum;\nconst paginatedUsers = filteredUsers.slice(startIndex, endIndex);\n\nconst response = {\n  users: paginatedUsers,\n  total: filteredUsers.length,\n  page: pageNum,\n  limit: limitNum,\n  totalPages: Math.ceil(filteredUsers.length / limitNum)\n};\n\nreturn res.status(200).json(response);\n} catch (error) {\nconsole.error('Error in handleGetUsers:', error);\nreturn res.status(500).json({ error: 'Internal server error' });\n}",
+      "visibility": "private",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/pages/api/users.ts",
+      "startLine": 51,
+      "endLine": 101,
+      "cyclomaticComplexity": 11,
+      "parameters": [
+        {
+          "name": "req",
+          "type": "NextApiRequest",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        },
+        {
+          "name": "res",
+          "type": "NextApiResponse",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "isGetter": false,
+        "isSetter": false,
+        "isEventHandler": true
+      }
+    },
+    {
+      "id": "test-project:method:global.handleCreateUserreq_NextApiRequest_res_NextApiResponse_any",
+      "name": "handleCreateUser",
+      "signature": "handleCreateUser(req: NextApiRequest, res: NextApiResponse): any",
+      "returnType": "any",
+      "comment": "Handle POST request - create new user",
+      "body": "try {\nconst userData: UserCreateRequest = req.body;\n\n// Validate required fields\nif (!userData.name || !userData.email) {\n  return res.status(400).json({ error: 'Name and email are required' });\n}\n\n// Validate email format\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nif (!emailRegex.test(userData.email)) {\n  return res.status(400).json({ error: 'Invalid email format' });\n}\n\n// Check if email already exists\nconst existingUser = mockUsers.find(user => user.email === userData.email);\nif (existingUser) {\n  return res.status(409).json({ error: 'User with this email already exists' });\n}\n\n// Create new user\nconst newUser: User = {\n  id: generateUserId(),\n  name: userData.name,\n  email: userData.email,\n  role: userData.role || UserRole.USER,\n  createdAt: new Date(),\n  updatedAt: new Date()\n};\n\n// Add to mock database\nmockUsers.push(newUser);\n\nreturn res.status(201).json(newUser);\n} catch (error) {\nconsole.error('Error in handleCreateUser:', error);\nreturn res.status(500).json({ error: 'Internal server error' });\n}",
+      "visibility": "private",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/pages/api/users.ts",
+      "startLine": 106,
+      "endLine": 145,
+      "cyclomaticComplexity": 7,
+      "parameters": [
+        {
+          "name": "req",
+          "type": "NextApiRequest",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        },
+        {
+          "name": "res",
+          "type": "NextApiResponse",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "isGetter": false,
+        "isSetter": false,
+        "isEventHandler": true
+      }
+    },
+    {
+      "id": "test-project:method:global.generateUserId_string",
+      "name": "generateUserId",
+      "signature": "generateUserId(): string",
+      "returnType": "string",
+      "comment": "Generate a unique user ID",
+      "body": "return Math.random().toString(36).substr(2, 9);",
+      "visibility": "private",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/pages/api/users.ts",
+      "startLine": 150,
+      "endLine": 152,
+      "cyclomaticComplexity": 1,
+      "parameters": [],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "isGetter": false,
+        "isSetter": false
+      }
+    },
+    {
+      "id": "test-project:method:global.isValidUserRolerole_string_boolean",
+      "name": "isValidUserRole",
+      "signature": "isValidUserRole(role: string): boolean",
+      "returnType": "boolean",
+      "comment": "Validate user role",
+      "body": "return Object.values(UserRole).includes(role as UserRole);",
+      "visibility": "private",
+      "isAbstract": false,
+      "isFinal": false,
+      "isStatic": false,
+      "isConstructor": false,
+      "isTestMethod": false,
+      "filePath": "/src/pages/api/users.ts",
+      "startLine": 157,
+      "endLine": 159,
+      "cyclomaticComplexity": 1,
+      "parameters": [
+        {
+          "name": "role",
+          "type": "string",
+          "isVarArgs": false,
+          "decorators": [],
+          "properties": {
+            "isOptional": false
+          }
+        }
+      ],
+      "decorators": [],
+      "properties": {
+        "isAsync": false,
+        "isGetter": false,
+        "isSetter": false
+      }
+    }
+  ],
+  "fields": [],
+  "dependencies": [
+    {
+      "id": "test-project:dependency:npm.react",
+      "groupId": "npm",
+      "artifactId": "react",
+      "version": "^18.2.0",
+      "scope": "compile",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "react"
+      }
+    },
+    {
+      "id": "test-project:dependency:npm.react-dom",
+      "groupId": "npm",
+      "artifactId": "react-dom",
+      "version": "^18.2.0",
+      "scope": "compile",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "react-dom"
+      }
+    },
+    {
+      "id": "test-project:dependency:npm.next",
+      "groupId": "npm",
+      "artifactId": "next",
+      "version": "14.0.0",
+      "scope": "compile",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "next"
+      }
+    },
+    {
+      "id": "test-project:dependency:types.node",
+      "groupId": "types",
+      "artifactId": "node",
+      "version": "^20",
+      "scope": "compile",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "@types/node"
+      }
+    },
+    {
+      "id": "test-project:dependency:types.react",
+      "groupId": "types",
+      "artifactId": "react",
+      "version": "^18",
+      "scope": "compile",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "@types/react"
+      }
+    },
+    {
+      "id": "test-project:dependency:types.react-dom",
+      "groupId": "types",
+      "artifactId": "react-dom",
+      "version": "^18",
+      "scope": "compile",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "@types/react-dom"
+      }
+    },
+    {
+      "id": "test-project:dependency:npm.typescript",
+      "groupId": "npm",
+      "artifactId": "typescript",
+      "version": "^5",
+      "scope": "compile",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "typescript"
+      }
+    },
+    {
+      "id": "test-project:dependency:npm.axios",
+      "groupId": "npm",
+      "artifactId": "axios",
+      "version": "^1.6.0",
+      "scope": "compile",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "axios"
+      }
+    },
+    {
+      "id": "test-project:dependency:npm.lodash",
+      "groupId": "npm",
+      "artifactId": "lodash",
+      "version": "^4.17.21",
+      "scope": "compile",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "lodash"
+      }
+    },
+    {
+      "id": "test-project:dependency:npm.eslint",
+      "groupId": "npm",
+      "artifactId": "eslint",
+      "version": "^8",
+      "scope": "test",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "eslint"
+      }
+    },
+    {
+      "id": "test-project:dependency:npm.eslint-config-next",
+      "groupId": "npm",
+      "artifactId": "eslint-config-next",
+      "version": "14.0.0",
+      "scope": "test",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "eslint-config-next"
+      }
+    },
+    {
+      "id": "test-project:dependency:types.lodash",
+      "groupId": "types",
+      "artifactId": "lodash",
+      "version": "^4.14.200",
+      "scope": "test",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "@types/lodash"
+      }
+    },
+    {
+      "id": "test-project:dependency:npm.jest",
+      "groupId": "npm",
+      "artifactId": "jest",
+      "version": "^29.7.0",
+      "scope": "test",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "jest"
+      }
+    },
+    {
+      "id": "test-project:dependency:testing-library.react",
+      "groupId": "testing-library",
+      "artifactId": "react",
+      "version": "^13.4.0",
+      "scope": "test",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "@testing-library/react"
+      }
+    },
+    {
+      "id": "test-project:dependency:testing-library.jest-dom",
+      "groupId": "testing-library",
+      "artifactId": "jest-dom",
+      "version": "^6.1.0",
+      "scope": "test",
+      "type": "npm",
+      "properties": {
+        "source": "package.json",
+        "originalName": "@testing-library/jest-dom"
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel:CONTAINS:srccomponentsUserCard.tsx:test-projectinterface.src.components.UserCard.tsx.UserCardProps",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/components/UserCard.tsx",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.components.UserCard.tsx.UserCardProps",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srccomponentsUserList.tsx:test-projectinterface.src.components.UserList.tsx.UserListProps",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/components/UserList.tsx",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.components.UserList.tsx.UserListProps",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srchooksuseUsers.ts:test-projectinterface.src.hooks.useUsers.UseUsersOptions",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/hooks/useUsers.ts",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.hooks.useUsers.UseUsersOptions",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srchooksuseUsers.ts:test-projectinterface.src.hooks.useUsers.UseUsersReturn",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/hooks/useUsers.ts",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.hooks.useUsers.UseUsersReturn",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srcservicesAdminService.ts:test-projectclass.src.services.AdminService.AdminService",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/services/AdminService.ts",
+      "targetType": "Class",
+      "targetId": "test-project:class:.src.services.AdminService.AdminService",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srcservicesAdminService.ts:test-projectinterface.src.services.AdminService.UserStatistics",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/services/AdminService.ts",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.services.AdminService.UserStatistics",
+      "properties": {}
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.AdminService.AdminService:test-projectmethodAdminService.promoteToAdminuserId_string_Promise_importsrctypesuser.User_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.AdminService.AdminService",
+      "targetType": "Method",
+      "targetId": "test-project:method:AdminService.promoteToAdminuserId_string_Promise_importsrctypesuser.User_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.AdminService.AdminService:test-projectmethodAdminService.demoteFromAdminuserId_string_Promise_importsrctypesuser.User_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.AdminService.AdminService",
+      "targetType": "Method",
+      "targetId": "test-project:method:AdminService.demoteFromAdminuserId_string_Promise_importsrctypesuser.User_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.AdminService.AdminService:test-projectmethodAdminService.suspendUseruserId_string_reason_string__undefined_Promise_void_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.AdminService.AdminService",
+      "targetType": "Method",
+      "targetId": "test-project:method:AdminService.suspendUseruserId_string_reason_string__undefined_Promise_void_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.AdminService.AdminService:test-projectmethodAdminService.reactivateUseruserId_string_Promise_importsrctypesuser.User_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.AdminService.AdminService",
+      "targetType": "Method",
+      "targetId": "test-project:method:AdminService.reactivateUseruserId_string_Promise_importsrctypesuser.User_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.AdminService.AdminService:test-projectmethodAdminService.getAllAdmins_Promise_importsrctypesuser.User_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.AdminService.AdminService",
+      "targetType": "Method",
+      "targetId": "test-project:method:AdminService.getAllAdmins_Promise_importsrctypesuser.User_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.AdminService.AdminService:test-projectmethodAdminService.getAllModerators_Promise_importsrctypesuser.User_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.AdminService.AdminService",
+      "targetType": "Method",
+      "targetId": "test-project:method:AdminService.getAllModerators_Promise_importsrctypesuser.User_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.AdminService.AdminService:test-projectmethodAdminService.bulkDeleteUsersuserIds_string_Promise_void_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.AdminService.AdminService",
+      "targetType": "Method",
+      "targetId": "test-project:method:AdminService.bulkDeleteUsersuserIds_string_Promise_void_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.AdminService.AdminService:test-projectmethodAdminService.getUserStatistics_Promise_importsrcservicesAdminService.UserStatistics_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.AdminService.AdminService",
+      "targetType": "Method",
+      "targetId": "test-project:method:AdminService.getUserStatistics_Promise_importsrcservicesAdminService.UserStatistics_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.AdminService.AdminService:test-projectmethodAdminService.isAdminuserId_string_Promise_boolean_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.AdminService.AdminService",
+      "targetType": "Method",
+      "targetId": "test-project:method:AdminService.isAdminuserId_string_Promise_boolean_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_CONSTRUCTOR:test-projectclass.src.services.AdminService.AdminService:test-projectmethodAdminService.constructorbaseUrl_string__undefined_apiKey_string__undefined",
+      "type": "HAS_CONSTRUCTOR",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.AdminService.AdminService",
+      "targetType": "Method",
+      "targetId": "test-project:method:AdminService.constructorbaseUrl_string__undefined_apiKey_string__undefined",
+      "properties": {
+        "methodType": "constructor",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:CONTAINS:srcservicesUserService.ts:test-projectclass.src.services.UserService.UserService",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/services/UserService.ts",
+      "targetType": "Class",
+      "targetId": "test-project:class:.src.services.UserService.UserService",
+      "properties": {}
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.UserService.UserService:test-projectmethodUserService.getAllUserspage_number_limit_number_Promise_importsrctypesuser.UserListResponse_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.UserService.UserService",
+      "targetType": "Method",
+      "targetId": "test-project:method:UserService.getAllUserspage_number_limit_number_Promise_importsrctypesuser.UserListResponse_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.UserService.UserService:test-projectmethodUserService.getUserByIdid_string_Promise_importsrctypesuser.User_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.UserService.UserService",
+      "targetType": "Method",
+      "targetId": "test-project:method:UserService.getUserByIdid_string_Promise_importsrctypesuser.User_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.UserService.UserService:test-projectmethodUserService.createUseruserData_importsrctypesuser.UserCreateRequest_Promise_importsrctypesuser.User_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.UserService.UserService",
+      "targetType": "Method",
+      "targetId": "test-project:method:UserService.createUseruserData_importsrctypesuser.UserCreateRequest_Promise_importsrctypesuser.User_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.UserService.UserService:test-projectmethodUserService.updateUserid_string_userData_importsrctypesuser.UserUpdateRequest_Promise_importsrctypesuser.User_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.UserService.UserService",
+      "targetType": "Method",
+      "targetId": "test-project:method:UserService.updateUserid_string_userData_importsrctypesuser.UserUpdateRequest_Promise_importsrctypesuser.User_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.UserService.UserService:test-projectmethodUserService.deleteUserid_string_Promise_void_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.UserService.UserService",
+      "targetType": "Method",
+      "targetId": "test-project:method:UserService.deleteUserid_string_Promise_void_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.UserService.UserService:test-projectmethodUserService.getUsersByRolerole_importsrctypesuser.UserRole_Promise_importsrctypesuser.User_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.UserService.UserService",
+      "targetType": "Method",
+      "targetId": "test-project:method:UserService.getUsersByRolerole_importsrctypesuser.UserRole_Promise_importsrctypesuser.User_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.UserService.UserService:test-projectmethodUserService.searchUsersquery_string_Promise_importsrctypesuser.User_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.UserService.UserService",
+      "targetType": "Method",
+      "targetId": "test-project:method:UserService.searchUsersquery_string_Promise_importsrctypesuser.User_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.UserService.UserService:test-projectmethodUserService.getHeaders_Record_string_string_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.UserService.UserService",
+      "targetType": "Method",
+      "targetId": "test-project:method:UserService.getHeaders_Record_string_string_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "private",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.services.UserService.UserService:test-projectmethodUserService.validateUserDatauserData_importsrctypesuser.UserCreateRequest__importsrctypesuser.UserUpdateRequest_boolean",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.UserService.UserService",
+      "targetType": "Method",
+      "targetId": "test-project:method:UserService.validateUserDatauserData_importsrctypesuser.UserCreateRequest__importsrctypesuser.UserUpdateRequest_boolean",
+      "properties": {
+        "methodType": "method",
+        "visibility": "private",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_CONSTRUCTOR:test-projectclass.src.services.UserService.UserService:test-projectmethodUserService.constructorbaseUrl_string_apiKey_string",
+      "type": "HAS_CONSTRUCTOR",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.services.UserService.UserService",
+      "targetType": "Method",
+      "targetId": "test-project:method:UserService.constructorbaseUrl_string_apiKey_string",
+      "properties": {
+        "methodType": "constructor",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:CONTAINS:srctypesuser.ts:test-projectinterface.src.types.user.User",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/types/user.ts",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.types.user.User",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srctypesuser.ts:test-projectinterface.src.types.user.UserCreateRequest",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/types/user.ts",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.types.user.UserCreateRequest",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srctypesuser.ts:test-projectinterface.src.types.user.UserUpdateRequest",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/types/user.ts",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.types.user.UserUpdateRequest",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srctypesuser.ts:test-projectinterface.src.types.user.UserListResponse",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/types/user.ts",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.types.user.UserListResponse",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srctypesuser.ts:test-projectinterface.src.types.user.UserProfile",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/types/user.ts",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.types.user.UserProfile",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srctypesuser.ts:test-projectinterface.src.types.user.UserPreferences",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/types/user.ts",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.types.user.UserPreferences",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srcutilsvalidation.ts:test-projectclass.src.utils.validation.ValidationError",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/utils/validation.ts",
+      "targetType": "Class",
+      "targetId": "test-project:class:.src.utils.validation.ValidationError",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srcutilsvalidation.ts:test-projectclass.src.utils.validation.FormValidator",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/utils/validation.ts",
+      "targetType": "Class",
+      "targetId": "test-project:class:.src.utils.validation.FormValidator",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srcutilsvalidation.ts:test-projectinterface.src.utils.validation.ValidationResult",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/utils/validation.ts",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.utils.validation.ValidationResult",
+      "properties": {}
+    },
+    {
+      "id": "rel:HAS_CONSTRUCTOR:test-projectclass.src.utils.validation.ValidationError:test-projectmethodValidationError.constructorerrors_string",
+      "type": "HAS_CONSTRUCTOR",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:ValidationError.constructorerrors_string",
+      "properties": {
+        "methodType": "constructor",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.utils.validation.ValidationError:test-projectmethodFormValidator.addErrorfield_string_error_string_void",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:FormValidator.addErrorfield_string_error_string_void",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.utils.validation.ValidationError:test-projectmethodFormValidator.hasErrors_boolean",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:FormValidator.hasErrors_boolean",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.utils.validation.ValidationError:test-projectmethodFormValidator.getFieldErrorsfield_string_string",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:FormValidator.getFieldErrorsfield_string_string",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.utils.validation.ValidationError:test-projectmethodFormValidator.getAllErrors_Record_string_string_",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:FormValidator.getAllErrors_Record_string_string_",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.utils.validation.ValidationError:test-projectmethodFormValidator.clear_void",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:FormValidator.clear_void",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.utils.validation.ValidationError:test-projectmethodFormValidator.clearFieldfield_string_void",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:FormValidator.clearFieldfield_string_void",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.utils.validation.ValidationError:test-projectmethodglobal.validateEmailemail_string_boolean",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:global.validateEmailemail_string_boolean",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.utils.validation.ValidationError:test-projectmethodglobal.validateNamename_string_boolean",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:global.validateNamename_string_boolean",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.utils.validation.ValidationError:test-projectmethodglobal.validateUserRolerole_string_boolean",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:global.validateUserRolerole_string_boolean",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.utils.validation.ValidationError:test-projectmethodglobal.validateUserCreatedata_importsrctypesuser.UserCreateRequest_importsrcutilsvalidation.ValidationResult",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:global.validateUserCreatedata_importsrctypesuser.UserCreateRequest_importsrcutilsvalidation.ValidationResult",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.utils.validation.ValidationError:test-projectmethodglobal.validateUserUpdatedata_importsrctypesuser.UserUpdateRequest_importsrcutilsvalidation.ValidationResult",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:global.validateUserUpdatedata_importsrctypesuser.UserUpdateRequest_importsrcutilsvalidation.ValidationResult",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.utils.validation.ValidationError:test-projectmethodglobal.sanitizeStringinput_string_string",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:global.sanitizeStringinput_string_string",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:HAS_METHOD:test-projectclass.src.utils.validation.ValidationError:test-projectmethodglobal.validatePasswordpassword_string_importsrcutilsvalidation.ValidationResult",
+      "type": "HAS_METHOD",
+      "sourceType": "Class",
+      "sourceId": "test-project:class:.src.utils.validation.ValidationError",
+      "targetType": "Method",
+      "targetId": "test-project:method:global.validatePasswordpassword_string_importsrcutilsvalidation.ValidationResult",
+      "properties": {
+        "methodType": "method",
+        "visibility": "public",
+        "isStatic": false,
+        "isAbstract": false
+      }
+    },
+    {
+      "id": "rel:CONTAINS:srcpagesusersindex.tsx:test-projectinterface.src.pages.users.index.tsx.UsersPageProps",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/pages/users/index.tsx",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.pages.users.index.tsx.UsersPageProps",
+      "properties": {}
+    },
+    {
+      "id": "rel:CONTAINS:srcpagesusersindex.tsx:test-projectinterface.src.pages.users.index.tsx.StatsCardProps",
+      "type": "CONTAINS",
+      "sourceType": "File",
+      "sourceId": "/src/pages/users/index.tsx",
+      "targetType": "Interface",
+      "targetId": "test-project:interface:.src.pages.users.index.tsx.StatsCardProps",
+      "properties": {}
+    }
+  ],
+  "apiEndpoints": [],
+  "lambdaExpressions": [],
+  "methodReferences": [],
+  "testCases": [],
+  "documents": []
+}

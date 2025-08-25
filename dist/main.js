@@ -2779,7 +2779,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 };
 var _a, _b, _c;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.IndexingController = exports.CreateJobDto = void 0;
+exports.IndexingController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const nest_winston_1 = __webpack_require__(/*! nest-winston */ "nest-winston");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
@@ -2788,66 +2788,11 @@ const index_job_entity_1 = __webpack_require__(/*! ./entities/index-job.entity *
 const typeorm_1 = __webpack_require__(/*! @nestjs/typeorm */ "@nestjs/typeorm");
 const typeorm_2 = __webpack_require__(/*! typeorm */ "typeorm");
 const entities_1 = __webpack_require__(/*! @/entities */ "./src/entities/index.ts");
-class CreateJobDto {
-}
-exports.CreateJobDto = CreateJobDto;
 let IndexingController = class IndexingController {
     constructor(jobOrchestrator, codebaseRepository, logger) {
         this.jobOrchestrator = jobOrchestrator;
         this.codebaseRepository = codebaseRepository;
         this.logger = logger;
-    }
-    async createJob(dto) {
-        this.logger.debug(`[CREATE-JOB] Full request details`, {
-            projectId: dto.projectId,
-            codebaseId: dto.codebaseId,
-            type: dto.type,
-            description: dto.description,
-            baseCommit: dto.baseCommit,
-            priority: dto.priority
-        });
-        try {
-            const request = {
-                projectId: dto.projectId,
-                codebaseId: dto.codebaseId,
-                type: dto.type,
-                description: dto.description,
-                baseCommit: dto.baseCommit,
-                priority: dto.priority,
-            };
-            this.logger.debug(`[CREATE-JOB] Calling job orchestrator with request`);
-            const job = await this.jobOrchestrator.createJob(request);
-            this.logger.log(`[CREATE-JOB] Job created successfully`, {
-                jobId: job.id,
-                type: job.type,
-                status: job.status,
-                createdAt: job.createdAt
-            });
-            return {
-                success: true,
-                data: {
-                    id: job.id,
-                    type: job.type,
-                    status: job.status,
-                    createdAt: job.createdAt,
-                },
-                message: 'Index job created and started successfully',
-            };
-        }
-        catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error(`[CREATE-JOB] Failed to create job`, {
-                error: errorMessage,
-                stack: error instanceof Error ? error.stack : undefined,
-                projectId: dto.projectId,
-                codebaseId: dto.codebaseId,
-                type: dto.type
-            });
-            if (errorMessage.includes('not found')) {
-                throw new common_1.NotFoundException(errorMessage);
-            }
-            throw new common_1.BadRequestException(errorMessage);
-        }
     }
     async getJobStatus(jobId) {
         this.logger.debug(`[GET-JOB-STATUS] Retrieving job status`, {
@@ -2855,17 +2800,6 @@ let IndexingController = class IndexingController {
         });
         try {
             const job = await this.jobOrchestrator.getJobStatus(jobId);
-            this.logger.debug(`[GET-JOB-STATUS] Job status retrieved successfully`, {
-                jobId: job.id,
-                type: job.type,
-                status: job.status,
-                progress: job.progress || 0,
-                currentTask: job.currentTask,
-                hasError: !!job.error,
-                startedAt: job.startedAt,
-                completedAt: job.completedAt,
-                tasksCount: Object.keys(job.metadata?.tasks || {}).length
-            });
             return {
                 success: true,
                 data: {
@@ -2921,34 +2855,36 @@ let IndexingController = class IndexingController {
             throw new common_1.BadRequestException(errorMessage);
         }
     }
-    async startFullIndexing(codebaseId, description) {
+    async startFullIndexing(codebaseId) {
         this.logger.log(`[FULL-INDEX] Starting full indexing for codebase: ${codebaseId}`);
         try {
             const codebase = await this.codebaseRepository.findOne({
                 where: { id: codebaseId },
                 relations: ['project'],
             });
-            if (!codebase) {
+            if (codebase) {
+                const request = {
+                    project: codebase.project,
+                    codebase,
+                    type: index_job_entity_1.IndexJobType.CODEBASE_FULL,
+                    description: 'Full Codebase indexing',
+                };
+                const job = await this.jobOrchestrator.createJob(request);
+                return {
+                    success: true,
+                    data: {
+                        jobId: job.id,
+                        status: job.status,
+                        codebaseId: codebase.id,
+                        codebaseName: codebase.name,
+                        projectId: codebase.project.id,
+                    },
+                    message: 'Full indexing started successfully',
+                };
+            }
+            else {
                 throw new common_1.NotFoundException(`Codebase ${codebaseId} not found`);
             }
-            const request = {
-                projectId: codebase.project.id,
-                codebaseId,
-                type: index_job_entity_1.IndexJobType.CODEBASE_FULL,
-                description: description || 'Full codebase indexing',
-            };
-            const job = await this.jobOrchestrator.createJob(request);
-            return {
-                success: true,
-                data: {
-                    jobId: job.id,
-                    status: job.status,
-                    codebaseId: codebase.id,
-                    codebaseName: codebase.name,
-                    projectId: codebase.project.id,
-                },
-                message: 'Full indexing started successfully',
-            };
         }
         catch (error) {
             this.logger.error(`[FULL-INDEX] Error starting full indexing for codebase ${codebaseId}:`, error);
@@ -2968,33 +2904,35 @@ let IndexingController = class IndexingController {
                 where: { id: codebaseId },
                 relations: ['project'],
             });
-            if (!codebase) {
-                throw new common_1.NotFoundException(`Codebase ${codebaseId} not found`);
-            }
-            const request = {
-                projectId: codebase.project.id,
-                codebaseId,
-                type: index_job_entity_1.IndexJobType.CODEBASE_INCR,
-                baseCommit: fromCommit,
-                description: 'Incremental codebase update',
-            };
-            const job = await this.jobOrchestrator.createJob(request);
-            this.logger.log(`[INCREMENTAL-UPDATE] Incremental update job created successfully`, {
-                jobId: job.id,
-                status: job.status,
-                codebaseId
-            });
-            return {
-                success: true,
-                data: {
+            if (codebase) {
+                const request = {
+                    project: codebase.project,
+                    codebase,
+                    type: index_job_entity_1.IndexJobType.CODEBASE_INCR,
+                    baseCommit: fromCommit,
+                    description: 'Incremental codebase update',
+                };
+                const job = await this.jobOrchestrator.createJob(request);
+                this.logger.log(`[INCREMENTAL-UPDATE] Incremental update job created successfully`, {
                     jobId: job.id,
                     status: job.status,
-                    codebaseId: codebase.id,
-                    codebaseName: codebase.name,
-                    projectId: codebase.project.id,
-                },
-                message: 'Incremental update started successfully',
-            };
+                    codebaseId
+                });
+                return {
+                    success: true,
+                    data: {
+                        jobId: job.id,
+                        status: job.status,
+                        codebaseId: codebase.id,
+                        codebaseName: codebase.name,
+                        projectId: codebase.project.id,
+                    },
+                    message: 'Incremental update started successfully',
+                };
+            }
+            else {
+                throw new common_1.NotFoundException(`Codebase ${codebaseId} not found`);
+            }
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -3007,126 +2945,8 @@ let IndexingController = class IndexingController {
             throw new common_1.BadRequestException(`Failed to start incremental update: ${errorMessage}`);
         }
     }
-    async startApiAnalysis(projectId, description) {
-        this.logger.log(`[API-ANALYSIS] Starting API analysis for project: ${projectId}`);
-        try {
-            const request = {
-                projectId,
-                type: index_job_entity_1.IndexJobType.API_ANALYSIS,
-                description: description || 'Project API analysis',
-            };
-            const job = await this.jobOrchestrator.createJob(request);
-            return {
-                success: true,
-                data: {
-                    jobId: job.id,
-                    status: job.status,
-                    projectId,
-                },
-                message: 'API analysis started successfully',
-            };
-        }
-        catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error(`[API-ANALYSIS] Failed to start API analysis`, { projectId, error: errorMessage });
-            throw new common_1.BadRequestException(`Failed to start API analysis: ${errorMessage}`);
-        }
-    }
-    async startUserflowAnalysis(projectId, description) {
-        this.logger.log(`[USERFLOW-ANALYSIS] Starting user flow analysis for project: ${projectId}`);
-        try {
-            const request = {
-                projectId,
-                type: index_job_entity_1.IndexJobType.USERFLOW_ANALYSIS,
-                description: description || 'Project user flow analysis',
-            };
-            const job = await this.jobOrchestrator.createJob(request);
-            return {
-                success: true,
-                data: {
-                    jobId: job.id,
-                    status: job.status,
-                    projectId,
-                },
-                message: 'User flow analysis started successfully',
-            };
-        }
-        catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error(`[USERFLOW-ANALYSIS] Failed to start user flow analysis`, { projectId, error: errorMessage });
-            throw new common_1.BadRequestException(`Failed to start user flow analysis: ${errorMessage}`);
-        }
-    }
-    async startDocsFullIndex(projectId, description) {
-        this.logger.log(`[DOCS-FULL-INDEX] Starting full documentation indexing for project: ${projectId}`);
-        try {
-            const request = {
-                projectId,
-                type: index_job_entity_1.IndexJobType.DOCS_BUCKET_FULL,
-                description: description || 'Full documentation indexing',
-            };
-            const job = await this.jobOrchestrator.createJob(request);
-            return {
-                success: true,
-                data: {
-                    jobId: job.id,
-                    status: job.status,
-                    projectId,
-                },
-                message: 'Full documentation indexing started successfully',
-            };
-        }
-        catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error(`[DOCS-FULL-INDEX] Failed to start full documentation indexing`, { projectId, error: errorMessage });
-            throw new common_1.BadRequestException(`Failed to start full documentation indexing: ${errorMessage}`);
-        }
-    }
-    async startDocsIncrementalIndex(projectId, description) {
-        this.logger.log(`[DOCS-INCR-INDEX] Starting incremental documentation indexing for project: ${projectId}`);
-        try {
-            const request = {
-                projectId,
-                type: index_job_entity_1.IndexJobType.DOCS_BUCKET_INCR,
-                description: description || 'Incremental documentation indexing',
-            };
-            const job = await this.jobOrchestrator.createJob(request);
-            return {
-                success: true,
-                data: {
-                    jobId: job.id,
-                    status: job.status,
-                    projectId,
-                },
-                message: 'Incremental documentation indexing started successfully',
-            };
-        }
-        catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error(`[DOCS-INCR-INDEX] Failed to start incremental documentation indexing`, { projectId, error: errorMessage });
-            throw new common_1.BadRequestException(`Failed to start incremental documentation indexing: ${errorMessage}`);
-        }
-    }
-    async listJobs(status, type, limit) {
-        return {
-            success: true,
-            data: [],
-            message: 'Job listing not yet implemented',
-        };
-    }
 };
 exports.IndexingController = IndexingController;
-__decorate([
-    (0, common_1.Post)('jobs'),
-    (0, swagger_1.ApiOperation)({ summary: 'Create and start a new indexing job' }),
-    (0, swagger_1.ApiResponse)({ status: 201, description: 'Job created successfully' }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid request' }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'Project or codebase not found' }),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [CreateJobDto]),
-    __metadata("design:returntype", Promise)
-], IndexingController.prototype, "createJob", null);
 __decorate([
     (0, common_1.Get)('jobs/:id'),
     (0, swagger_1.ApiOperation)({ summary: 'Get job status and progress' }),
@@ -3156,9 +2976,8 @@ __decorate([
     (0, swagger_1.ApiParam)({ name: 'id', description: 'Codebase ID' }),
     (0, swagger_1.ApiResponse)({ status: 201, description: 'Full indexing started' }),
     __param(0, (0, common_1.Param)('id')),
-    __param(1, (0, common_1.Query)('description')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], IndexingController.prototype, "startFullIndexing", null);
 __decorate([
@@ -3173,61 +2992,6 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], IndexingController.prototype, "startIncrementalUpdate", null);
-__decorate([
-    (0, common_1.Post)('projects/:id/api-analysis'),
-    (0, swagger_1.ApiOperation)({ summary: 'Start API analysis for project' }),
-    (0, swagger_1.ApiParam)({ name: 'id', description: 'Project ID' }),
-    (0, swagger_1.ApiResponse)({ status: 201, description: 'API analysis started' }),
-    __param(0, (0, common_1.Param)('id')),
-    __param(1, (0, common_1.Query)('description')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
-    __metadata("design:returntype", Promise)
-], IndexingController.prototype, "startApiAnalysis", null);
-__decorate([
-    (0, common_1.Post)('projects/:id/userflow-analysis'),
-    (0, swagger_1.ApiOperation)({ summary: 'Start user flow analysis for project' }),
-    (0, swagger_1.ApiParam)({ name: 'id', description: 'Project ID' }),
-    (0, swagger_1.ApiResponse)({ status: 201, description: 'User flow analysis started' }),
-    __param(0, (0, common_1.Param)('id')),
-    __param(1, (0, common_1.Query)('description')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
-    __metadata("design:returntype", Promise)
-], IndexingController.prototype, "startUserflowAnalysis", null);
-__decorate([
-    (0, common_1.Post)('projects/:id/docs-full-index'),
-    (0, swagger_1.ApiOperation)({ summary: 'Start full documentation indexing for project' }),
-    (0, swagger_1.ApiParam)({ name: 'id', description: 'Project ID' }),
-    (0, swagger_1.ApiResponse)({ status: 201, description: 'Full documentation indexing started' }),
-    __param(0, (0, common_1.Param)('id')),
-    __param(1, (0, common_1.Query)('description')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
-    __metadata("design:returntype", Promise)
-], IndexingController.prototype, "startDocsFullIndex", null);
-__decorate([
-    (0, common_1.Post)('projects/:id/docs-incremental-index'),
-    (0, swagger_1.ApiOperation)({ summary: 'Start incremental documentation indexing for project' }),
-    (0, swagger_1.ApiParam)({ name: 'id', description: 'Project ID' }),
-    (0, swagger_1.ApiResponse)({ status: 201, description: 'Incremental documentation indexing started' }),
-    __param(0, (0, common_1.Param)('id')),
-    __param(1, (0, common_1.Query)('description')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
-    __metadata("design:returntype", Promise)
-], IndexingController.prototype, "startDocsIncrementalIndex", null);
-__decorate([
-    (0, common_1.Get)('jobs'),
-    (0, swagger_1.ApiOperation)({ summary: 'List all jobs for monitoring' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Jobs retrieved successfully' }),
-    __param(0, (0, common_1.Query)('status')),
-    __param(1, (0, common_1.Query)('type')),
-    __param(2, (0, common_1.Query)('limit')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Number]),
-    __metadata("design:returntype", Promise)
-], IndexingController.prototype, "listJobs", null);
 exports.IndexingController = IndexingController = __decorate([
     (0, swagger_1.ApiTags)('Indexing'),
     (0, common_1.Controller)('indexing'),
@@ -3428,7 +3192,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+var _a, _b, _c, _d, _e, _f, _g, _h;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.JobOrchestratorService = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
@@ -3436,24 +3200,19 @@ const typeorm_1 = __webpack_require__(/*! @nestjs/typeorm */ "@nestjs/typeorm");
 const nest_winston_1 = __webpack_require__(/*! nest-winston */ "nest-winston");
 const typeorm_2 = __webpack_require__(/*! typeorm */ "typeorm");
 const config_1 = __webpack_require__(/*! @nestjs/config */ "@nestjs/config");
-const entities_1 = __webpack_require__(/*! @/entities */ "./src/entities/index.ts");
 const index_job_entity_1 = __webpack_require__(/*! ../../entities/index-job.entity */ "./src/modules/indexing/entities/index-job.entity.ts");
 const git_sync_task_1 = __webpack_require__(/*! ../tasks/git-sync.task */ "./src/modules/indexing/jobs/tasks/git-sync.task.ts");
 const code_parsing_task_1 = __webpack_require__(/*! ../tasks/code-parsing.task */ "./src/modules/indexing/jobs/tasks/code-parsing.task.ts");
 const graph_update_task_1 = __webpack_require__(/*! ../tasks/graph-update.task */ "./src/modules/indexing/jobs/tasks/graph-update.task.ts");
 const cleanup_task_1 = __webpack_require__(/*! ../tasks/cleanup.task */ "./src/modules/indexing/jobs/tasks/cleanup.task.ts");
-const task_config_service_1 = __webpack_require__(/*! ../../config/task-config.service */ "./src/modules/indexing/config/task-config.service.ts");
 const job_worker_service_1 = __webpack_require__(/*! ./job-worker.service */ "./src/modules/indexing/jobs/services/job-worker.service.ts");
 const fs = __webpack_require__(/*! fs/promises */ "fs/promises");
 const path = __webpack_require__(/*! path */ "path");
 const os = __webpack_require__(/*! os */ "os");
 let JobOrchestratorService = class JobOrchestratorService {
-    constructor(jobRepository, projectRepository, codebaseRepository, configService, taskConfigService, jobWorkerService, gitSyncTask, codeParsingTask, graphUpdateTask, cleanupTask, logger) {
+    constructor(jobRepository, configService, jobWorkerService, gitSyncTask, codeParsingTask, graphUpdateTask, cleanupTask, logger) {
         this.jobRepository = jobRepository;
-        this.projectRepository = projectRepository;
-        this.codebaseRepository = codebaseRepository;
         this.configService = configService;
-        this.taskConfigService = taskConfigService;
         this.jobWorkerService = jobWorkerService;
         this.gitSyncTask = gitSyncTask;
         this.codeParsingTask = codeParsingTask;
@@ -3463,34 +3222,15 @@ let JobOrchestratorService = class JobOrchestratorService {
         this.runningJobs = new Map();
     }
     async createJob(request) {
-        this.logger.log(`[JOB-ORCHESTRATOR] Creating job: ${request.type} for project ${request.projectId}`);
-        const project = await this.projectRepository.findOne({
-            where: { id: request.projectId },
-        });
-        if (!project) {
-            throw new Error(`Project ${request.projectId} not found`);
-        }
-        let codebase;
-        if (request.codebaseId) {
-            codebase = await this.codebaseRepository.findOne({
-                where: { id: request.codebaseId },
-                relations: ['project'],
-            });
-            if (!codebase) {
-                throw new Error(`Codebase ${request.codebaseId} not found`);
-            }
-            if (codebase.project.id !== request.projectId) {
-                throw new Error(`Codebase ${request.codebaseId} does not belong to project ${request.projectId}`);
-            }
-        }
+        this.logger.log(`[JOB-ORCHESTRATOR] Creating job: ${request.type} for project ${request.project.id}`);
         const job = new index_job_entity_1.IndexJob();
         job.type = request.type;
         job.status = index_job_entity_1.IndexJobStatus.PENDING;
         job.priority = request.priority || 0;
         job.description = request.description;
         job.metadata = this.createInitialMetadata(request);
-        job.project = project;
-        job.codebase = codebase;
+        job.project = request.project;
+        job.codebase = request.codebase;
         const savedJob = await this.jobRepository.save(job);
         const executionPromise = this.jobWorkerService.submitJob(savedJob.id, savedJob.type, () => this.executeJob(savedJob.id));
         this.runningJobs.set(savedJob.id, executionPromise);
@@ -3517,75 +3257,77 @@ let JobOrchestratorService = class JobOrchestratorService {
                 where: { id: jobId },
                 relations: ['project', 'codebase'],
             });
-            if (!job) {
-                throw new Error(`Job ${jobId} not found`);
-            }
-            this.logger.log(`Starting job execution: ${jobId}`);
-            await this.updateJobStatus(job, index_job_entity_1.IndexJobStatus.RUNNING);
-            const context = await this.createJobContext(job);
-            const tasks = this.getTaskInstancesForJobType(job.type);
-            for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
-                const task = tasks[taskIndex];
-                const taskNumber = taskIndex + 1;
-                if (!task.shouldExecute(context)) {
-                    this.logger.debug(`Skipping task: ${task.name} (conditions not met)`);
-                    continue;
-                }
-                tasksExecuted++;
-                this.logger.log(`Executing task ${taskNumber}/${tasks.length}: ${task.name}`);
-                try {
-                    job.currentTask = task.name;
-                    job.progress = Math.round((tasksExecuted / tasks.length) * 100);
-                    await this.jobRepository.save(job);
-                    const result = await task.execute(context);
-                    if (result.success) {
-                        tasksSucceeded++;
-                        this.logger.log(`Task completed successfully: ${task.name}`);
+            if (job) {
+                this.logger.log(`Starting job execution: ${jobId}`);
+                await this.updateJobStatus(job, index_job_entity_1.IndexJobStatus.RUNNING);
+                const context = await this.createJobContext(job);
+                const tasks = this.getTaskInstancesForJobType(job.type);
+                for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
+                    const task = tasks[taskIndex];
+                    const taskNumber = taskIndex + 1;
+                    if (!task.shouldExecute(context)) {
+                        this.logger.debug(`Skipping task: ${task.name} (conditions not met)`);
+                        continue;
                     }
-                    else {
+                    tasksExecuted++;
+                    this.logger.log(`Executing task ${taskNumber}/${tasks.length}: ${task.name}`);
+                    try {
+                        job.currentTask = task.name;
+                        job.progress = Math.round((tasksExecuted / tasks.length) * 100);
+                        await this.jobRepository.save(job);
+                        const result = await task.execute(context);
+                        if (result.success) {
+                            tasksSucceeded++;
+                            this.logger.log(`Task completed successfully: ${task.name}`);
+                        }
+                        else {
+                            tasksFailed++;
+                            finalError = result.error;
+                            this.logger.error(`Task failed: ${task.name}`, { error: result.error });
+                            break;
+                        }
+                    }
+                    catch (error) {
                         tasksFailed++;
-                        finalError = result.error;
-                        this.logger.error(`Task failed: ${task.name}`, { error: result.error });
+                        const errorMessage = error instanceof Error ? error.message : String(error);
+                        finalError = errorMessage;
+                        this.logger.error(`Task execution error: ${task.name}`, { error: errorMessage });
                         break;
                     }
-                }
-                catch (error) {
-                    tasksFailed++;
-                    const errorMessage = error instanceof Error ? error.message : String(error);
-                    finalError = errorMessage;
-                    this.logger.error(`Task execution error: ${task.name}`, { error: errorMessage });
-                    break;
-                }
-                finally {
-                    try {
-                        await task.cleanup(context);
-                    }
-                    catch (cleanupError) {
-                        this.logger.warn(`Task cleanup failed: ${task.name}`, { error: cleanupError });
+                    finally {
+                        try {
+                            await task.cleanup(context);
+                        }
+                        catch (cleanupError) {
+                            this.logger.warn(`Task cleanup failed: ${task.name}`, { error: cleanupError });
+                        }
                     }
                 }
+                const finalStatus = tasksFailed > 0 ? index_job_entity_1.IndexJobStatus.FAILED : index_job_entity_1.IndexJobStatus.COMPLETED;
+                job.progress = finalStatus === index_job_entity_1.IndexJobStatus.COMPLETED ? 100 : job.progress;
+                await this.updateJobStatus(job, finalStatus, finalError);
+                await this.cleanupJobContext(context);
+                const duration = Date.now() - startTime;
+                this.logger.log(`Job ${jobId} execution completed`, {
+                    status: finalStatus,
+                    duration,
+                    tasksExecuted,
+                    tasksSucceeded,
+                    tasksFailed,
+                });
+                return {
+                    jobId,
+                    status: finalStatus,
+                    duration,
+                    tasksExecuted,
+                    tasksSucceeded,
+                    tasksFailed,
+                    finalError,
+                };
             }
-            const finalStatus = tasksFailed > 0 ? index_job_entity_1.IndexJobStatus.FAILED : index_job_entity_1.IndexJobStatus.COMPLETED;
-            job.progress = finalStatus === index_job_entity_1.IndexJobStatus.COMPLETED ? 100 : job.progress;
-            await this.updateJobStatus(job, finalStatus, finalError);
-            await this.cleanupJobContext(context);
-            const duration = Date.now() - startTime;
-            this.logger.log(`Job ${jobId} execution completed`, {
-                status: finalStatus,
-                duration,
-                tasksExecuted,
-                tasksSucceeded,
-                tasksFailed,
-            });
-            return {
-                jobId,
-                status: finalStatus,
-                duration,
-                tasksExecuted,
-                tasksSucceeded,
-                tasksFailed,
-                finalError,
-            };
+            else {
+                throw new Error(`Job ${jobId} not found`);
+            }
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -3711,7 +3453,6 @@ let JobOrchestratorService = class JobOrchestratorService {
     createInitialMetadata(request) {
         const metadata = {
             filesProcessed: 0,
-            symbolsExtracted: 0,
             duration: 0,
             tasks: {},
             metrics: {
@@ -3728,21 +3469,13 @@ let JobOrchestratorService = class JobOrchestratorService {
         }
         return metadata;
     }
-    getActiveJobs() {
-        return Array.from(this.runningJobs.keys());
-    }
-    isJobActive(jobId) {
-        return this.runningJobs.has(jobId);
-    }
 };
 exports.JobOrchestratorService = JobOrchestratorService;
 exports.JobOrchestratorService = JobOrchestratorService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(index_job_entity_1.IndexJob)),
-    __param(1, (0, typeorm_1.InjectRepository)(entities_1.TekProject)),
-    __param(2, (0, typeorm_1.InjectRepository)(entities_1.Codebase)),
-    __param(10, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
-    __metadata("design:paramtypes", [typeof (_a = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _a : Object, typeof (_b = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _b : Object, typeof (_c = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _c : Object, typeof (_d = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _d : Object, typeof (_e = typeof task_config_service_1.TaskConfigService !== "undefined" && task_config_service_1.TaskConfigService) === "function" ? _e : Object, typeof (_f = typeof job_worker_service_1.JobWorkerService !== "undefined" && job_worker_service_1.JobWorkerService) === "function" ? _f : Object, typeof (_g = typeof git_sync_task_1.GitSyncTask !== "undefined" && git_sync_task_1.GitSyncTask) === "function" ? _g : Object, typeof (_h = typeof code_parsing_task_1.CodeParsingTask !== "undefined" && code_parsing_task_1.CodeParsingTask) === "function" ? _h : Object, typeof (_j = typeof graph_update_task_1.GraphUpdateTask !== "undefined" && graph_update_task_1.GraphUpdateTask) === "function" ? _j : Object, typeof (_k = typeof cleanup_task_1.CleanupTask !== "undefined" && cleanup_task_1.CleanupTask) === "function" ? _k : Object, typeof (_l = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _l : Object])
+    __param(7, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
+    __metadata("design:paramtypes", [typeof (_a = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _a : Object, typeof (_b = typeof config_1.ConfigService !== "undefined" && config_1.ConfigService) === "function" ? _b : Object, typeof (_c = typeof job_worker_service_1.JobWorkerService !== "undefined" && job_worker_service_1.JobWorkerService) === "function" ? _c : Object, typeof (_d = typeof git_sync_task_1.GitSyncTask !== "undefined" && git_sync_task_1.GitSyncTask) === "function" ? _d : Object, typeof (_e = typeof code_parsing_task_1.CodeParsingTask !== "undefined" && code_parsing_task_1.CodeParsingTask) === "function" ? _e : Object, typeof (_f = typeof graph_update_task_1.GraphUpdateTask !== "undefined" && graph_update_task_1.GraphUpdateTask) === "function" ? _f : Object, typeof (_g = typeof cleanup_task_1.CleanupTask !== "undefined" && cleanup_task_1.CleanupTask) === "function" ? _g : Object, typeof (_h = typeof common_1.LoggerService !== "undefined" && common_1.LoggerService) === "function" ? _h : Object])
 ], JobOrchestratorService);
 
 
@@ -3877,9 +3610,6 @@ let JobWorkerService = class JobWorkerService {
             default:
                 return baseTimeout;
         }
-    }
-    getQueuePosition(_jobId) {
-        return null;
     }
     async cancelQueuedJob(jobId) {
         this.logger.warn(`Job cancellation not yet implemented for ${jobId}`);
@@ -4264,31 +3994,36 @@ let CodeParsingTask = class CodeParsingTask extends base_task_interface_1.BaseTa
         });
         try {
             const imageAvailable = await this.dockerParserService.ensureDockerImage(languageConfig.dockerImage);
-            if (!imageAvailable) {
+            if (imageAvailable) {
+                const outputPath = path.join(os.tmpdir(), `parser-output-${jobId}-${language}-${Date.now()}.json`);
+                const parserResult = await this.dockerParserService.executeParser({
+                    dockerImage: languageConfig.dockerImage,
+                    sourcePath: basePath,
+                    outputPath,
+                    options: languageConfig.options,
+                    timeout: config.timeout
+                });
+                if (parserResult.success) {
+                    const standardizedOutput = this.parserTransformerService.transformParserOutput(parserResult.output, language);
+                    context.logger.info(`[${jobId}] [CODE-PARSING] Successfully parsed ${language} files`, {
+                        filesProcessed: standardizedOutput.metadata.totalFiles,
+                        nodesExtracted: standardizedOutput.metadata.totalNodes,
+                        relationshipsExtracted: standardizedOutput.metadata.totalRelationships,
+                        duration: parserResult.duration
+                    });
+                    return {
+                        symbolsExtracted: standardizedOutput.metadata.totalNodes,
+                        filesProcessed: standardizedOutput.metadata.totalFiles,
+                        results: standardizedOutput,
+                    };
+                }
+                else {
+                    throw new Error(`Parser execution failed: ${parserResult.error}`);
+                }
+            }
+            else {
                 throw new Error(`Docker image not available: ${languageConfig.dockerImage}`);
             }
-            const outputPath = path.join(os.tmpdir(), `parser-output-${jobId}-${language}-${Date.now()}.json`);
-            const parserResult = await this.dockerParserService.executeParser({
-                dockerImage: languageConfig.dockerImage,
-                sourcePath: basePath,
-                outputPath,
-                options: languageConfig.options,
-                timeout: config.timeout
-            });
-            if (!parserResult.success) {
-                throw new Error(`Parser execution failed: ${parserResult.error}`);
-            }
-            const standardizedOutput = this.parserTransformerService.transformParserOutput(parserResult.output, language);
-            context.logger.info(`[${jobId}] [CODE-PARSING] Successfully parsed ${language} files`, {
-                filesProcessed: standardizedOutput.metadata.totalFiles,
-                symbolsExtracted: standardizedOutput.metadata.totalSymbols,
-                duration: parserResult.duration
-            });
-            return {
-                symbolsExtracted: standardizedOutput.metadata.totalSymbols,
-                filesProcessed: standardizedOutput.metadata.totalFiles,
-                results: standardizedOutput,
-            };
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -4368,7 +4103,7 @@ let GitSyncTask = class GitSyncTask extends base_task_interface_1.BaseTask {
             const jobMetadata = context.job.metadata;
             return {
                 ...baseConfig,
-                baseCommit: jobMetadata?.baseCommit || baseConfig.baseCommit,
+                baseCommit: jobMetadata?.baseCommit,
             };
         }
         return baseConfig;
@@ -4621,38 +4356,41 @@ let GraphUpdateTask = class GraphUpdateTask extends base_task_interface_1.BaseTa
         try {
             await this.graphService.initializeGraph(config);
             const parsingResults = codeParsingData.parsingResults;
-            const allFiles = [];
+            const allNodes = [];
+            const allRelationships = [];
             for (const parserOutput of parsingResults) {
-                allFiles.push(...parserOutput.files);
+                allNodes.push(...parserOutput.nodes);
+                allRelationships.push(...parserOutput.relationships);
             }
-            context.logger.info(`[${jobId}] [GRAPH-UPDATE] Total files from parser: ${allFiles.length}`);
+            context.logger.info(`[${jobId}] [GRAPH-UPDATE] Total nodes from parser: ${allNodes.length}`);
+            context.logger.info(`[${jobId}] [GRAPH-UPDATE] Total relationships from parser: ${allRelationships.length}`);
             context.logger.info(`[${jobId}] [GRAPH-UPDATE] Parser results structure:`, {
                 parsingResultsCount: parsingResults.length,
                 firstResultStructure: parsingResults[0] ? {
                     hasMetadata: !!parsingResults[0].metadata,
-                    hasFiles: !!parsingResults[0].files,
-                    filesCount: parsingResults[0].files?.length || 0,
-                    metadataSymbols: parsingResults[0].metadata?.totalSymbols || 0
+                    hasNodes: !!parsingResults[0].nodes,
+                    nodesCount: parsingResults[0].nodes?.length || 0,
+                    relationshipsCount: parsingResults[0].relationships?.length || 0,
+                    totalNodes: parsingResults[0].metadata?.totalNodes || 0
                 } : 'No results'
             });
-            context.logger.info(`[${jobId}] [GRAPH-UPDATE] Sample file structure:`, allFiles[0] ? {
-                path: allFiles[0].path,
-                symbolsCount: allFiles[0].symbols?.length || 0,
-                hasSymbols: !!allFiles[0].symbols,
-                symbolsArray: allFiles[0].symbols,
-                fileStructure: Object.keys(allFiles[0])
-            } : 'No files');
-            const filesWithSymbols = allFiles.filter(file => file.symbols && file.symbols.length > 0);
-            context.logger.info(`[${jobId}] [GRAPH-UPDATE] Processing ${filesWithSymbols.length} files with symbols in batches of ${config.batchSize}`);
+            context.logger.info(`[${jobId}] [GRAPH-UPDATE] Sample node structure:`, allNodes[0] ? {
+                id: allNodes[0].id,
+                nodeType: allNodes[0].nodeType,
+                propertiesKeys: Object.keys(allNodes[0].properties || {}),
+                nodeStructure: Object.keys(allNodes[0])
+            } : 'No nodes');
+            context.logger.info(`[${jobId}] [GRAPH-UPDATE] Processing ${allNodes.length} nodes and ${allRelationships.length} relationships in batches of ${config.batchSize}`);
             if (!context.codebase) {
                 throw new Error('Codebase not found in job context');
             }
             const codebaseId = context.codebase.id;
-            const result = await this.graphService.updateCodebaseGraph(codebaseId, filesWithSymbols, config);
+            const result = await this.graphService.updateCodebaseGraph(codebaseId, allNodes, allRelationships, config);
             context.data.GRAPH_UPDATE = result;
             context.logger.info(`[${jobId}] [GRAPH-UPDATE] Graph update completed successfully`, {
                 ...result,
-                filesProcessed: filesWithSymbols.length
+                nodesProcessed: allNodes.length,
+                relationshipsProcessed: allRelationships.length
             });
             return {
                 success: true,
@@ -4735,7 +4473,7 @@ let DockerParserService = class DockerParserService {
     async executeParser(options) {
         const startTime = Date.now();
         const { dockerImage, sourcePath, outputPath, options: dockerOptions = [], timeout = 600000 } = options;
-        const containerName = `java-parser-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+        const containerName = `language-parser-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
         this.logger.debug(`[DOCKER-PARSER] Starting parser execution`, {
             dockerImage,
             sourcePath,
@@ -5126,7 +4864,6 @@ const typeorm_2 = __webpack_require__(/*! typeorm */ "typeorm");
 const nest_winston_1 = __webpack_require__(/*! nest-winston */ "nest-winston");
 const entities_1 = __webpack_require__(/*! @/entities */ "./src/entities/index.ts");
 const neo4j_service_1 = __webpack_require__(/*! ./neo4j.service */ "./src/modules/indexing/services/neo4j.service.ts");
-const crypto_1 = __webpack_require__(/*! crypto */ "crypto");
 let GraphService = class GraphService {
     constructor(neo4jService, projectRepository, codebaseRepository, logger) {
         this.neo4jService = neo4jService;
@@ -5139,7 +4876,7 @@ let GraphService = class GraphService {
         await this.neo4jService.createConstraintsAndIndexes();
         this.logger.log(`[GRAPH-SERVICE] Graph database initialized`);
     }
-    async updateCodebaseGraph(codebaseId, files, config) {
+    async updateCodebaseGraph(codebaseId, nodes, relationships, config) {
         await this.neo4jService.connect(config);
         const codebase = await this.codebaseRepository.findOne({
             where: { id: codebaseId },
@@ -5148,241 +4885,106 @@ let GraphService = class GraphService {
         if (!codebase || !codebase.project) {
             throw new Error(`Codebase ${codebaseId} or its project not found`);
         }
-        this.logger.debug(`[GRAPH-SERVICE] Updating graph for codebase: ${codebase.name}`);
-        await this.neo4jService.createOrUpdateProject(codebase.project.id, codebase.project.name);
-        await this.neo4jService.createOrUpdateCodebase(codebase.project.id, codebase.id, codebase.name, codebase.gitlabUrl, codebase.language, undefined, codebase.lastSyncCommit);
-        const batchSize = config.batchSize;
-        let totalResult = {
-            nodesCreated: 0,
-            nodesUpdated: 0,
-            relationshipsCreated: 0,
-            relationshipsUpdated: 0
-        };
-        for (let i = 0; i < files.length; i += batchSize) {
-            const batch = files.slice(i, i + batchSize);
-            const batchResult = await this.processBatch(codebaseId, batch);
-            totalResult.nodesCreated += batchResult.nodesCreated;
-            totalResult.nodesUpdated += batchResult.nodesUpdated;
-            totalResult.relationshipsCreated += batchResult.relationshipsCreated;
-            totalResult.relationshipsUpdated += batchResult.relationshipsUpdated;
-            this.logger.debug(`[GRAPH-SERVICE] Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(files.length / batchSize)}`);
+        this.logger.debug(`[GRAPH-SERVICE] Updating graph with nodes for codebase: ${codebase.name}`);
+        const queries = [];
+        let nodesCreated = 0;
+        let relationshipsCreated = 0;
+        const batchSize = config.batchSize || 100;
+        for (let i = 0; i < nodes.length; i += batchSize) {
+            const batch = nodes.slice(i, i + batchSize);
+            for (const node of batch) {
+                const nodeQuery = this.createNodeQuery(node);
+                if (nodeQuery) {
+                    queries.push(nodeQuery);
+                    nodesCreated++;
+                }
+            }
+            if (queries.length > 0) {
+                await this.neo4jService.executeBatch(queries);
+                queries.length = 0;
+            }
+        }
+        for (let i = 0; i < relationships.length; i += batchSize) {
+            const batch = relationships.slice(i, i + batchSize);
+            for (const relationship of batch) {
+                const relQuery = this.createRelationshipQuery(relationship);
+                if (relQuery) {
+                    queries.push(relQuery);
+                    relationshipsCreated++;
+                }
+            }
+            if (queries.length > 0) {
+                await this.neo4jService.executeBatch(queries);
+                queries.length = 0;
+            }
         }
         this.logger.log(`[GRAPH-SERVICE] Graph update completed`, {
             codebaseId,
-            filesProcessed: files.length,
-            ...totalResult
+            nodesCreated,
+            relationshipsCreated
         });
-        return totalResult;
+        return {
+            nodesCreated,
+            relationshipsCreated,
+            nodesUpdated: 0,
+            relationshipsUpdated: 0
+        };
     }
-    async processBatch(codebaseId, files) {
-        const queries = [];
-        for (const file of files) {
-            const fileChecksum = this.calculateFileChecksum(file);
-            queries.push({
-                query: `
-          MATCH (c:Codebase {id: $codebaseId})
-          MERGE (f:File {path: $filePath})
-          SET f.fileName = $fileName,
-              f.packageName = $packageName,
-              f.language = $language,
-              f.checksum = $checksum,
-              f.updatedAt = datetime()
-          MERGE (c)-[:CONTAINS_FILE]->(f)
-        `,
-                parameters: {
-                    codebaseId,
-                    filePath: file.path,
-                    fileName: file.fileName,
-                    packageName: file.packageName,
-                    language: file.language,
-                    checksum: fileChecksum
-                }
-            });
-            for (const symbol of file.symbols) {
-                const symbolQueries = this.createSymbolQueries(file.path, symbol);
-                queries.push(...symbolQueries);
+    createNodeQuery(node) {
+        const nodeType = node.nodeType;
+        const properties = this.sanitizeProperties(node.properties);
+        const propertyKeys = Object.keys(properties);
+        const setClause = propertyKeys.map(key => `n.${key} = $${key}`).join(', ');
+        const query = `
+      MERGE (n:${nodeType} {id: $id})
+      SET ${setClause}
+      SET n.updatedAt = datetime()
+    `;
+        const parameters = {
+            id: node.id,
+            ...properties
+        };
+        return { query, parameters };
+    }
+    createRelationshipQuery(relationship) {
+        const query = `
+      MATCH (start {id: $startNodeId})
+      MATCH (end {id: $endNodeId})
+      MERGE (start)-[r:${relationship.type}]->(end)
+      SET r.updatedAt = datetime()
+    `;
+        const parameters = {
+            startNodeId: relationship.startNodeId,
+            endNodeId: relationship.endNodeId,
+            ...relationship.properties
+        };
+        return { query, parameters };
+    }
+    sanitizeProperties(properties) {
+        const sanitized = {};
+        for (const [key, value] of Object.entries(properties)) {
+            if (value === null || value === undefined) {
+                continue;
             }
-            for (const relationship of file.relationships) {
-                const sourceName = this.extractEntityNameFromSpoonId(relationship.source);
-                const targetName = this.extractEntityNameFromSpoonId(relationship.target);
-                if (sourceName && targetName) {
-                    queries.push({
-                        query: `
-              MATCH (source), (target)
-              WHERE (source:Class OR source:Method OR source:Interface OR source:Variable)
-                AND (source.name = $sourceName OR source.fullyQualifiedName = $sourceFullName)
-                AND (target:Class OR target:Method OR target:Interface OR target:Variable)
-                AND (target.name = $targetName OR target.fullyQualifiedName = $targetFullName)
-              MERGE (source)-[:${relationship.type.toUpperCase()}]->(target)
-            `,
-                        parameters: {
-                            sourceName,
-                            targetName,
-                            sourceFullName: this.extractFullyQualifiedNameFromSpoonId(relationship.source),
-                            targetFullName: this.extractFullyQualifiedNameFromSpoonId(relationship.target)
-                        }
-                    });
-                }
+            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                sanitized[key] = value;
+            }
+            else if (Array.isArray(value)) {
+                sanitized[key] = value.map(item => {
+                    if (typeof item === 'object' && item !== null) {
+                        return JSON.stringify(item);
+                    }
+                    return item;
+                });
+            }
+            else if (typeof value === 'object') {
+                sanitized[key] = JSON.stringify(value);
+            }
+            else {
+                sanitized[key] = String(value);
             }
         }
-        return await this.neo4jService.executeBatch(queries);
-    }
-    createSymbolQueries(filePath, symbol) {
-        const queries = [];
-        const symbolId = this.generateSymbolId(filePath, symbol);
-        switch (symbol.type) {
-            case 'class':
-                queries.push({
-                    query: `
-            MATCH (f:File {path: $filePath})
-            MERGE (c:Class {id: $symbolId})
-            SET c.name = $name,
-                c.fullyQualifiedName = $fullyQualifiedName,
-                c.visibility = $visibility,
-                c.isStatic = $isStatic,
-                c.isAbstract = $isAbstract,
-                c.line = $line,
-                c.updatedAt = datetime()
-            MERGE (f)-[:DEFINES_CLASS]->(c)
-          `,
-                    parameters: {
-                        filePath,
-                        symbolId,
-                        name: symbol.name,
-                        fullyQualifiedName: this.getFullyQualifiedName(filePath, symbol),
-                        visibility: symbol.visibility,
-                        isStatic: symbol.isStatic,
-                        isAbstract: symbol.isAbstract,
-                        line: symbol.line
-                    }
-                });
-                break;
-            case 'interface':
-                queries.push({
-                    query: `
-            MATCH (f:File {path: $filePath})
-            MERGE (i:Interface {id: $symbolId})
-            SET i.name = $name,
-                i.fullyQualifiedName = $fullyQualifiedName,
-                i.line = $line,
-                i.updatedAt = datetime()
-            MERGE (f)-[:DEFINES_INTERFACE]->(i)
-          `,
-                    parameters: {
-                        filePath,
-                        symbolId,
-                        name: symbol.name,
-                        fullyQualifiedName: this.getFullyQualifiedName(filePath, symbol),
-                        line: symbol.line
-                    }
-                });
-                break;
-            case 'method':
-            case 'function':
-                const signature = this.buildMethodSignature(symbol);
-                queries.push({
-                    query: `
-            MATCH (f:File {path: $filePath})
-            MERGE (m:Method {id: $symbolId})
-            SET m.name = $name,
-                m.signature = $signature,
-                m.returnType = $returnType,
-                m.visibility = $visibility,
-                m.isStatic = $isStatic,
-                m.isAbstract = $isAbstract,
-                m.line = $line,
-                m.updatedAt = datetime()
-            MERGE (f)-[:DEFINES_METHOD]->(m)
-          `,
-                    parameters: {
-                        filePath,
-                        symbolId,
-                        name: symbol.name,
-                        signature,
-                        returnType: symbol.returnType,
-                        visibility: symbol.visibility,
-                        isStatic: symbol.isStatic,
-                        isAbstract: symbol.isAbstract,
-                        line: symbol.line
-                    }
-                });
-                break;
-            case 'field':
-            case 'property':
-            case 'variable':
-                queries.push({
-                    query: `
-            MATCH (f:File {path: $filePath})
-            MERGE (v:Variable {id: $symbolId})
-            SET v.name = $name,
-                v.type = $type,
-                v.visibility = $visibility,
-                v.isStatic = $isStatic,
-                v.line = $line,
-                v.updatedAt = datetime()
-            MERGE (f)-[:DEFINES_VARIABLE]->(v)
-          `,
-                    parameters: {
-                        filePath,
-                        symbolId,
-                        name: symbol.name,
-                        type: symbol.returnType || 'unknown',
-                        visibility: symbol.visibility,
-                        isStatic: symbol.isStatic,
-                        line: symbol.line
-                    }
-                });
-                break;
-        }
-        return queries;
-    }
-    generateSymbolId(filePath, symbol) {
-        const content = `${filePath}:${symbol.type}:${symbol.name}:${symbol.line || 0}`;
-        return (0, crypto_1.createHash)('sha256').update(content).digest('hex').substring(0, 16);
-    }
-    getFullyQualifiedName(filePath, symbol) {
-        const pathParts = filePath.split('/');
-        const fileName = pathParts[pathParts.length - 1].replace(/\.(java|ts|js)$/, '');
-        return `${fileName}.${symbol.name}`;
-    }
-    buildMethodSignature(symbol) {
-        const params = symbol.parameters?.map(p => `${p.name}: ${p.type}`).join(', ') || '';
-        return `${symbol.name}(${params})${symbol.returnType ? `: ${symbol.returnType}` : ''}`;
-    }
-    calculateFileChecksum(file) {
-        const content = JSON.stringify({
-            path: file.path,
-            symbols: file.symbols.length,
-            relationships: file.relationships.length
-        });
-        return (0, crypto_1.createHash)('md5').update(content).digest('hex');
-    }
-    async handleDeletedFiles(codebaseId, deletedFilePaths) {
-        if (deletedFilePaths.length === 0) {
-            return { nodesCreated: 0, nodesUpdated: 0, relationshipsCreated: 0, relationshipsUpdated: 0 };
-        }
-        this.logger.debug(`[GRAPH-SERVICE] Handling ${deletedFilePaths.length} deleted files for codebase: ${codebaseId}`);
-        return await this.neo4jService.deleteFilesFromCodebase(codebaseId, deletedFilePaths);
-    }
-    extractEntityNameFromSpoonId(spoonId) {
-        if (!spoonId)
-            return null;
-        const parts = spoonId.split(':');
-        if (parts.length >= 3) {
-            const fullyQualifiedName = parts.slice(2).join(':');
-            const nameParts = fullyQualifiedName.split('.');
-            return nameParts[nameParts.length - 1];
-        }
-        return null;
-    }
-    extractFullyQualifiedNameFromSpoonId(spoonId) {
-        if (!spoonId)
-            return null;
-        const parts = spoonId.split(':');
-        if (parts.length >= 3) {
-            return parts.slice(2).join(':');
-        }
-        return null;
+        return sanitized;
     }
 };
 exports.GraphService = GraphService;
@@ -5749,353 +5351,514 @@ let ParserOutputTransformerService = class ParserOutputTransformerService {
         this.logger = logger;
     }
     transformParserOutput(rawOutput, language) {
-        this.logger.debug(`[PARSER-TRANSFORMER] Transforming ${language} parser output`);
+        this.logger.debug(`[PARSER-TRANSFORMER] Transforming ${language} parser output to graph format`);
         switch (language.toLowerCase()) {
             case 'java':
-                return this.transformJavaOutput(rawOutput);
+                return this.transformJavaToGraph(rawOutput);
             case 'typescript':
-                return this.transformTypeScriptOutput(rawOutput);
+                return this.transformTypeScriptToGraph(rawOutput);
             default:
                 throw new Error(`Unsupported language for transformation: ${language}`);
         }
     }
-    transformJavaOutput(rawOutput) {
-        this.logger.log(`[PARSER-TRANSFORMER] Raw Java output structure:`, {
-            hasFiles: !!rawOutput.files,
-            filesIsArray: Array.isArray(rawOutput.files),
+    generateNodeId(nodeType, codebaseName, identifier) {
+        return `${codebaseName}:${nodeType.toLowerCase()}:${identifier}`;
+    }
+    generateRelationshipId(type, sourceId, targetId) {
+        return `${type}:${sourceId}:${targetId}`;
+    }
+    transformJavaToGraph(rawOutput) {
+        this.logger.log(`[PARSER-TRANSFORMER] Transforming Java output to graph format`, {
+            codebaseName: rawOutput.codebaseName,
             filesCount: rawOutput.files?.length || 0,
-            hasClasses: !!rawOutput.classes,
             classesCount: rawOutput.classes?.length || 0,
-            hasMethods: !!rawOutput.methods,
             methodsCount: rawOutput.methods?.length || 0,
-            hasInterfaces: !!rawOutput.interfaces,
             interfacesCount: rawOutput.interfaces?.length || 0,
-            hasFields: !!rawOutput.fields,
-            fieldsCount: rawOutput.fields?.length || 0,
-            hasEnums: !!rawOutput.enums,
-            enumsCount: rawOutput.enums?.length || 0,
-            hasRelationships: !!rawOutput.relationships,
-            relationshipsCount: rawOutput.relationships?.length || 0,
-            topLevelKeys: Object.keys(rawOutput)
+            relationshipsCount: rawOutput.relationships?.length || 0
         });
-        const fileMap = new Map();
-        if (rawOutput.files && Array.isArray(rawOutput.files)) {
-            for (const file of rawOutput.files) {
-                fileMap.set(file.path, {
-                    path: file.path,
-                    fileName: file.fileName,
-                    packageName: file.packageName || '',
-                    language: dto_1.Language.JAVA,
-                    symbols: [],
-                    imports: [],
-                    exports: [],
-                    relationships: []
-                });
+        const nodes = [];
+        const relationships = [];
+        const codebaseName = rawOutput.codebaseName;
+        const projectNode = {
+            id: this.generateNodeId(dto_1.NodeType.PROJECT, codebaseName, codebaseName),
+            nodeType: dto_1.NodeType.PROJECT,
+            properties: {
+                name: codebaseName,
+                projectId: codebaseName,
+                description: `Java project: ${codebaseName}`
             }
-        }
-        if (rawOutput.classes && Array.isArray(rawOutput.classes)) {
-            for (const cls of rawOutput.classes) {
-                const file = fileMap.get(cls.filePath);
-                if (file) {
-                    file.symbols.push({
-                        name: cls.name,
-                        type: 'class',
-                        visibility: cls.visibility?.toLowerCase(),
-                        isStatic: cls.isStatic,
-                        isAbstract: cls.isAbstract,
-                        annotations: cls.decorators?.map((d) => d.name) || [],
-                        line: cls.startLine
-                    });
-                }
-            }
-        }
-        if (rawOutput.methods && Array.isArray(rawOutput.methods)) {
-            for (const method of rawOutput.methods) {
-                const file = fileMap.get(method.filePath);
-                if (file) {
-                    file.symbols.push({
-                        name: method.name,
-                        type: 'method',
-                        visibility: method.visibility?.toLowerCase(),
-                        isStatic: method.isStatic,
-                        isAbstract: method.isAbstract,
-                        returnType: method.returnType,
-                        parameters: method.parameters?.map((p) => ({
-                            name: p.name,
-                            type: p.type
-                        })) || [],
-                        annotations: method.decorators?.map((d) => d.name) || [],
-                        line: method.startLine
-                    });
-                }
-            }
-        }
-        if (rawOutput.interfaces && Array.isArray(rawOutput.interfaces)) {
-            for (const iface of rawOutput.interfaces) {
-                const file = fileMap.get(iface.filePath);
-                if (file) {
-                    file.symbols.push({
-                        name: iface.name,
-                        type: 'interface',
-                        visibility: iface.visibility?.toLowerCase() || 'public',
-                        annotations: iface.decorators?.map((d) => d.name) || [],
-                        line: iface.startLine
-                    });
-                }
-            }
-        }
-        if (rawOutput.fields && Array.isArray(rawOutput.fields)) {
-            for (const field of rawOutput.fields) {
-                this.logger.debug(`[PARSER-TRANSFORMER] Skipping field ${field.name} - no filePath available`);
-            }
-        }
-        if (rawOutput.enums && Array.isArray(rawOutput.enums)) {
-            for (const enumNode of rawOutput.enums) {
-                const file = fileMap.get(enumNode.filePath);
-                if (file) {
-                    file.symbols.push({
-                        name: enumNode.name,
-                        type: 'enum',
-                        visibility: enumNode.visibility?.toLowerCase() || 'public',
-                        annotations: enumNode.decorators?.map((d) => d.name) || [],
-                        line: enumNode.startLine
-                    });
-                }
-            }
-        }
-        if (rawOutput.relationships && Array.isArray(rawOutput.relationships)) {
-            for (const rel of rawOutput.relationships) {
-                if (rel.sourceFilePath) {
-                    const file = fileMap.get(rel.sourceFilePath);
-                    if (file) {
-                        file.relationships.push({
-                            type: rel.type,
-                            source: rel.source,
-                            target: rel.target,
-                            line: rel.line
-                        });
-                    }
-                }
-            }
-        }
-        const files = Array.from(fileMap.values());
-        return {
-            metadata: {
+        };
+        nodes.push(projectNode);
+        const codebaseNode = {
+            id: this.generateNodeId(dto_1.NodeType.CODEBASE, codebaseName, codebaseName),
+            nodeType: dto_1.NodeType.CODEBASE,
+            properties: {
+                name: codebaseName,
+                gitUrl: '',
                 language: dto_1.Language.JAVA,
-                totalFiles: files.length,
-                totalSymbols: files.reduce((sum, file) => sum + file.symbols.length, 0),
-                parsingDuration: rawOutput.metadata?.parsingDurationMs || 0,
-                framework: rawOutput.metadata?.framework,
-                detectedFrameworks: rawOutput.metadata?.detectedFrameworks,
-                codebaseName: rawOutput.codebaseName
-            },
-            files
+                framework: rawOutput.metadata.framework,
+                lastIndexedCommit: '',
+                isActive: true
+            }
         };
-    }
-    transformTypeScriptOutput(rawOutput) {
-        this.logger.log(`[PARSER-TRANSFORMER] Raw TypeScript output structure:`, {
-            hasFiles: !!rawOutput.files,
-            filesIsArray: Array.isArray(rawOutput.files),
-            filesCount: rawOutput.files?.length || 0,
-            hasClasses: !!rawOutput.classes,
-            classesCount: rawOutput.classes?.length || 0,
-            hasMethods: !!rawOutput.methods,
-            methodsCount: rawOutput.methods?.length || 0,
-            hasInterfaces: !!rawOutput.interfaces,
-            interfacesCount: rawOutput.interfaces?.length || 0,
-            hasFields: !!rawOutput.fields,
-            fieldsCount: rawOutput.fields?.length || 0,
-            hasEnums: !!rawOutput.enums,
-            enumsCount: rawOutput.enums?.length || 0,
-            hasRelationships: !!rawOutput.relationships,
-            relationshipsCount: rawOutput.relationships?.length || 0,
-            topLevelKeys: Object.keys(rawOutput)
+        nodes.push(codebaseNode);
+        relationships.push({
+            type: dto_1.RelationshipType.HAS_CODEBASE,
+            startNodeId: projectNode.id,
+            endNodeId: codebaseNode.id,
+            properties: {}
         });
-        const fileMap = new Map();
         if (rawOutput.files && Array.isArray(rawOutput.files)) {
             for (const file of rawOutput.files) {
-                let detectedLanguage = dto_1.Language.TYPESCRIPT;
-                if (file.fileExtension) {
-                    switch (file.fileExtension.toLowerCase()) {
-                        case '.java':
-                        case 'java':
-                            detectedLanguage = dto_1.Language.JAVA;
-                            break;
-                        case '.ts':
-                        case '.tsx':
-                        case 'ts':
-                        case 'tsx':
-                            detectedLanguage = dto_1.Language.TYPESCRIPT;
-                            break;
-                        case '.js':
-                        case '.jsx':
-                        case 'js':
-                        case 'jsx':
-                            detectedLanguage = dto_1.Language.JAVASCRIPT;
-                            break;
-                        default:
-                            if (rawOutput.metadata?.detectedFrameworks?.includes('java')) {
-                                detectedLanguage = dto_1.Language.JAVA;
-                            }
-                            break;
+                const fileNode = {
+                    id: this.generateNodeId(dto_1.NodeType.FILE, codebaseName, file.path),
+                    nodeType: dto_1.NodeType.FILE,
+                    properties: {
+                        path: file.path,
+                        fileName: file.fileName,
+                        checksum: file.checksum || '',
+                        lineCount: file.lineCount || 0,
+                        fileSize: file.fileSize || 0,
+                        extension: file.fileExtension || '',
+                        packageName: file.packageName || '',
+                        isTestFile: file.isTestFile || false
                     }
-                }
-                fileMap.set(file.path, {
-                    path: file.path,
-                    fileName: file.fileName,
-                    packageName: file.packageName || '',
-                    language: detectedLanguage,
-                    symbols: [],
-                    imports: [],
-                    exports: [],
-                    relationships: []
+                };
+                nodes.push(fileNode);
+                relationships.push({
+                    type: dto_1.RelationshipType.CONTAINS_FILE,
+                    startNodeId: codebaseNode.id,
+                    endNodeId: fileNode.id,
+                    properties: {}
                 });
             }
         }
         if (rawOutput.classes && Array.isArray(rawOutput.classes)) {
             for (const cls of rawOutput.classes) {
-                const file = fileMap.get(cls.filePath);
-                if (file) {
-                    file.symbols.push({
+                const classNode = {
+                    id: this.generateNodeId(dto_1.NodeType.CLASS, codebaseName, cls.fullyQualifiedName || cls.name),
+                    nodeType: dto_1.NodeType.CLASS,
+                    properties: {
                         name: cls.name,
-                        type: 'class',
+                        fullyQualifiedName: cls.fullyQualifiedName || cls.name,
+                        comment: cls.comment || '',
+                        embedding: [],
                         visibility: cls.visibility?.toLowerCase() || 'public',
-                        isStatic: cls.isStatic,
-                        isAbstract: cls.isAbstract,
-                        annotations: cls.decorators?.map((d) => d.name) || [],
-                        line: cls.startLine
-                    });
-                }
-            }
-        }
-        if (rawOutput.methods && Array.isArray(rawOutput.methods)) {
-            for (const method of rawOutput.methods) {
-                const file = fileMap.get(method.filePath);
-                if (file) {
-                    file.symbols.push({
-                        name: method.name,
-                        type: 'method',
-                        visibility: method.visibility?.toLowerCase() || 'public',
-                        isStatic: method.isStatic,
-                        isAbstract: method.isAbstract,
-                        returnType: method.returnType,
-                        parameters: method.parameters?.map((p) => ({
-                            name: p.name,
-                            type: p.type
-                        })) || [],
-                        annotations: method.decorators?.map((d) => d.name) || [],
-                        line: method.startLine
+                        isAbstract: cls.isAbstract || false,
+                        isFinal: cls.isFinal || false,
+                        isStatic: cls.isStatic || false,
+                        isInnerClass: cls.isInnerClass || false,
+                        startLine: cls.startLine || 0,
+                        endLine: cls.endLine || 0,
+                        filePath: cls.filePath || ''
+                    }
+                };
+                nodes.push(classNode);
+                if (cls.filePath) {
+                    const fileId = this.generateNodeId(dto_1.NodeType.FILE, codebaseName, cls.filePath);
+                    relationships.push({
+                        type: dto_1.RelationshipType.DEFINES_CLASS,
+                        startNodeId: fileId,
+                        endNodeId: classNode.id,
+                        properties: {}
                     });
                 }
             }
         }
         if (rawOutput.interfaces && Array.isArray(rawOutput.interfaces)) {
             for (const iface of rawOutput.interfaces) {
-                const file = fileMap.get(iface.filePath);
-                if (file) {
-                    file.symbols.push({
+                const interfaceNode = {
+                    id: this.generateNodeId(dto_1.NodeType.INTERFACE, codebaseName, iface.fullyQualifiedName || iface.name),
+                    nodeType: dto_1.NodeType.INTERFACE,
+                    properties: {
                         name: iface.name,
-                        type: 'interface',
-                        visibility: dto_1.Visibility.PUBLIC,
-                        annotations: iface.decorators?.map((d) => d.name) || [],
-                        line: iface.startLine
+                        fullyQualifiedName: iface.fullyQualifiedName || iface.name,
+                        comment: iface.comment || '',
+                        embedding: [],
+                        visibility: iface.visibility?.toLowerCase() || 'public',
+                        startLine: iface.startLine || 0,
+                        endLine: iface.endLine || 0,
+                        filePath: iface.filePath || ''
+                    }
+                };
+                nodes.push(interfaceNode);
+                if (iface.filePath) {
+                    const fileId = this.generateNodeId(dto_1.NodeType.FILE, codebaseName, iface.filePath);
+                    relationships.push({
+                        type: dto_1.RelationshipType.DEFINES_CLASS,
+                        startNodeId: fileId,
+                        endNodeId: interfaceNode.id,
+                        properties: { entityType: 'interface' }
                     });
                 }
             }
         }
-        if (rawOutput.fields && Array.isArray(rawOutput.fields)) {
-            for (const field of rawOutput.fields) {
-                const file = fileMap.get(field.filePath);
-                if (file) {
-                    file.symbols.push({
-                        name: field.name,
-                        type: 'field',
-                        visibility: field.visibility?.toLowerCase() || 'public',
-                        isStatic: field.isStatic,
-                        returnType: field.type,
-                        annotations: field.decorators?.map((d) => d.name) || [],
-                        line: field.startLine
+        if (rawOutput.methods && Array.isArray(rawOutput.methods)) {
+            for (const method of rawOutput.methods) {
+                const methodNode = {
+                    id: this.generateNodeId(dto_1.NodeType.METHOD, codebaseName, `${method.filePath}:${method.name}:${method.startLine}`),
+                    nodeType: dto_1.NodeType.METHOD,
+                    properties: {
+                        name: method.name,
+                        signature: method.signature || '',
+                        returnType: method.returnType || 'void',
+                        comment: method.comment || '',
+                        body: method.body || '',
+                        visibility: method.visibility?.toLowerCase() || 'public',
+                        cyclomaticComplexity: method.cyclomaticComplexity || 0,
+                        embedding: [],
+                        isStatic: method.isStatic || false,
+                        isAbstract: method.isAbstract || false,
+                        isConstructor: method.isConstructor || false,
+                        isTestMethod: method.isTestMethod || false,
+                        startLine: method.startLine || 0,
+                        endLine: method.endLine || 0,
+                        filePath: method.filePath || '',
+                        parameters: method.parameters || []
+                    }
+                };
+                nodes.push(methodNode);
+                if (method.filePath) {
+                    const fileId = this.generateNodeId(dto_1.NodeType.FILE, codebaseName, method.filePath);
+                    relationships.push({
+                        type: dto_1.RelationshipType.DEFINES_METHOD,
+                        startNodeId: fileId,
+                        endNodeId: methodNode.id,
+                        properties: {}
                     });
                 }
             }
         }
-        if (rawOutput.enums && Array.isArray(rawOutput.enums)) {
-            for (const enumNode of rawOutput.enums) {
-                const file = fileMap.get(enumNode.filePath);
-                if (file) {
-                    file.symbols.push({
-                        name: enumNode.name,
-                        type: 'enum',
-                        visibility: enumNode.visibility?.toLowerCase() || 'public',
-                        annotations: enumNode.decorators?.map((d) => d.name) || [],
-                        line: enumNode.startLine
-                    });
-                }
+        if (rawOutput.dependencies && Array.isArray(rawOutput.dependencies)) {
+            for (const dep of rawOutput.dependencies) {
+                const dependencyNode = {
+                    id: this.generateNodeId(dto_1.NodeType.DEPENDENCY, codebaseName, `${dep.name}:${dep.version || 'unknown'}`),
+                    nodeType: dto_1.NodeType.DEPENDENCY,
+                    properties: {
+                        name: dep.name,
+                        version: dep.version || 'unknown',
+                        scope: dep.scope || 'compile',
+                        groupId: dep.groupId || '',
+                        artifactId: dep.artifactId || '',
+                        isDevDependency: dep.isDevDependency || false
+                    }
+                };
+                nodes.push(dependencyNode);
+                relationships.push({
+                    type: dto_1.RelationshipType.DEPENDS_ON,
+                    startNodeId: codebaseNode.id,
+                    endNodeId: dependencyNode.id,
+                    properties: { scope: dep.scope || 'compile' }
+                });
+            }
+        }
+        if (rawOutput.apiEndpoints && Array.isArray(rawOutput.apiEndpoints)) {
+            for (const endpoint of rawOutput.apiEndpoints) {
+                const endpointNode = {
+                    id: this.generateNodeId(dto_1.NodeType.API_ENDPOINT, codebaseName, `${endpoint.httpMethod}:${endpoint.path}`),
+                    nodeType: dto_1.NodeType.API_ENDPOINT,
+                    properties: {
+                        httpMethod: endpoint.httpMethod || dto_1.HttpMethod.GET,
+                        path: endpoint.path || '',
+                        description: endpoint.description || '',
+                        embedding: [],
+                        requestSchema: endpoint.requestSchema || '',
+                        responseSchema: endpoint.responseSchema || '',
+                        statusCodes: endpoint.statusCodes || []
+                    }
+                };
+                nodes.push(endpointNode);
+            }
+        }
+        if (rawOutput.testCases && Array.isArray(rawOutput.testCases)) {
+            for (const testCase of rawOutput.testCases) {
+                const testCaseNode = {
+                    id: this.generateNodeId(dto_1.NodeType.TEST_CASE, codebaseName, `${testCase.filePath}:${testCase.name}`),
+                    nodeType: dto_1.NodeType.TEST_CASE,
+                    properties: {
+                        name: testCase.name,
+                        filePath: testCase.filePath || '',
+                        className: testCase.className || '',
+                        methodName: testCase.methodName || '',
+                        testType: testCase.testType || 'UNIT',
+                        assertions: testCase.assertions || 0,
+                        startLine: testCase.startLine || 0,
+                        endLine: testCase.endLine || 0
+                    }
+                };
+                nodes.push(testCaseNode);
             }
         }
         if (rawOutput.relationships && Array.isArray(rawOutput.relationships)) {
             for (const rel of rawOutput.relationships) {
-                if (rel.sourceId && rel.targetId) {
-                    let sourceFile = null;
-                    for (const [filePath, file] of fileMap.entries()) {
-                        const hasSourceEntity = file.symbols.some(symbol => {
-                            const symbolId = this.generateSymbolIdFromSpoonId(rel.sourceId, symbol);
-                            return symbolId === rel.sourceId || rel.sourceId.includes(symbol.name);
-                        });
-                        if (hasSourceEntity) {
-                            sourceFile = file;
-                            break;
-                        }
-                    }
-                    if (sourceFile) {
-                        sourceFile.relationships.push({
-                            type: rel.type.toLowerCase(),
-                            source: rel.sourceId,
-                            target: rel.targetId,
-                            properties: rel.properties
-                        });
-                    }
+                let relationshipType;
+                switch (rel.type?.toLowerCase()) {
+                    case 'extends':
+                        relationshipType = dto_1.RelationshipType.EXTENDS;
+                        break;
+                    case 'implements':
+                        relationshipType = dto_1.RelationshipType.IMPLEMENTS;
+                        break;
+                    case 'calls':
+                        relationshipType = dto_1.RelationshipType.CALLS;
+                        break;
+                    case 'uses':
+                        relationshipType = dto_1.RelationshipType.USES_TYPE;
+                        break;
+                    default:
+                        continue;
                 }
-            }
-        }
-        const files = Array.from(fileMap.values());
-        const languageCounts = new Map();
-        files.forEach(file => {
-            const count = languageCounts.get(file.language) || 0;
-            languageCounts.set(file.language, count + 1);
-        });
-        let primaryLanguage = dto_1.Language.TYPESCRIPT;
-        let maxCount = 0;
-        for (const [lang, count] of languageCounts.entries()) {
-            if (count > maxCount) {
-                maxCount = count;
-                primaryLanguage = lang;
+                relationships.push({
+                    type: relationshipType,
+                    startNodeId: rel.sourceId || '',
+                    endNodeId: rel.targetId || '',
+                    properties: rel.properties || {}
+                });
             }
         }
         return {
             metadata: {
-                language: primaryLanguage,
-                totalFiles: files.length,
-                totalSymbols: files.reduce((sum, file) => sum + file.symbols.length, 0),
-                parsingDuration: rawOutput.metadata?.parsingDurationMs || 0,
-                framework: rawOutput.metadata?.framework,
-                detectedFrameworks: rawOutput.metadata?.detectedFrameworks,
-                codebaseName: rawOutput.codebaseName
+                codebaseName: rawOutput.codebaseName,
+                language: dto_1.Language.JAVA,
+                totalFiles: rawOutput.files?.length || 0,
+                totalNodes: nodes.length,
+                totalRelationships: relationships.length,
+                parsingDuration: rawOutput.metadata.parsingDurationMs,
+                framework: rawOutput.metadata.framework,
+                detectedFrameworks: rawOutput.metadata.detectedFrameworks,
+                parseTime: rawOutput.metadata.parseTime,
+                parserVersion: rawOutput.metadata.parserVersion
             },
-            files
+            nodes,
+            relationships
         };
     }
-    generateSymbolIdFromSpoonId(spoonId, symbol) {
-        const parts = spoonId.split(':');
-        if (parts.length >= 3) {
-            const codebaseName = parts[0];
-            const entityType = parts[1];
-            const fullyQualifiedName = parts.slice(2).join(':');
-            if (fullyQualifiedName.endsWith(symbol.name)) {
-                return spoonId;
+    transformTypeScriptToGraph(rawOutput) {
+        this.logger.log(`[PARSER-TRANSFORMER] Transforming TypeScript output to graph format`, {
+            codebaseName: rawOutput.codebaseName,
+            filesCount: rawOutput.files?.length || 0,
+            classesCount: rawOutput.classes?.length || 0,
+            methodsCount: rawOutput.methods?.length || 0,
+            interfacesCount: rawOutput.interfaces?.length || 0,
+            relationshipsCount: rawOutput.relationships?.length || 0
+        });
+        const nodes = [];
+        const relationships = [];
+        const codebaseName = rawOutput.codebaseName;
+        const projectNode = {
+            id: this.generateNodeId(dto_1.NodeType.PROJECT, codebaseName, codebaseName),
+            nodeType: dto_1.NodeType.PROJECT,
+            properties: {
+                name: codebaseName,
+                projectId: codebaseName,
+                description: `TypeScript project: ${codebaseName}`
+            }
+        };
+        nodes.push(projectNode);
+        const codebaseNode = {
+            id: this.generateNodeId(dto_1.NodeType.CODEBASE, codebaseName, codebaseName),
+            nodeType: dto_1.NodeType.CODEBASE,
+            properties: {
+                name: codebaseName,
+                gitUrl: '',
+                language: dto_1.Language.TYPESCRIPT,
+                framework: rawOutput.metadata.framework,
+                lastIndexedCommit: '',
+                isActive: true
+            }
+        };
+        nodes.push(codebaseNode);
+        relationships.push({
+            type: dto_1.RelationshipType.HAS_CODEBASE,
+            startNodeId: projectNode.id,
+            endNodeId: codebaseNode.id,
+            properties: {}
+        });
+        if (rawOutput.files && Array.isArray(rawOutput.files)) {
+            for (const file of rawOutput.files) {
+                const fileNode = {
+                    id: this.generateNodeId(dto_1.NodeType.FILE, codebaseName, file.path),
+                    nodeType: dto_1.NodeType.FILE,
+                    properties: {
+                        path: file.path,
+                        fileName: file.fileName,
+                        checksum: file.checksum || '',
+                        lineCount: file.lineCount || 0,
+                        fileSize: file.fileSize || 0,
+                        extension: file.fileExtension || '',
+                        packageName: file.packageName || '',
+                        isTestFile: file.isTestFile || false
+                    }
+                };
+                nodes.push(fileNode);
+                relationships.push({
+                    type: dto_1.RelationshipType.CONTAINS_FILE,
+                    startNodeId: codebaseNode.id,
+                    endNodeId: fileNode.id,
+                    properties: {}
+                });
             }
         }
-        return '';
+        if (rawOutput.classes && Array.isArray(rawOutput.classes)) {
+            for (const cls of rawOutput.classes) {
+                const classNode = {
+                    id: this.generateNodeId(dto_1.NodeType.CLASS, codebaseName, cls.fullyQualifiedName || cls.name),
+                    nodeType: dto_1.NodeType.CLASS,
+                    properties: {
+                        name: cls.name,
+                        fullyQualifiedName: cls.fullyQualifiedName || cls.name,
+                        comment: cls.comment || '',
+                        embedding: [],
+                        visibility: cls.visibility?.toLowerCase() || 'public',
+                        isAbstract: cls.isAbstract || false,
+                        isFinal: cls.isFinal || false,
+                        isStatic: cls.isStatic || false,
+                        isInnerClass: cls.isInnerClass || false,
+                        startLine: cls.startLine || 0,
+                        endLine: cls.endLine || 0,
+                        filePath: cls.filePath || ''
+                    }
+                };
+                nodes.push(classNode);
+                if (cls.filePath) {
+                    const fileId = this.generateNodeId(dto_1.NodeType.FILE, codebaseName, cls.filePath);
+                    relationships.push({
+                        type: dto_1.RelationshipType.DEFINES_CLASS,
+                        startNodeId: fileId,
+                        endNodeId: classNode.id,
+                        properties: {}
+                    });
+                }
+            }
+        }
+        if (rawOutput.interfaces && Array.isArray(rawOutput.interfaces)) {
+            for (const iface of rawOutput.interfaces) {
+                const interfaceNode = {
+                    id: this.generateNodeId(dto_1.NodeType.INTERFACE, codebaseName, iface.fullyQualifiedName || iface.name),
+                    nodeType: dto_1.NodeType.INTERFACE,
+                    properties: {
+                        name: iface.name,
+                        fullyQualifiedName: iface.fullyQualifiedName || iface.name,
+                        comment: iface.comment || '',
+                        embedding: [],
+                        visibility: iface.visibility?.toLowerCase() || 'public',
+                        startLine: iface.startLine || 0,
+                        endLine: iface.endLine || 0,
+                        filePath: iface.filePath || ''
+                    }
+                };
+                nodes.push(interfaceNode);
+                if (iface.filePath) {
+                    const fileId = this.generateNodeId(dto_1.NodeType.FILE, codebaseName, iface.filePath);
+                    relationships.push({
+                        type: dto_1.RelationshipType.DEFINES_CLASS,
+                        startNodeId: fileId,
+                        endNodeId: interfaceNode.id,
+                        properties: { entityType: 'interface' }
+                    });
+                }
+            }
+        }
+        if (rawOutput.methods && Array.isArray(rawOutput.methods)) {
+            for (const method of rawOutput.methods) {
+                const methodNode = {
+                    id: this.generateNodeId(dto_1.NodeType.METHOD, codebaseName, `${method.filePath}:${method.name}:${method.startLine}`),
+                    nodeType: dto_1.NodeType.METHOD,
+                    properties: {
+                        name: method.name,
+                        signature: method.signature || '',
+                        returnType: method.returnType || 'void',
+                        comment: method.comment || '',
+                        body: method.body || '',
+                        visibility: method.visibility?.toLowerCase() || 'public',
+                        cyclomaticComplexity: method.cyclomaticComplexity || 0,
+                        embedding: [],
+                        isStatic: method.isStatic || false,
+                        isAbstract: method.isAbstract || false,
+                        isConstructor: method.isConstructor || false,
+                        isTestMethod: method.isTestMethod || false,
+                        startLine: method.startLine || 0,
+                        endLine: method.endLine || 0,
+                        filePath: method.filePath || '',
+                        parameters: method.parameters || []
+                    }
+                };
+                nodes.push(methodNode);
+                if (method.filePath) {
+                    const fileId = this.generateNodeId(dto_1.NodeType.FILE, codebaseName, method.filePath);
+                    relationships.push({
+                        type: dto_1.RelationshipType.DEFINES_METHOD,
+                        startNodeId: fileId,
+                        endNodeId: methodNode.id,
+                        properties: {}
+                    });
+                }
+            }
+        }
+        if (rawOutput.dependencies && Array.isArray(rawOutput.dependencies)) {
+            for (const dep of rawOutput.dependencies) {
+                const dependencyNode = {
+                    id: this.generateNodeId(dto_1.NodeType.DEPENDENCY, codebaseName, `${dep.name}:${dep.version || 'unknown'}`),
+                    nodeType: dto_1.NodeType.DEPENDENCY,
+                    properties: {
+                        name: dep.name,
+                        version: dep.version || 'unknown',
+                        scope: dep.scope || 'runtime',
+                        isDevDependency: dep.isDevDependency || false
+                    }
+                };
+                nodes.push(dependencyNode);
+                relationships.push({
+                    type: dto_1.RelationshipType.DEPENDS_ON,
+                    startNodeId: codebaseNode.id,
+                    endNodeId: dependencyNode.id,
+                    properties: { scope: dep.scope || 'runtime' }
+                });
+            }
+        }
+        if (rawOutput.relationships && Array.isArray(rawOutput.relationships)) {
+            for (const rel of rawOutput.relationships) {
+                let relationshipType;
+                switch (rel.type?.toLowerCase()) {
+                    case 'extends':
+                        relationshipType = dto_1.RelationshipType.EXTENDS;
+                        break;
+                    case 'implements':
+                        relationshipType = dto_1.RelationshipType.IMPLEMENTS;
+                        break;
+                    case 'calls':
+                        relationshipType = dto_1.RelationshipType.CALLS;
+                        break;
+                    case 'uses':
+                        relationshipType = dto_1.RelationshipType.USES_TYPE;
+                        break;
+                    default:
+                        continue;
+                }
+                relationships.push({
+                    type: relationshipType,
+                    startNodeId: rel.sourceId || '',
+                    endNodeId: rel.targetId || '',
+                    properties: rel.properties || {}
+                });
+            }
+        }
+        return {
+            metadata: {
+                codebaseName: rawOutput.codebaseName,
+                language: dto_1.Language.TYPESCRIPT,
+                totalFiles: rawOutput.files?.length || 0,
+                totalNodes: nodes.length,
+                totalRelationships: relationships.length,
+                parsingDuration: rawOutput.metadata.parsingDurationMs,
+                framework: rawOutput.metadata.framework,
+                detectedFrameworks: rawOutput.metadata.detectedFrameworks,
+                parseTime: rawOutput.metadata.parseTime,
+                parserVersion: rawOutput.metadata.parserVersion
+            },
+            nodes,
+            relationships
+        };
     }
 };
 exports.ParserOutputTransformerService = ParserOutputTransformerService;

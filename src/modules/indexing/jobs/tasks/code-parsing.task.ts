@@ -5,7 +5,7 @@ import { JobContext, TaskExecutionResult } from '../interfaces/job-context.inter
 import { CodeParsingConfig } from '../../entities/index-job.entity';
 import { TaskConfigService } from '../../config/task-config.service';
 import { DockerParserService } from '../../services/docker-parser.service';
-import { ParserOutputTransformerService, StandardizedParserOutput } from '../../services/parser-output-transformer.service';
+import { ParserOutputTransformerService, StandardizedGraphOutput } from '../../services/parser-output-transformer.service';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -214,7 +214,7 @@ export class CodeParsingTask extends BaseTask {
   ): Promise<{
     symbolsExtracted: number;
     filesProcessed: number;
-    results: StandardizedParserOutput;
+    results: StandardizedGraphOutput;
   }> {
     const jobId = context.job.id;
     const languageConfig = config.languages[language];
@@ -228,43 +228,39 @@ export class CodeParsingTask extends BaseTask {
     try {
       // Ensure Docker image is available
       const imageAvailable = await this.dockerParserService.ensureDockerImage(languageConfig.dockerImage);
-      if (!imageAvailable) {
+      if (imageAvailable) {
+        const outputPath = path.join(os.tmpdir(), `parser-output-${jobId}-${language}-${Date.now()}.json`);
+        const parserResult = await this.dockerParserService.executeParser({
+          dockerImage: languageConfig.dockerImage,
+          sourcePath: basePath,
+          outputPath,
+          options: languageConfig.options,
+          timeout: config.timeout
+        });
+        if (parserResult.success) {
+          const standardizedOutput = this.parserTransformerService.transformParserOutput(
+              parserResult.output,
+              language
+          );
+          context.logger.info(`[${jobId}] [CODE-PARSING] Successfully parsed ${language} files`, {
+            filesProcessed: standardizedOutput.metadata.totalFiles,
+            nodesExtracted: standardizedOutput.metadata.totalNodes,
+            relationshipsExtracted: standardizedOutput.metadata.totalRelationships,
+            duration: parserResult.duration
+          });
+          return {
+            symbolsExtracted: standardizedOutput.metadata.totalNodes,
+            filesProcessed: standardizedOutput.metadata.totalFiles,
+            results: standardizedOutput,
+          };
+        } else {
+          throw new Error(`Parser execution failed: ${parserResult.error}`);
+        }
+      } else {
         throw new Error(`Docker image not available: ${languageConfig.dockerImage}`);
       }
 
       // Create temporary output file
-      const outputPath = path.join(os.tmpdir(), `parser-output-${jobId}-${language}-${Date.now()}.json`);
-
-      // Execute Docker parser
-      const parserResult = await this.dockerParserService.executeParser({
-        dockerImage: languageConfig.dockerImage,
-        sourcePath: basePath,
-        outputPath,
-        options: languageConfig.options,
-        timeout: config.timeout
-      });
-
-      if (!parserResult.success) {
-        throw new Error(`Parser execution failed: ${parserResult.error}`);
-      }
-
-      // Transform parser output to standardized format
-      const standardizedOutput = this.parserTransformerService.transformParserOutput(
-        parserResult.output,
-        language
-      );
-
-      context.logger.info(`[${jobId}] [CODE-PARSING] Successfully parsed ${language} files`, {
-        filesProcessed: standardizedOutput.metadata.totalFiles,
-        symbolsExtracted: standardizedOutput.metadata.totalSymbols,
-        duration: parserResult.duration
-      });
-
-      return {
-        symbolsExtracted: standardizedOutput.metadata.totalSymbols,
-        filesProcessed: standardizedOutput.metadata.totalFiles,
-        results: standardizedOutput,
-      };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

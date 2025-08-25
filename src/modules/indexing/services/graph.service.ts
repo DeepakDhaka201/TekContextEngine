@@ -5,8 +5,8 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { TekProject, Codebase } from '@/entities';
 import { Neo4jService, GraphOperationResult } from './neo4j.service';
 import { GraphUpdateConfig } from '../entities/index-job.entity';
-import { StandardizedFile, StandardizedSymbol } from './parser-output-transformer.service';
-import { createHash } from 'crypto';
+import { StandardizedGraphNode } from './parser-output-transformer.service';
+import { BaseRelationship } from '../dto';
 
 @Injectable()
 export class GraphService {
@@ -30,11 +30,12 @@ export class GraphService {
   }
 
   /**
-   * Update the graph with parsed files from a codebase
+   * Update the graph with standardized nodes and relationships from parser
    */
   async updateCodebaseGraph(
     codebaseId: string,
-    files: StandardizedFile[],
+    nodes: StandardizedGraphNode[],
+    relationships: BaseRelationship[],
     config: GraphUpdateConfig
   ): Promise<GraphOperationResult> {
     await this.neo4jService.connect(config);
@@ -49,318 +50,143 @@ export class GraphService {
       throw new Error(`Codebase ${codebaseId} or its project not found`);
     }
 
-    this.logger.debug(`[GRAPH-SERVICE] Updating graph for codebase: ${codebase.name}`);
+    this.logger.debug(`[GRAPH-SERVICE] Updating graph with nodes for codebase: ${codebase.name}`);
 
-    // Create/update project and codebase nodes
-    await this.neo4jService.createOrUpdateProject(
-      codebase.project.id,
-      codebase.project.name
-    );
+    const queries = [];
+    let nodesCreated = 0;
+    let relationshipsCreated = 0;
 
-    await this.neo4jService.createOrUpdateCodebase(
-      codebase.project.id,
-      codebase.id,
-      codebase.name,
-      codebase.gitlabUrl,
-      codebase.language,
-      undefined, // framework not available in entity
-      codebase.lastSyncCommit
-    );
-
-    // Process files in batches
-    const batchSize = config.batchSize;
-    let totalResult: GraphOperationResult = {
-      nodesCreated: 0,
-      nodesUpdated: 0,
-      relationshipsCreated: 0,
-      relationshipsUpdated: 0
-    };
-
-    for (let i = 0; i < files.length; i += batchSize) {
-      const batch = files.slice(i, i + batchSize);
-      const batchResult = await this.processBatch(codebaseId, batch);
+    // Process nodes in batches
+    const batchSize = config.batchSize || 100;
+    for (let i = 0; i < nodes.length; i += batchSize) {
+      const batch = nodes.slice(i, i + batchSize);
       
-      totalResult.nodesCreated += batchResult.nodesCreated;
-      totalResult.nodesUpdated += batchResult.nodesUpdated;
-      totalResult.relationshipsCreated += batchResult.relationshipsCreated;
-      totalResult.relationshipsUpdated += batchResult.relationshipsUpdated;
+      for (const node of batch) {
+        // Create node query based on node type
+        const nodeQuery = this.createNodeQuery(node);
+        if (nodeQuery) {
+          queries.push(nodeQuery);
+          nodesCreated++;
+        }
+      }
 
-      this.logger.debug(`[GRAPH-SERVICE] Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(files.length / batchSize)}`);
+      // Execute batch
+      if (queries.length > 0) {
+        await this.neo4jService.executeBatch(queries);
+        queries.length = 0; // Clear the array
+      }
+    }
+
+    // Process relationships in batches
+    for (let i = 0; i < relationships.length; i += batchSize) {
+      const batch = relationships.slice(i, i + batchSize);
+      
+      for (const relationship of batch) {
+        // Create relationship query
+        const relQuery = this.createRelationshipQuery(relationship);
+        if (relQuery) {
+          queries.push(relQuery);
+          relationshipsCreated++;
+        }
+      }
+
+      // Execute batch
+      if (queries.length > 0) {
+        await this.neo4jService.executeBatch(queries);
+        queries.length = 0; // Clear the array
+      }
     }
 
     this.logger.log(`[GRAPH-SERVICE] Graph update completed`, {
       codebaseId,
-      filesProcessed: files.length,
-      ...totalResult
+      nodesCreated,
+      relationshipsCreated
     });
 
-    return totalResult;
+    return {
+      nodesCreated,
+      relationshipsCreated,
+      nodesUpdated: 0,
+      relationshipsUpdated: 0
+    };
   }
 
   /**
-   * Process a batch of files
+   * Create a Cypher query for a standardized graph node
    */
-  private async processBatch(codebaseId: string, files: StandardizedFile[]): Promise<GraphOperationResult> {
-    const queries: Array<{ query: string; parameters: Record<string, any> }> = [];
+  private createNodeQuery(node: StandardizedGraphNode): { query: string; parameters: any } | null {
+    const nodeType = node.nodeType;
+    const properties = this.sanitizeProperties(node.properties);
 
-    for (const file of files) {
-      // Create file node
-      const fileChecksum = this.calculateFileChecksum(file);
-      queries.push({
-        query: `
-          MATCH (c:Codebase {id: $codebaseId})
-          MERGE (f:File {path: $filePath})
-          SET f.fileName = $fileName,
-              f.packageName = $packageName,
-              f.language = $language,
-              f.checksum = $checksum,
-              f.updatedAt = datetime()
-          MERGE (c)-[:CONTAINS_FILE]->(f)
-        `,
-        parameters: {
-          codebaseId,
-          filePath: file.path,
-          fileName: file.fileName,
-          packageName: file.packageName,
-          language: file.language,
-          checksum: fileChecksum
-        }
-      });
+    // Build property string for Cypher
+    const propertyKeys = Object.keys(properties);
+    const setClause = propertyKeys.map(key => `n.${key} = $${key}`).join(', ');
 
-      // Process symbols in the file
-      for (const symbol of file.symbols) {
-        const symbolQueries = this.createSymbolQueries(file.path, symbol);
-        queries.push(...symbolQueries);
+    const query = `
+      MERGE (n:${nodeType} {id: $id})
+      SET ${setClause}
+      SET n.updatedAt = datetime()
+    `;
+
+    const parameters = {
+      id: node.id,
+      ...properties
+    };
+
+    return { query, parameters };
+  }
+
+  /**
+   * Create a Cypher query for a relationship
+   */
+  private createRelationshipQuery(relationship: BaseRelationship): { query: string; parameters: any } | null {
+    const query = `
+      MATCH (start {id: $startNodeId})
+      MATCH (end {id: $endNodeId})
+      MERGE (start)-[r:${relationship.type}]->(end)
+      SET r.updatedAt = datetime()
+    `;
+
+    const parameters = {
+      startNodeId: relationship.startNodeId,
+      endNodeId: relationship.endNodeId,
+      ...relationship.properties
+    };
+
+    return { query, parameters };
+  }
+
+  /**
+   * Sanitize properties to ensure they are Neo4j compatible
+   * Neo4j only accepts primitive types (string, number, boolean) or arrays of primitives
+   */
+  private sanitizeProperties(properties: Record<string, any>): Record<string, any> {
+    const sanitized: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(properties)) {
+      if (value === null || value === undefined) {
+        continue; // Skip null/undefined values
       }
 
-      // Process relationships
-      for (const relationship of file.relationships) {
-        // Extract entity names from spoon IDs for matching
-        const sourceName = this.extractEntityNameFromSpoonId(relationship.source);
-        const targetName = this.extractEntityNameFromSpoonId(relationship.target);
-
-        if (sourceName && targetName) {
-          queries.push({
-            query: `
-              MATCH (source), (target)
-              WHERE (source:Class OR source:Method OR source:Interface OR source:Variable)
-                AND (source.name = $sourceName OR source.fullyQualifiedName = $sourceFullName)
-                AND (target:Class OR target:Method OR target:Interface OR target:Variable)
-                AND (target.name = $targetName OR target.fullyQualifiedName = $targetFullName)
-              MERGE (source)-[:${relationship.type.toUpperCase()}]->(target)
-            `,
-            parameters: {
-              sourceName,
-              targetName,
-              sourceFullName: this.extractFullyQualifiedNameFromSpoonId(relationship.source),
-              targetFullName: this.extractFullyQualifiedNameFromSpoonId(relationship.target)
-            }
-          });
-        }
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        sanitized[key] = value;
+      } else if (Array.isArray(value)) {
+        // Handle arrays - convert complex objects to strings
+        sanitized[key] = value.map(item => {
+          if (typeof item === 'object' && item !== null) {
+            return JSON.stringify(item);
+          }
+          return item;
+        });
+      } else if (typeof value === 'object') {
+        // Convert objects to JSON strings
+        sanitized[key] = JSON.stringify(value);
+      } else {
+        // Convert other types to strings
+        sanitized[key] = String(value);
       }
     }
 
-    return await this.neo4jService.executeBatch(queries);
-  }
-
-  /**
-   * Create Cypher queries for a symbol
-   */
-  private createSymbolQueries(filePath: string, symbol: StandardizedSymbol): Array<{ query: string; parameters: Record<string, any> }> {
-    const queries: Array<{ query: string; parameters: Record<string, any> }> = [];
-    const symbolId = this.generateSymbolId(filePath, symbol);
-
-    switch (symbol.type) {
-      case 'class':
-        queries.push({
-          query: `
-            MATCH (f:File {path: $filePath})
-            MERGE (c:Class {id: $symbolId})
-            SET c.name = $name,
-                c.fullyQualifiedName = $fullyQualifiedName,
-                c.visibility = $visibility,
-                c.isStatic = $isStatic,
-                c.isAbstract = $isAbstract,
-                c.line = $line,
-                c.updatedAt = datetime()
-            MERGE (f)-[:DEFINES_CLASS]->(c)
-          `,
-          parameters: {
-            filePath,
-            symbolId,
-            name: symbol.name,
-            fullyQualifiedName: this.getFullyQualifiedName(filePath, symbol),
-            visibility: symbol.visibility,
-            isStatic: symbol.isStatic,
-            isAbstract: symbol.isAbstract,
-            line: symbol.line
-          }
-        });
-        break;
-
-      case 'interface':
-        queries.push({
-          query: `
-            MATCH (f:File {path: $filePath})
-            MERGE (i:Interface {id: $symbolId})
-            SET i.name = $name,
-                i.fullyQualifiedName = $fullyQualifiedName,
-                i.line = $line,
-                i.updatedAt = datetime()
-            MERGE (f)-[:DEFINES_INTERFACE]->(i)
-          `,
-          parameters: {
-            filePath,
-            symbolId,
-            name: symbol.name,
-            fullyQualifiedName: this.getFullyQualifiedName(filePath, symbol),
-            line: symbol.line
-          }
-        });
-        break;
-
-      case 'method':
-      case 'function':
-        const signature = this.buildMethodSignature(symbol);
-        queries.push({
-          query: `
-            MATCH (f:File {path: $filePath})
-            MERGE (m:Method {id: $symbolId})
-            SET m.name = $name,
-                m.signature = $signature,
-                m.returnType = $returnType,
-                m.visibility = $visibility,
-                m.isStatic = $isStatic,
-                m.isAbstract = $isAbstract,
-                m.line = $line,
-                m.updatedAt = datetime()
-            MERGE (f)-[:DEFINES_METHOD]->(m)
-          `,
-          parameters: {
-            filePath,
-            symbolId,
-            name: symbol.name,
-            signature,
-            returnType: symbol.returnType,
-            visibility: symbol.visibility,
-            isStatic: symbol.isStatic,
-            isAbstract: symbol.isAbstract,
-            line: symbol.line
-          }
-        });
-        break;
-
-      case 'field':
-      case 'property':
-      case 'variable':
-        queries.push({
-          query: `
-            MATCH (f:File {path: $filePath})
-            MERGE (v:Variable {id: $symbolId})
-            SET v.name = $name,
-                v.type = $type,
-                v.visibility = $visibility,
-                v.isStatic = $isStatic,
-                v.line = $line,
-                v.updatedAt = datetime()
-            MERGE (f)-[:DEFINES_VARIABLE]->(v)
-          `,
-          parameters: {
-            filePath,
-            symbolId,
-            name: symbol.name,
-            type: symbol.returnType || 'unknown',
-            visibility: symbol.visibility,
-            isStatic: symbol.isStatic,
-            line: symbol.line
-          }
-        });
-        break;
-    }
-
-    return queries;
-  }
-
-  /**
-   * Generate a unique ID for a symbol
-   */
-  private generateSymbolId(filePath: string, symbol: StandardizedSymbol): string {
-    const content = `${filePath}:${symbol.type}:${symbol.name}:${symbol.line || 0}`;
-    return createHash('sha256').update(content).digest('hex').substring(0, 16);
-  }
-
-  /**
-   * Get fully qualified name for a symbol
-   */
-  private getFullyQualifiedName(filePath: string, symbol: StandardizedSymbol): string {
-    // Extract package from file path or use symbol name
-    const pathParts = filePath.split('/');
-    const fileName = pathParts[pathParts.length - 1].replace(/\.(java|ts|js)$/, '');
-    return `${fileName}.${symbol.name}`;
-  }
-
-  /**
-   * Build method signature from symbol
-   */
-  private buildMethodSignature(symbol: StandardizedSymbol): string {
-    const params = symbol.parameters?.map(p => `${p.name}: ${p.type}`).join(', ') || '';
-    return `${symbol.name}(${params})${symbol.returnType ? `: ${symbol.returnType}` : ''}`;
-  }
-
-  /**
-   * Calculate checksum for a file
-   */
-  private calculateFileChecksum(file: StandardizedFile): string {
-    const content = JSON.stringify({
-      path: file.path,
-      symbols: file.symbols.length,
-      relationships: file.relationships.length
-    });
-    return createHash('md5').update(content).digest('hex');
-  }
-
-  /**
-   * Handle deleted files by removing them and their related nodes from the graph
-   */
-  async handleDeletedFiles(codebaseId: string, deletedFilePaths: string[]): Promise<GraphOperationResult> {
-    if (deletedFilePaths.length === 0) {
-      return { nodesCreated: 0, nodesUpdated: 0, relationshipsCreated: 0, relationshipsUpdated: 0 };
-    }
-
-    this.logger.debug(`[GRAPH-SERVICE] Handling ${deletedFilePaths.length} deleted files for codebase: ${codebaseId}`);
-
-    return await this.neo4jService.deleteFilesFromCodebase(codebaseId, deletedFilePaths);
-  }
-
-  /**
-   * Extract entity name from spoon ID
-   * e.g., "comprehensive-test-project:class:com.testproject.BaseEntity" -> "BaseEntity"
-   */
-  private extractEntityNameFromSpoonId(spoonId: string): string | null {
-    if (!spoonId) return null;
-
-    const parts = spoonId.split(':');
-    if (parts.length >= 3) {
-      const fullyQualifiedName = parts.slice(2).join(':');
-      const nameParts = fullyQualifiedName.split('.');
-      return nameParts[nameParts.length - 1];
-    }
-
-    return null;
-  }
-
-  /**
-   * Extract fully qualified name from spoon ID
-   * e.g., "comprehensive-test-project:class:com.testproject.BaseEntity" -> "com.testproject.BaseEntity"
-   */
-  private extractFullyQualifiedNameFromSpoonId(spoonId: string): string | null {
-    if (!spoonId) return null;
-
-    const parts = spoonId.split(':');
-    if (parts.length >= 3) {
-      return parts.slice(2).join(':');
-    }
-
-    return null;
+    return sanitized;
   }
 }

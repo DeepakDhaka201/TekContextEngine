@@ -2,61 +2,73 @@ import { Injectable, Inject, LoggerService } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import {
   Language,
-  Visibility,
-  MethodParameter
+  NodeType,
+  RelationshipType,
+  BaseRelationship,
+  HttpMethod
 } from '../dto';
 
-export interface StandardizedSymbol {
-  name: string;
-  type: 'class' | 'interface' | 'method' | 'function' | 'field' | 'property' | 'enum' | 'variable';
-  visibility?: Visibility;
-  isStatic?: boolean;
-  isAbstract?: boolean;
-  returnType?: string;
-  parameters?: MethodParameter[];
-  annotations?: string[];
-  line?: number;
-  column?: number;
-  fullyQualifiedName?: string;
-  comment?: string;
-  cyclomaticComplexity?: number;
+// Graph-based standardized output interfaces
+export interface StandardizedGraphNode {
+  id: string;
+  nodeType: NodeType;
+  properties: Record<string, any>;
 }
 
-export interface StandardizedRelationship {
-  type: 'extends' | 'implements' | 'uses' | 'calls' | 'imports';
-  source: string;
-  target: string;
-  line?: number;
-  properties?: Record<string, any>;
-}
-
-export interface StandardizedFile {
-  path: string;
-  fileName: string;
-  packageName?: string;
-  language: Language;
-  symbols: StandardizedSymbol[];
-  imports?: string[];
-  exports?: string[];
-  relationships: StandardizedRelationship[];
-  checksum?: string;
-  lineCount?: number;
-  fileSize?: number;
-  isTestFile?: boolean;
-}
-
-export interface StandardizedParserOutput {
+export interface StandardizedGraphOutput {
   metadata: {
+    codebaseName: string;
     language: Language;
     totalFiles: number;
-    totalSymbols: number;
+    totalNodes: number;
+    totalRelationships: number;
     parsingDuration: number;
     framework?: string;
     detectedFrameworks?: string[];
-    codebaseName?: string;
+    parseTime: string;
+    parserVersion: string;
   };
-  files: StandardizedFile[];
+  nodes: StandardizedGraphNode[];
+  relationships: BaseRelationship[];
 }
+
+// Parser input interfaces (matching both Java and TypeScript parser outputs)
+export interface ParserMetadata {
+  codebaseName: string;
+  version?: string;
+  parserVersion: string;
+  parseTime: string;
+  parsingDurationMs: number;
+  framework: string;
+  detectedFrameworks: string[];
+  statistics?: {
+    totalFiles: number;
+    totalClasses: number;
+    totalInterfaces: number;
+    totalMethods: number;
+    totalFields?: number;
+    complexity?: number;
+  };
+}
+
+export interface ParserOutput {
+  metadata: ParserMetadata;
+  codebaseName: string;
+  files: any[];
+  classes: any[];
+  interfaces: any[];
+  enums?: any[];
+  methods: any[];
+  fields?: any[];
+  dependencies: any[];
+  relationships: any[];
+  apiEndpoints?: any[];
+  testCases?: any[];
+  documents?: any[];
+  annotations?: any[];
+}
+
+
 
 @Injectable()
 export class ParserOutputTransformerService {
@@ -66,427 +78,602 @@ export class ParserOutputTransformerService {
   ) {}
 
   /**
-   * Transform parser output to standardized format
+   * Transform parser output to standardized graph format
    */
-  transformParserOutput(rawOutput: any, language: string): StandardizedParserOutput {
-    this.logger.debug(`[PARSER-TRANSFORMER] Transforming ${language} parser output`);
+  transformParserOutput(rawOutput: ParserOutput, language: string): StandardizedGraphOutput {
+    this.logger.debug(`[PARSER-TRANSFORMER] Transforming ${language} parser output to graph format`);
 
     switch (language.toLowerCase()) {
       case 'java':
-        return this.transformJavaOutput(rawOutput);
+        return this.transformJavaToGraph(rawOutput);
       case 'typescript':
-        return this.transformTypeScriptOutput(rawOutput);
+        return this.transformTypeScriptToGraph(rawOutput);
       default:
         throw new Error(`Unsupported language for transformation: ${language}`);
     }
   }
 
   /**
-   * Transform Java (spoon-parser-v2) output
+   * Generate globally unique ID for nodes
    */
-  private transformJavaOutput(rawOutput: any): StandardizedParserOutput {
-    this.logger.log(`[PARSER-TRANSFORMER] Raw Java output structure:`, {
-      hasFiles: !!rawOutput.files,
-      filesIsArray: Array.isArray(rawOutput.files),
+  private generateNodeId(nodeType: NodeType, codebaseName: string, identifier: string): string {
+    return `${codebaseName}:${nodeType.toLowerCase()}:${identifier}`;
+  }
+
+  /**
+   * Generate globally unique ID for relationships
+   */
+  private generateRelationshipId(type: RelationshipType, sourceId: string, targetId: string): string {
+    return `${type}:${sourceId}:${targetId}`;
+  }
+
+  /**
+   * Transform Java (spoon-parser-v2) output to graph format
+   */
+  private transformJavaToGraph(rawOutput: ParserOutput): StandardizedGraphOutput {
+    this.logger.log(`[PARSER-TRANSFORMER] Transforming Java output to graph format`, {
+      codebaseName: rawOutput.codebaseName,
       filesCount: rawOutput.files?.length || 0,
-      hasClasses: !!rawOutput.classes,
       classesCount: rawOutput.classes?.length || 0,
-      hasMethods: !!rawOutput.methods,
       methodsCount: rawOutput.methods?.length || 0,
-      hasInterfaces: !!rawOutput.interfaces,
       interfacesCount: rawOutput.interfaces?.length || 0,
-      hasFields: !!rawOutput.fields,
-      fieldsCount: rawOutput.fields?.length || 0,
-      hasEnums: !!rawOutput.enums,
-      enumsCount: rawOutput.enums?.length || 0,
-      hasRelationships: !!rawOutput.relationships,
-      relationshipsCount: rawOutput.relationships?.length || 0,
-      topLevelKeys: Object.keys(rawOutput)
+      relationshipsCount: rawOutput.relationships?.length || 0
     });
 
-    // Create a map of files to build file-centric structure
-    const fileMap = new Map<string, StandardizedFile>();
+    const nodes: StandardizedGraphNode[] = [];
+    const relationships: BaseRelationship[] = [];
+    const codebaseName = rawOutput.codebaseName;
 
-    // Initialize files from FileNode list
-    if (rawOutput.files && Array.isArray(rawOutput.files)) {
-      for (const file of rawOutput.files) {
-        fileMap.set(file.path, {
-          path: file.path,
-          fileName: file.fileName,
-          packageName: file.packageName || '',
-          language: Language.JAVA,
-          symbols: [],
-          imports: [], // Will be populated from dependencies if available
-          exports: [],
-          relationships: []
-        });
+    // Create Project node
+    const projectNode: StandardizedGraphNode = {
+      id: this.generateNodeId(NodeType.PROJECT, codebaseName, codebaseName),
+      nodeType: NodeType.PROJECT,
+      properties: {
+        name: codebaseName,
+        projectId: codebaseName,
+        description: `Java project: ${codebaseName}`
       }
-    }
+    };
+    nodes.push(projectNode);
 
-    // Add classes to their respective files
-    if (rawOutput.classes && Array.isArray(rawOutput.classes)) {
-      for (const cls of rawOutput.classes) {
-        const file = fileMap.get(cls.filePath);
-        if (file) {
-          file.symbols.push({
-            name: cls.name,
-            type: 'class',
-            visibility: cls.visibility?.toLowerCase(),
-            isStatic: cls.isStatic,
-            isAbstract: cls.isAbstract,
-            annotations: cls.decorators?.map((d: any) => d.name) || [],
-            line: cls.startLine
-          });
-        }
-      }
-    }
-
-    // Add methods to their respective files
-    if (rawOutput.methods && Array.isArray(rawOutput.methods)) {
-      for (const method of rawOutput.methods) {
-        const file = fileMap.get(method.filePath);
-        if (file) {
-          file.symbols.push({
-            name: method.name,
-            type: 'method',
-            visibility: method.visibility?.toLowerCase(),
-            isStatic: method.isStatic,
-            isAbstract: method.isAbstract,
-            returnType: method.returnType,
-            parameters: method.parameters?.map((p: any) => ({
-              name: p.name,
-              type: p.type
-            })) || [],
-            annotations: method.decorators?.map((d: any) => d.name) || [],
-            line: method.startLine
-          });
-        }
-      }
-    }
-
-    // Add interfaces to their respective files
-    if (rawOutput.interfaces && Array.isArray(rawOutput.interfaces)) {
-      for (const iface of rawOutput.interfaces) {
-        const file = fileMap.get(iface.filePath);
-        if (file) {
-          file.symbols.push({
-            name: iface.name,
-            type: 'interface',
-            visibility: iface.visibility?.toLowerCase() || 'public',
-            annotations: iface.decorators?.map((d: any) => d.name) || [],
-            line: iface.startLine
-          });
-        }
-      }
-    }
-
-    // Add fields to their respective files
-    if (rawOutput.fields && Array.isArray(rawOutput.fields)) {
-      for (const field of rawOutput.fields) {
-        // Fields don't have filePath directly, we need to find the class they belong to
-        // For now, we'll skip fields or try to match by class name if available
-        // This is a limitation of the current structure
-        this.logger.debug(`[PARSER-TRANSFORMER] Skipping field ${field.name} - no filePath available`);
-      }
-    }
-
-    // Add enums to their respective files
-    if (rawOutput.enums && Array.isArray(rawOutput.enums)) {
-      for (const enumNode of rawOutput.enums) {
-        const file = fileMap.get(enumNode.filePath);
-        if (file) {
-          file.symbols.push({
-            name: enumNode.name,
-            type: 'enum',
-            visibility: enumNode.visibility?.toLowerCase() || 'public',
-            annotations: enumNode.decorators?.map((d: any) => d.name) || [],
-            line: enumNode.startLine
-          });
-        }
-      }
-    }
-
-    // Add relationships to their respective files
-    if (rawOutput.relationships && Array.isArray(rawOutput.relationships)) {
-      for (const rel of rawOutput.relationships) {
-        // Relationships might not have a specific file, so we'll try to find the source file
-        // This is a best-effort approach
-        if (rel.sourceFilePath) {
-          const file = fileMap.get(rel.sourceFilePath);
-          if (file) {
-            file.relationships.push({
-              type: rel.type,
-              source: rel.source,
-              target: rel.target,
-              line: rel.line
-            });
-          }
-        }
-      }
-    }
-
-    const files = Array.from(fileMap.values());
-
-    return {
-      metadata: {
+    // Create Codebase node
+    const codebaseNode: StandardizedGraphNode = {
+      id: this.generateNodeId(NodeType.CODEBASE, codebaseName, codebaseName),
+      nodeType: NodeType.CODEBASE,
+      properties: {
+        name: codebaseName,
+        gitUrl: '', // Not available in parser output
         language: Language.JAVA,
-        totalFiles: files.length,
-        totalSymbols: files.reduce((sum, file) => sum + file.symbols.length, 0),
-        parsingDuration: rawOutput.metadata?.parsingDurationMs || 0,
-        framework: rawOutput.metadata?.framework,
-        detectedFrameworks: rawOutput.metadata?.detectedFrameworks,
-        codebaseName: rawOutput.codebaseName
-      },
-      files
+        framework: rawOutput.metadata.framework,
+        lastIndexedCommit: '', // Not available in parser output
+        isActive: true
+      }
     };
-  }
+    nodes.push(codebaseNode);
 
-  /**
-   * Transform TypeScript (ts-morph-parser) output
-   */
-  private transformTypeScriptOutput(rawOutput: any): StandardizedParserOutput {
-    this.logger.log(`[PARSER-TRANSFORMER] Raw TypeScript output structure:`, {
-      hasFiles: !!rawOutput.files,
-      filesIsArray: Array.isArray(rawOutput.files),
-      filesCount: rawOutput.files?.length || 0,
-      hasClasses: !!rawOutput.classes,
-      classesCount: rawOutput.classes?.length || 0,
-      hasMethods: !!rawOutput.methods,
-      methodsCount: rawOutput.methods?.length || 0,
-      hasInterfaces: !!rawOutput.interfaces,
-      interfacesCount: rawOutput.interfaces?.length || 0,
-      hasFields: !!rawOutput.fields,
-      fieldsCount: rawOutput.fields?.length || 0,
-      hasEnums: !!rawOutput.enums,
-      enumsCount: rawOutput.enums?.length || 0,
-      hasRelationships: !!rawOutput.relationships,
-      relationshipsCount: rawOutput.relationships?.length || 0,
-      topLevelKeys: Object.keys(rawOutput)
+    // Create Project -> Codebase relationship
+    relationships.push({
+      type: RelationshipType.HAS_CODEBASE,
+      startNodeId: projectNode.id,
+      endNodeId: codebaseNode.id,
+      properties: {}
     });
 
-    // Create a map of files to build file-centric structure
-    const fileMap = new Map<string, StandardizedFile>();
-
-    // Initialize files from FileNode list
+    // Transform File nodes
     if (rawOutput.files && Array.isArray(rawOutput.files)) {
       for (const file of rawOutput.files) {
-        // Detect language from file extension or metadata
-        let detectedLanguage = Language.TYPESCRIPT; // default
-        if (file.fileExtension) {
-          switch (file.fileExtension.toLowerCase()) {
-            case '.java':
-            case 'java':
-              detectedLanguage = Language.JAVA;
-              break;
-            case '.ts':
-            case '.tsx':
-            case 'ts':
-            case 'tsx':
-              detectedLanguage = Language.TYPESCRIPT;
-              break;
-            case '.js':
-            case '.jsx':
-            case 'js':
-            case 'jsx':
-              detectedLanguage = Language.JAVASCRIPT;
-              break;
-            default:
-              // Try to detect from metadata if available
-              if (rawOutput.metadata?.detectedFrameworks?.includes('java')) {
-                detectedLanguage = Language.JAVA;
-              }
-              break;
+        const fileNode: StandardizedGraphNode = {
+          id: this.generateNodeId(NodeType.FILE, codebaseName, file.path),
+          nodeType: NodeType.FILE,
+          properties: {
+            path: file.path,
+            fileName: file.fileName,
+            checksum: file.checksum || '',
+            lineCount: file.lineCount || 0,
+            fileSize: file.fileSize || 0,
+            extension: file.fileExtension || '',
+            packageName: file.packageName || '',
+            isTestFile: file.isTestFile || false
           }
-        }
+        };
+        nodes.push(fileNode);
 
-        fileMap.set(file.path, {
-          path: file.path,
-          fileName: file.fileName,
-          packageName: file.packageName || '',
-          language: detectedLanguage,
-          symbols: [],
-          imports: [], // Will be populated from dependencies if available
-          exports: [],
-          relationships: []
+        // Create Codebase -> File relationship
+        relationships.push({
+          type: RelationshipType.CONTAINS_FILE,
+          startNodeId: codebaseNode.id,
+          endNodeId: fileNode.id,
+          properties: {}
         });
       }
     }
 
-    // Add classes to their respective files
+    // Transform Class nodes
     if (rawOutput.classes && Array.isArray(rawOutput.classes)) {
       for (const cls of rawOutput.classes) {
-        const file = fileMap.get(cls.filePath);
-        if (file) {
-          file.symbols.push({
+        const classNode: StandardizedGraphNode = {
+          id: this.generateNodeId(NodeType.CLASS, codebaseName, cls.fullyQualifiedName || cls.name),
+          nodeType: NodeType.CLASS,
+          properties: {
             name: cls.name,
-            type: 'class',
+            fullyQualifiedName: cls.fullyQualifiedName || cls.name,
+            comment: cls.comment || '',
+            embedding: [], // Will be populated later
             visibility: cls.visibility?.toLowerCase() || 'public',
-            isStatic: cls.isStatic,
-            isAbstract: cls.isAbstract,
-            annotations: cls.decorators?.map((d: any) => d.name) || [],
-            line: cls.startLine
+            isAbstract: cls.isAbstract || false,
+            isFinal: cls.isFinal || false,
+            isStatic: cls.isStatic || false,
+            isInnerClass: cls.isInnerClass || false,
+            startLine: cls.startLine || 0,
+            endLine: cls.endLine || 0,
+            filePath: cls.filePath || ''
+          }
+        };
+        nodes.push(classNode);
+
+        // Create File -> Class relationship
+        if (cls.filePath) {
+          const fileId = this.generateNodeId(NodeType.FILE, codebaseName, cls.filePath);
+          relationships.push({
+            type: RelationshipType.DEFINES_CLASS,
+            startNodeId: fileId,
+            endNodeId: classNode.id,
+            properties: {}
           });
         }
       }
     }
 
-    // Add methods to their respective files
-    if (rawOutput.methods && Array.isArray(rawOutput.methods)) {
-      for (const method of rawOutput.methods) {
-        const file = fileMap.get(method.filePath);
-        if (file) {
-          file.symbols.push({
-            name: method.name,
-            type: 'method',
-            visibility: method.visibility?.toLowerCase() || 'public',
-            isStatic: method.isStatic,
-            isAbstract: method.isAbstract,
-            returnType: method.returnType,
-            parameters: method.parameters?.map((p: any) => ({
-              name: p.name,
-              type: p.type
-            })) || [],
-            annotations: method.decorators?.map((d: any) => d.name) || [],
-            line: method.startLine
-          });
-        }
-      }
-    }
-
-    // Add interfaces to their respective files
+    // Transform Interface nodes
     if (rawOutput.interfaces && Array.isArray(rawOutput.interfaces)) {
       for (const iface of rawOutput.interfaces) {
-        const file = fileMap.get(iface.filePath);
-        if (file) {
-          file.symbols.push({
+        const interfaceNode: StandardizedGraphNode = {
+          id: this.generateNodeId(NodeType.INTERFACE, codebaseName, iface.fullyQualifiedName || iface.name),
+          nodeType: NodeType.INTERFACE,
+          properties: {
             name: iface.name,
-            type: 'interface',
-            visibility: Visibility.PUBLIC,
-            annotations: iface.decorators?.map((d: any) => d.name) || [],
-            line: iface.startLine
+            fullyQualifiedName: iface.fullyQualifiedName || iface.name,
+            comment: iface.comment || '',
+            embedding: [], // Will be populated later
+            visibility: iface.visibility?.toLowerCase() || 'public',
+            startLine: iface.startLine || 0,
+            endLine: iface.endLine || 0,
+            filePath: iface.filePath || ''
+          }
+        };
+        nodes.push(interfaceNode);
+
+        // Create File -> Interface relationship (using DEFINES_CLASS for now, could be DEFINES_INTERFACE)
+        if (iface.filePath) {
+          const fileId = this.generateNodeId(NodeType.FILE, codebaseName, iface.filePath);
+          relationships.push({
+            type: RelationshipType.DEFINES_CLASS, // Using DEFINES_CLASS as schema doesn't have DEFINES_INTERFACE
+            startNodeId: fileId,
+            endNodeId: interfaceNode.id,
+            properties: { entityType: 'interface' }
           });
         }
       }
     }
 
-    // Add fields to their respective files
-    if (rawOutput.fields && Array.isArray(rawOutput.fields)) {
-      for (const field of rawOutput.fields) {
-        const file = fileMap.get(field.filePath);
-        if (file) {
-          file.symbols.push({
-            name: field.name,
-            type: 'field',
-            visibility: field.visibility?.toLowerCase() || 'public',
-            isStatic: field.isStatic,
-            returnType: field.type,
-            annotations: field.decorators?.map((d: any) => d.name) || [],
-            line: field.startLine
+    // Transform Method nodes
+    if (rawOutput.methods && Array.isArray(rawOutput.methods)) {
+      for (const method of rawOutput.methods) {
+        const methodNode: StandardizedGraphNode = {
+          id: this.generateNodeId(NodeType.METHOD, codebaseName, `${method.filePath}:${method.name}:${method.startLine}`),
+          nodeType: NodeType.METHOD,
+          properties: {
+            name: method.name,
+            signature: method.signature || '',
+            returnType: method.returnType || 'void',
+            comment: method.comment || '',
+            body: method.body || '',
+            visibility: method.visibility?.toLowerCase() || 'public',
+            cyclomaticComplexity: method.cyclomaticComplexity || 0,
+            embedding: [], // Will be populated later
+            isStatic: method.isStatic || false,
+            isAbstract: method.isAbstract || false,
+            isConstructor: method.isConstructor || false,
+            isTestMethod: method.isTestMethod || false,
+            startLine: method.startLine || 0,
+            endLine: method.endLine || 0,
+            filePath: method.filePath || '',
+            parameters: method.parameters || []
+          }
+        };
+        nodes.push(methodNode);
+
+        // Create File -> Method relationship
+        if (method.filePath) {
+          const fileId = this.generateNodeId(NodeType.FILE, codebaseName, method.filePath);
+          relationships.push({
+            type: RelationshipType.DEFINES_METHOD,
+            startNodeId: fileId,
+            endNodeId: methodNode.id,
+            properties: {}
           });
         }
       }
     }
 
-    // Add enums to their respective files
-    if (rawOutput.enums && Array.isArray(rawOutput.enums)) {
-      for (const enumNode of rawOutput.enums) {
-        const file = fileMap.get(enumNode.filePath);
-        if (file) {
-          file.symbols.push({
-            name: enumNode.name,
-            type: 'enum',
-            visibility: enumNode.visibility?.toLowerCase() || 'public',
-            annotations: enumNode.decorators?.map((d: any) => d.name) || [],
-            line: enumNode.startLine
-          });
-        }
+    // Transform Dependencies
+    if (rawOutput.dependencies && Array.isArray(rawOutput.dependencies)) {
+      for (const dep of rawOutput.dependencies) {
+        const dependencyNode: StandardizedGraphNode = {
+          id: this.generateNodeId(NodeType.DEPENDENCY, codebaseName, `${dep.name}:${dep.version || 'unknown'}`),
+          nodeType: NodeType.DEPENDENCY,
+          properties: {
+            name: dep.name,
+            version: dep.version || 'unknown',
+            scope: dep.scope || 'compile',
+            groupId: dep.groupId || '',
+            artifactId: dep.artifactId || '',
+            isDevDependency: dep.isDevDependency || false
+          }
+        };
+        nodes.push(dependencyNode);
+
+        // Create Codebase -> Dependency relationship
+        relationships.push({
+          type: RelationshipType.DEPENDS_ON,
+          startNodeId: codebaseNode.id,
+          endNodeId: dependencyNode.id,
+          properties: { scope: dep.scope || 'compile' }
+        });
       }
     }
 
-    // Add relationships to their respective files
+    // Transform API Endpoints
+    if (rawOutput.apiEndpoints && Array.isArray(rawOutput.apiEndpoints)) {
+      for (const endpoint of rawOutput.apiEndpoints) {
+        const endpointNode: StandardizedGraphNode = {
+          id: this.generateNodeId(NodeType.API_ENDPOINT, codebaseName, `${endpoint.httpMethod}:${endpoint.path}`),
+          nodeType: NodeType.API_ENDPOINT,
+          properties: {
+            httpMethod: endpoint.httpMethod || HttpMethod.GET,
+            path: endpoint.path || '',
+            description: endpoint.description || '',
+            embedding: [], // Will be populated later
+            requestSchema: endpoint.requestSchema || '',
+            responseSchema: endpoint.responseSchema || '',
+            statusCodes: endpoint.statusCodes || []
+          }
+        };
+        nodes.push(endpointNode);
+      }
+    }
+
+    // Transform Test Cases
+    if (rawOutput.testCases && Array.isArray(rawOutput.testCases)) {
+      for (const testCase of rawOutput.testCases) {
+        const testCaseNode: StandardizedGraphNode = {
+          id: this.generateNodeId(NodeType.TEST_CASE, codebaseName, `${testCase.filePath}:${testCase.name}`),
+          nodeType: NodeType.TEST_CASE,
+          properties: {
+            name: testCase.name,
+            filePath: testCase.filePath || '',
+            className: testCase.className || '',
+            methodName: testCase.methodName || '',
+            testType: testCase.testType || 'UNIT',
+            assertions: testCase.assertions || 0,
+            startLine: testCase.startLine || 0,
+            endLine: testCase.endLine || 0
+          }
+        };
+        nodes.push(testCaseNode);
+      }
+    }
+
+    // Transform relationships from parser output
     if (rawOutput.relationships && Array.isArray(rawOutput.relationships)) {
       for (const rel of rawOutput.relationships) {
-        // For spoon-v2, relationships have sourceId and targetId
-        // We need to extract the file path from the sourceId to associate with the correct file
-        if (rel.sourceId && rel.targetId) {
-          // Try to find the source file by looking for classes/interfaces/methods in files
-          let sourceFile = null;
-
-          // Look through all files to find where the source entity is defined
-          for (const [filePath, file] of fileMap.entries()) {
-            const hasSourceEntity = file.symbols.some(symbol => {
-              const symbolId = this.generateSymbolIdFromSpoonId(rel.sourceId, symbol);
-              return symbolId === rel.sourceId || rel.sourceId.includes(symbol.name);
-            });
-
-            if (hasSourceEntity) {
-              sourceFile = file;
-              break;
-            }
-          }
-
-          if (sourceFile) {
-            sourceFile.relationships.push({
-              type: rel.type.toLowerCase() as any,
-              source: rel.sourceId,
-              target: rel.targetId,
-              properties: rel.properties
-            });
-          }
+        // Map parser relationship types to our schema relationship types
+        let relationshipType: RelationshipType;
+        switch (rel.type?.toLowerCase()) {
+          case 'extends':
+            relationshipType = RelationshipType.EXTENDS;
+            break;
+          case 'implements':
+            relationshipType = RelationshipType.IMPLEMENTS;
+            break;
+          case 'calls':
+            relationshipType = RelationshipType.CALLS;
+            break;
+          case 'uses':
+            relationshipType = RelationshipType.USES_TYPE;
+            break;
+          default:
+            continue; // Skip unknown relationship types
         }
-      }
-    }
 
-    const files = Array.from(fileMap.values());
-
-    // Determine the primary language from the files
-    const languageCounts = new Map<Language, number>();
-    files.forEach(file => {
-      const count = languageCounts.get(file.language) || 0;
-      languageCounts.set(file.language, count + 1);
-    });
-
-    // Get the most common language
-    let primaryLanguage = Language.TYPESCRIPT;
-    let maxCount = 0;
-    for (const [lang, count] of languageCounts.entries()) {
-      if (count > maxCount) {
-        maxCount = count;
-        primaryLanguage = lang;
+        relationships.push({
+          type: relationshipType,
+          startNodeId: rel.sourceId || '',
+          endNodeId: rel.targetId || '',
+          properties: rel.properties || {}
+        });
       }
     }
 
     return {
       metadata: {
-        language: primaryLanguage,
-        totalFiles: files.length,
-        totalSymbols: files.reduce((sum, file) => sum + file.symbols.length, 0),
-        parsingDuration: rawOutput.metadata?.parsingDurationMs || 0,
-        framework: rawOutput.metadata?.framework,
-        detectedFrameworks: rawOutput.metadata?.detectedFrameworks,
-        codebaseName: rawOutput.codebaseName
+        codebaseName: rawOutput.codebaseName,
+        language: Language.JAVA,
+        totalFiles: rawOutput.files?.length || 0,
+        totalNodes: nodes.length,
+        totalRelationships: relationships.length,
+        parsingDuration: rawOutput.metadata.parsingDurationMs,
+        framework: rawOutput.metadata.framework,
+        detectedFrameworks: rawOutput.metadata.detectedFrameworks,
+        parseTime: rawOutput.metadata.parseTime,
+        parserVersion: rawOutput.metadata.parserVersion
       },
-      files
+      nodes,
+      relationships
     };
   }
 
   /**
-   * Generate a symbol ID that matches the spoon parser format
+   * Transform TypeScript (ts-morph-parser) output to graph format
    */
-  private generateSymbolIdFromSpoonId(spoonId: string, symbol: StandardizedSymbol): string {
-    // Spoon IDs are in format: "codebase:type:fullyQualifiedName"
-    // e.g., "comprehensive-test-project:class:com.testproject.BaseEntity"
-    const parts = spoonId.split(':');
-    if (parts.length >= 3) {
-      const codebaseName = parts[0];
-      const entityType = parts[1];
-      const fullyQualifiedName = parts.slice(2).join(':');
+  private transformTypeScriptToGraph(rawOutput: ParserOutput): StandardizedGraphOutput {
+    this.logger.log(`[PARSER-TRANSFORMER] Transforming TypeScript output to graph format`, {
+      codebaseName: rawOutput.codebaseName,
+      filesCount: rawOutput.files?.length || 0,
+      classesCount: rawOutput.classes?.length || 0,
+      methodsCount: rawOutput.methods?.length || 0,
+      interfacesCount: rawOutput.interfaces?.length || 0,
+      relationshipsCount: rawOutput.relationships?.length || 0
+    });
 
-      // Check if this symbol matches
-      if (fullyQualifiedName.endsWith(symbol.name)) {
-        return spoonId;
+    const nodes: StandardizedGraphNode[] = [];
+    const relationships: BaseRelationship[] = [];
+    const codebaseName = rawOutput.codebaseName;
+
+    // Create Project node
+    const projectNode: StandardizedGraphNode = {
+      id: this.generateNodeId(NodeType.PROJECT, codebaseName, codebaseName),
+      nodeType: NodeType.PROJECT,
+      properties: {
+        name: codebaseName,
+        projectId: codebaseName,
+        description: `TypeScript project: ${codebaseName}`
+      }
+    };
+    nodes.push(projectNode);
+
+    // Create Codebase node
+    const codebaseNode: StandardizedGraphNode = {
+      id: this.generateNodeId(NodeType.CODEBASE, codebaseName, codebaseName),
+      nodeType: NodeType.CODEBASE,
+      properties: {
+        name: codebaseName,
+        gitUrl: '', // Not available in parser output
+        language: Language.TYPESCRIPT,
+        framework: rawOutput.metadata.framework,
+        lastIndexedCommit: '', // Not available in parser output
+        isActive: true
+      }
+    };
+    nodes.push(codebaseNode);
+
+    // Create Project -> Codebase relationship
+    relationships.push({
+      type: RelationshipType.HAS_CODEBASE,
+      startNodeId: projectNode.id,
+      endNodeId: codebaseNode.id,
+      properties: {}
+    });
+
+    // Transform File nodes (similar to Java)
+    if (rawOutput.files && Array.isArray(rawOutput.files)) {
+      for (const file of rawOutput.files) {
+        const fileNode: StandardizedGraphNode = {
+          id: this.generateNodeId(NodeType.FILE, codebaseName, file.path),
+          nodeType: NodeType.FILE,
+          properties: {
+            path: file.path,
+            fileName: file.fileName,
+            checksum: file.checksum || '',
+            lineCount: file.lineCount || 0,
+            fileSize: file.fileSize || 0,
+            extension: file.fileExtension || '',
+            packageName: file.packageName || '',
+            isTestFile: file.isTestFile || false
+          }
+        };
+        nodes.push(fileNode);
+
+        // Create Codebase -> File relationship
+        relationships.push({
+          type: RelationshipType.CONTAINS_FILE,
+          startNodeId: codebaseNode.id,
+          endNodeId: fileNode.id,
+          properties: {}
+        });
       }
     }
-    return '';
+
+    // Transform Class nodes (similar to Java)
+    if (rawOutput.classes && Array.isArray(rawOutput.classes)) {
+      for (const cls of rawOutput.classes) {
+        const classNode: StandardizedGraphNode = {
+          id: this.generateNodeId(NodeType.CLASS, codebaseName, cls.fullyQualifiedName || cls.name),
+          nodeType: NodeType.CLASS,
+          properties: {
+            name: cls.name,
+            fullyQualifiedName: cls.fullyQualifiedName || cls.name,
+            comment: cls.comment || '',
+            embedding: [], // Will be populated later
+            visibility: cls.visibility?.toLowerCase() || 'public',
+            isAbstract: cls.isAbstract || false,
+            isFinal: cls.isFinal || false,
+            isStatic: cls.isStatic || false,
+            isInnerClass: cls.isInnerClass || false,
+            startLine: cls.startLine || 0,
+            endLine: cls.endLine || 0,
+            filePath: cls.filePath || ''
+          }
+        };
+        nodes.push(classNode);
+
+        // Create File -> Class relationship
+        if (cls.filePath) {
+          const fileId = this.generateNodeId(NodeType.FILE, codebaseName, cls.filePath);
+          relationships.push({
+            type: RelationshipType.DEFINES_CLASS,
+            startNodeId: fileId,
+            endNodeId: classNode.id,
+            properties: {}
+          });
+        }
+      }
+    }
+
+    // Transform Interface nodes (similar to Java)
+    if (rawOutput.interfaces && Array.isArray(rawOutput.interfaces)) {
+      for (const iface of rawOutput.interfaces) {
+        const interfaceNode: StandardizedGraphNode = {
+          id: this.generateNodeId(NodeType.INTERFACE, codebaseName, iface.fullyQualifiedName || iface.name),
+          nodeType: NodeType.INTERFACE,
+          properties: {
+            name: iface.name,
+            fullyQualifiedName: iface.fullyQualifiedName || iface.name,
+            comment: iface.comment || '',
+            embedding: [], // Will be populated later
+            visibility: iface.visibility?.toLowerCase() || 'public',
+            startLine: iface.startLine || 0,
+            endLine: iface.endLine || 0,
+            filePath: iface.filePath || ''
+          }
+        };
+        nodes.push(interfaceNode);
+
+        // Create File -> Interface relationship
+        if (iface.filePath) {
+          const fileId = this.generateNodeId(NodeType.FILE, codebaseName, iface.filePath);
+          relationships.push({
+            type: RelationshipType.DEFINES_CLASS, // Using DEFINES_CLASS as schema doesn't have DEFINES_INTERFACE
+            startNodeId: fileId,
+            endNodeId: interfaceNode.id,
+            properties: { entityType: 'interface' }
+          });
+        }
+      }
+    }
+
+    // Transform Method nodes (similar to Java)
+    if (rawOutput.methods && Array.isArray(rawOutput.methods)) {
+      for (const method of rawOutput.methods) {
+        const methodNode: StandardizedGraphNode = {
+          id: this.generateNodeId(NodeType.METHOD, codebaseName, `${method.filePath}:${method.name}:${method.startLine}`),
+          nodeType: NodeType.METHOD,
+          properties: {
+            name: method.name,
+            signature: method.signature || '',
+            returnType: method.returnType || 'void',
+            comment: method.comment || '',
+            body: method.body || '',
+            visibility: method.visibility?.toLowerCase() || 'public',
+            cyclomaticComplexity: method.cyclomaticComplexity || 0,
+            embedding: [], // Will be populated later
+            isStatic: method.isStatic || false,
+            isAbstract: method.isAbstract || false,
+            isConstructor: method.isConstructor || false,
+            isTestMethod: method.isTestMethod || false,
+            startLine: method.startLine || 0,
+            endLine: method.endLine || 0,
+            filePath: method.filePath || '',
+            parameters: method.parameters || []
+          }
+        };
+        nodes.push(methodNode);
+
+        // Create File -> Method relationship
+        if (method.filePath) {
+          const fileId = this.generateNodeId(NodeType.FILE, codebaseName, method.filePath);
+          relationships.push({
+            type: RelationshipType.DEFINES_METHOD,
+            startNodeId: fileId,
+            endNodeId: methodNode.id,
+            properties: {}
+          });
+        }
+      }
+    }
+
+    // Transform Dependencies (similar to Java)
+    if (rawOutput.dependencies && Array.isArray(rawOutput.dependencies)) {
+      for (const dep of rawOutput.dependencies) {
+        const dependencyNode: StandardizedGraphNode = {
+          id: this.generateNodeId(NodeType.DEPENDENCY, codebaseName, `${dep.name}:${dep.version || 'unknown'}`),
+          nodeType: NodeType.DEPENDENCY,
+          properties: {
+            name: dep.name,
+            version: dep.version || 'unknown',
+            scope: dep.scope || 'runtime',
+            isDevDependency: dep.isDevDependency || false
+          }
+        };
+        nodes.push(dependencyNode);
+
+        // Create Codebase -> Dependency relationship
+        relationships.push({
+          type: RelationshipType.DEPENDS_ON,
+          startNodeId: codebaseNode.id,
+          endNodeId: dependencyNode.id,
+          properties: { scope: dep.scope || 'runtime' }
+        });
+      }
+    }
+
+    // Transform relationships from parser output (similar to Java)
+    if (rawOutput.relationships && Array.isArray(rawOutput.relationships)) {
+      for (const rel of rawOutput.relationships) {
+        let relationshipType: RelationshipType;
+        switch (rel.type?.toLowerCase()) {
+          case 'extends':
+            relationshipType = RelationshipType.EXTENDS;
+            break;
+          case 'implements':
+            relationshipType = RelationshipType.IMPLEMENTS;
+            break;
+          case 'calls':
+            relationshipType = RelationshipType.CALLS;
+            break;
+          case 'uses':
+            relationshipType = RelationshipType.USES_TYPE;
+            break;
+          default:
+            continue; // Skip unknown relationship types
+        }
+
+        relationships.push({
+          type: relationshipType,
+          startNodeId: rel.sourceId || '',
+          endNodeId: rel.targetId || '',
+          properties: rel.properties || {}
+        });
+      }
+    }
+
+    return {
+      metadata: {
+        codebaseName: rawOutput.codebaseName,
+        language: Language.TYPESCRIPT,
+        totalFiles: rawOutput.files?.length || 0,
+        totalNodes: nodes.length,
+        totalRelationships: relationships.length,
+        parsingDuration: rawOutput.metadata.parsingDurationMs,
+        framework: rawOutput.metadata.framework,
+        detectedFrameworks: rawOutput.metadata.detectedFrameworks,
+        parseTime: rawOutput.metadata.parseTime,
+        parserVersion: rawOutput.metadata.parserVersion
+      },
+      nodes,
+      relationships
+    };
   }
+
+  // Remove the old legacy methods below this point
 }

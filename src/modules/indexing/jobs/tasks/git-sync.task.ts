@@ -30,7 +30,7 @@ export class GitSyncTask extends BaseTask {
       const jobMetadata = context.job.metadata as any;
       return {
         ...baseConfig,
-        baseCommit: jobMetadata?.baseCommit || baseConfig.baseCommit,
+        baseCommit: jobMetadata?.baseCommit,
       };
     }
 
@@ -227,7 +227,6 @@ export class GitSyncTask extends BaseTask {
   async cleanup(context: JobContext): Promise<void> {
     const { job } = context;
     const jobId = job.id;
-
     this.logger.debug(`[${jobId}] [GIT-SYNC] Starting task cleanup`);
     // Cleanup will be handled by cleanup task
     this.logger.debug(`[${jobId}] [GIT-SYNC] Task cleanup completed`);
